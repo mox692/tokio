@@ -113,6 +113,7 @@ impl Inner {
         }
 
         loop {
+            // MEMO: 別スレッドからunparkされるまでここでblockされるっぽい
             m = self.condvar.wait(m).unwrap();
 
             if self
@@ -275,6 +276,7 @@ impl CachedParkThread {
         let waker = self.waker()?;
         let mut cx = Context::from_waker(&waker);
 
+        // TODO: これ何してる？
         pin!(f);
 
         loop {

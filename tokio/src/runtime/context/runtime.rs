@@ -29,6 +29,7 @@ pub(crate) struct EnterRuntimeGuard {
     old_seed: RngSeed,
 }
 
+// MEMO: worker thread全てで呼ばれる
 /// Marks the current thread as being within the dynamic extent of an
 /// executor.
 #[track_caller]
@@ -36,6 +37,7 @@ pub(crate) fn enter_runtime<F, R>(handle: &scheduler::Handle, allow_block_in_pla
 where
     F: FnOnce(&mut BlockingRegionGuard) -> R,
 {
+    // MEMO: tokioを起動したthreadでだけ呼ばれる？
     let maybe_guard = CONTEXT.with(|c| {
         if c.runtime.get().is_entered() {
             None
@@ -54,6 +56,7 @@ where
             c.rng.set(Some(rng));
 
             Some(EnterRuntimeGuard {
+                // TODO: これ(BlockingRegionGuard)何？
                 blocking: BlockingRegionGuard::new(),
                 handle: c.set_current(handle),
                 old_seed,

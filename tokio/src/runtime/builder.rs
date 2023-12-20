@@ -1241,6 +1241,7 @@ cfg_test_util! {
 
 cfg_rt_multi_thread! {
     impl Builder {
+        // MEMO: multi threadのRuntimeの作成のエンドポイント
         fn build_threaded_runtime(&mut self) -> io::Result<Runtime> {
             use crate::loom::sys::num_cpus;
             use crate::runtime::{Config, runtime::Scheduler};
@@ -1248,6 +1249,7 @@ cfg_rt_multi_thread! {
 
             let core_threads = self.worker_threads.unwrap_or_else(num_cpus);
 
+            // TODO: Driverって何?
             let (driver, driver_handle) = driver::Driver::new(self.get_cfg())?;
 
             // Create the blocking pool

@@ -83,6 +83,7 @@ impl MultiThread {
     where
         F: Future,
     {
+        // TODO: handleという概念を把握する
         crate::runtime::context::enter_runtime(handle, true, |blocking| {
             blocking.block_on(future).expect("failed to park thread")
         })

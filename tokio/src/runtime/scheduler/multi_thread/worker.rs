@@ -239,6 +239,7 @@ type Notified = task::Notified<Arc<Handle>>;
 /// improvements.
 const MAX_LIFO_POLLS_PER_TICK: usize = 3;
 
+// MEMO: 指定された分だけworker threadを作成する
 pub(super) fn create(
     size: usize,
     park: Parker,
@@ -449,6 +450,7 @@ impl Launch {
     }
 }
 
+// MEMO: workerのエントリポイント
 fn run(worker: Arc<Worker>) {
     struct AbortOnPanic;
 
@@ -480,6 +482,7 @@ fn run(worker: Arc<Worker>) {
         let cx = scheduler::Context::MultiThread(Context {
             worker,
             core: RefCell::new(None),
+            // TODO: defer何？
             defer: Defer::new(),
         });
 

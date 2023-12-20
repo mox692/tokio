@@ -358,6 +358,7 @@ impl Spawner {
         F: FnOnce() -> R + Send + 'static,
         R: Send + 'static,
     {
+        // TODO: blockingTaskとはなんぞ？
         let fut = BlockingTask::new(func);
         let id = task::Id::next();
         #[cfg(all(tokio_unstable, feature = "tracing"))]
@@ -400,6 +401,7 @@ impl Spawner {
             return Err(SpawnError::ShuttingDown);
         }
 
+        // MEMO: local queueじゃなくてshared_queueにtask入れるのか？
         shared.queue.push_back(task);
         self.inner.metrics.inc_queue_depth();
 
@@ -409,6 +411,7 @@ impl Spawner {
             if self.inner.metrics.num_threads() == self.inner.thread_cap {
                 // At max number of threads
             } else {
+                // MEMO: まだスレッドを作る余地がある
                 assert!(shared.shutdown_tx.is_some());
                 let shutdown_tx = shared.shutdown_tx.clone();
 

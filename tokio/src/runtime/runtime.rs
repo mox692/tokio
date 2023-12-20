@@ -269,6 +269,7 @@ impl Runtime {
         self.handle.spawn_blocking(func)
     }
 
+    // MEMO: これがtokioのエンドポイント
     /// Runs a future to completion on the Tokio runtime. This is the
     /// runtime's entry point.
     ///
