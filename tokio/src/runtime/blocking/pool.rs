@@ -405,6 +405,7 @@ impl Spawner {
         shared.queue.push_back(task);
         self.inner.metrics.inc_queue_depth();
 
+        // MEMO:まだスレッドを起動する余地があれば起動(?)
         if self.inner.metrics.num_idle_threads() == 0 {
             // No threads are able to process the task.
 
@@ -418,6 +419,7 @@ impl Spawner {
                 if let Some(shutdown_tx) = shutdown_tx {
                     let id = shared.worker_thread_index;
 
+                    // MEMO: WorkerThreadを起動.
                     match self.spawn_thread(shutdown_tx, rt, id) {
                         Ok(handle) => {
                             self.inner.metrics.inc_num_threads();
@@ -500,6 +502,7 @@ fn is_temporary_os_thread_error(error: &std::io::Error) -> bool {
 }
 
 impl Inner {
+    // MEMO: worker threadのloop
     fn run(&self, worker_thread_id: usize) {
         if let Some(f) = &self.after_start {
             f();
@@ -510,7 +513,9 @@ impl Inner {
 
         'main: loop {
             // BUSY
+            // TODO: poolのqueueってなんだっけ？workerとpoolの違いgaよくわかってないかも
             while let Some(task) = shared.queue.pop_front() {
+                // MEMO: taskが見つかったらrun
                 self.metrics.dec_queue_depth();
                 drop(shared);
                 task.run();

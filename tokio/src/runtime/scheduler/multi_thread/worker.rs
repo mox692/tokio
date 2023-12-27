@@ -502,6 +502,7 @@ fn run(worker: Arc<Worker>) {
 }
 
 impl Context {
+    // MEMO: workerスレッドのロジック
     fn run(&self, mut core: Box<Core>) -> RunResult {
         // Reset `lifo_enabled` here in case the core was previously stolen from
         // a task that had the LIFO slot disabled.
@@ -511,6 +512,8 @@ impl Context {
         // will be one of the first things we do.
         core.stats.start_processing_scheduled_tasks();
 
+        // MEMO: workerスレッドのロジック
+        // local queueを確認 -> 他からstrealを試みる
         while !core.is_shutdown {
             self.assert_lifo_enabled_is_correct(&core);
 
@@ -1031,6 +1034,7 @@ impl Handle {
                 }
             }
 
+            // TODO: remoteとは？
             // Otherwise, use the inject queue.
             self.push_remote_task(task);
             self.notify_parked_remote();

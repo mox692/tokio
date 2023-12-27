@@ -53,6 +53,7 @@ impl Handle {
     {
         let (handle, notified) = me.shared.owned.bind(future, me.clone(), id);
 
+        // TODO: 何してる?
         me.schedule_option_task_without_yield(notified);
 
         handle
