@@ -181,6 +181,7 @@ cfg_coop! {
 
             if decrement.success {
                 let restore = RestoreOnPending(Cell::new(cell.get()));
+                // 新しいbudgetをset
                 cell.set(budget);
 
                 // avoid double counting
@@ -190,6 +191,7 @@ cfg_coop! {
 
                 Poll::Ready(restore)
             } else {
+                // MEMO: これ何してるっけ？
                 cx.waker().wake_by_ref();
                 Poll::Pending
             }

@@ -74,6 +74,7 @@ struct Context {
     trace: trace::Context,
 }
 
+// MEMO: thread localなデータ
 tokio_thread_local! {
     static CONTEXT: Context = const {
         Context {
