@@ -172,6 +172,13 @@ cfg_coop! {
     /// Therefore, if the budget is _further_ adjusted between when `poll_proceed` returns and
     /// `RestRestoreOnPending` is dropped, those adjustments are erased unless the caller indicates
     /// that progress was made.
+    /// このメソッドを呼び出すと、現在の予算は減少しますが、タスクがポーリングされるたびに進行が保証されるように、
+    /// 返された「RestoreOnPending」が破棄されると予算は元の値に自動的に戻ります。
+    /// このプロセスの中で、呼び出し側は進展があった場合に「RestoreOnPending::made_progress」を呼び出す責任があり、
+    /// 予算が適切に消費されることを保証する必要があります。
+    /// さらに、「RestoreOnPending」は「poll_proceed」の呼び出し前の予算状態に戻すことに注意が必要です。
+    /// したがって、「poll_proceed」が戻ってから「RestoreOnPending」が破棄される間に予算がさらに調整された場合、
+    /// 進展があったと呼び出し側が示さない限り、それらの調整は取り消されます。
     #[inline]
     pub(crate) fn poll_proceed(cx: &mut Context<'_>) -> Poll<RestoreOnPending> {
         context::budget(|cell| {

@@ -57,6 +57,8 @@ where
             // if our buffer is empty, then we need to read some data to continue.
             let rem = me.buf.remaining();
             if rem != 0 {
+                // MEMO: ここで tokio/src/io/util/repeat.rs の poll_readの実装を使う
+                //
                 ready!(Pin::new(&mut *me.reader).poll_read(cx, me.buf))?;
                 if me.buf.remaining() == rem {
                     return Err(eof()).into();

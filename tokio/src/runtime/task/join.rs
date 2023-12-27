@@ -321,6 +321,7 @@ impl<T> Future for JoinHandle<T> {
         let mut ret = Poll::Pending;
 
         // Keep track of task budget
+        // MEMO: budgetを使い果たすと、ここでyieldする
         let coop = ready!(crate::runtime::coop::poll_proceed(cx));
 
         // Try to read the task output. If the task is not yet complete, the
@@ -340,6 +341,7 @@ impl<T> Future for JoinHandle<T> {
         }
 
         if ret.is_ready() {
+            // MEMO: 実際の意味のある進展があったときにだけ、`made_progress`を実施.
             coop.made_progress();
         }
 

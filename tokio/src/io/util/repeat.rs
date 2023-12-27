@@ -58,8 +58,10 @@ impl AsyncRead for Repeat {
         ready!(poll_proceed_and_make_progress(cx));
         // TODO: could be faster, but should we unsafe it?
         while buf.remaining() != 0 {
+            // MEMO: bufに書く
             buf.put_slice(&[self.byte]);
         }
+        // MEMO: ここでいつもPoll::Ready(Ok(()))を返していることに注.
         Poll::Ready(Ok(()))
     }
 }
