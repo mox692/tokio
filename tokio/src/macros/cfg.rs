@@ -177,6 +177,7 @@ macro_rules! cfg_io_std {
     }
 }
 
+// MEMO: io-utilのfgをつけるd
 macro_rules! cfg_io_util {
     ($($item:item)*) => {
         $(

@@ -44,6 +44,7 @@ fn eof() -> io::Error {
     io::Error::new(io::ErrorKind::UnexpectedEof, "early eof")
 }
 
+// MEMO: readExactもcoopが必要？
 impl<A> Future for ReadExact<'_, A>
 where
     A: AsyncRead + Unpin + ?Sized,
