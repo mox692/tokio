@@ -28,6 +28,7 @@ cfg_trace! {
             }
             use tracing::instrument::Instrument;
             let span = get_span(kind, name, id);
+            // MEMO: tracing/src/instrument.rs で、全ての型Tに対してTracingが定義されている
             task.instrument(span)
         }
 

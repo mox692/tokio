@@ -21,8 +21,16 @@ use tree::Tree;
 
 use super::{Notified, OwnedTasks, Schedule};
 
+// MEMO: Rustが提供しているBacktraceFrame?
 type Backtrace = Vec<BacktraceFrame>;
 type SymbolTrace = Vec<Symbol>;
+
+// MEMO:
+//
+// * Context
+//   * Frame <-> Frame <-> Frame
+//   * Trace
+//     * Vec<Backtrace>
 
 /// The ambiant backtracing context.
 pub(crate) struct Context {
@@ -53,6 +61,7 @@ pub(crate) struct Trace {
     backtraces: Vec<Backtrace>,
 }
 
+// MEMO: 下で定義されてるFutureがポイント？
 pin_project_lite::pin_project! {
     #[derive(Debug, Clone)]
     #[must_use = "futures do nothing unless you `.await` or poll them"]
@@ -245,6 +254,7 @@ impl<T: Future> Future for Root<T> {
                 parent: None,
             };
 
+            // MEMO: 現在のframeを親にして、不快frameをsetしてる
             Context::with_current_frame(|current| {
                 frame.parent = current.take();
                 current.set(Some(NonNull::from(&frame)));

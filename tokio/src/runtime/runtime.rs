@@ -334,6 +334,7 @@ impl Runtime {
         ))]
         let future = super::task::trace::Trace::root(future);
 
+        // MEMO: root futを Instrumented にする.
         #[cfg(all(tokio_unstable, feature = "tracing"))]
         let future = crate::util::trace::task(
             future,
