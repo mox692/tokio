@@ -481,6 +481,11 @@ impl Semaphore {
         self.ll_sem.release(n);
     }
 
+    /// docs
+    pub fn decrease_permit(&self, n: usize) -> usize {
+        self.ll_sem.decrease_permit(n)
+    }
+
     /// Acquires a permit from the semaphore.
     ///
     /// If the semaphore has been closed, this returns an [`AcquireError`].
