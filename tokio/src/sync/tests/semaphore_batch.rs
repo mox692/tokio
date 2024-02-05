@@ -260,6 +260,33 @@ fn cancel_acquire_releases_permits() {
 }
 
 #[test]
+fn decrease_permits_basic() {
+    let s = Semaphore::new(10);
+    s.decrease_permits(5);
+    assert_eq!(5, s.available_permits());
+
+    let decreased = s.decrease_permits(10);
+    assert_eq!(5, decreased);
+    assert_eq!(0, s.available_permits());
+}
+
+#[test]
+fn acquire_after_decrease_permits() {
+    let s = Semaphore::new(10);
+    s.try_acquire(4).expect("uncontended try_acquire succeeds");
+
+    s.decrease_permits(4);
+
+    let mut acquire = task::spawn(s.acquire(4));
+    assert_pending!(acquire.poll());
+    assert_eq!(0, s.available_permits());
+
+    drop(acquire);
+
+    assert_eq!(2, s.available_permits());
+}
+
+#[test]
 fn release_permits_at_drop() {
     use crate::sync::semaphore::*;
     use futures::task::ArcWake;

@@ -379,21 +379,19 @@ impl Semaphore {
 
     /// try to decrease at most `n` permits of this semaphore.
     /// If the number of "permits" is negative, returns the number of "permits" that were reduced.
-    /// TODO: Doesn't that conflict with other places looking at self.permits?
-    pub(crate) fn decrease_permit(&self, n: usize) -> usize {
-        let mut curr_bit;
+    pub(crate) fn decrease_permits(&self, n: usize) -> usize {
+        let mut curr_bit = self.permits.load(Acquire);
         loop {
-            curr_bit = self.permits.load(Acquire);
             let curr = curr_bit >> Self::PERMIT_SHIFT;
             let new = curr.saturating_sub(n);
-            match self.permits.compare_exchange(
+            match self.permits.compare_exchange_weak(
                 curr_bit,
                 new << Self::PERMIT_SHIFT,
                 AcqRel,
                 Acquire,
             ) {
                 Ok(_) => break,
-                Err(_) => continue,
+                Err(actual) => curr_bit = actual,
             };
         }
         std::cmp::min(curr_bit >> Self::PERMIT_SHIFT, n)

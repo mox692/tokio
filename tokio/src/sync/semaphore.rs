@@ -481,9 +481,9 @@ impl Semaphore {
         self.ll_sem.release(n);
     }
 
-    /// docs
-    pub fn decrease_permit(&self, n: usize) -> usize {
-        self.ll_sem.decrease_permit(n)
+    /// Decreases `n` permits from the semaphore.
+    pub fn decrease_permits(&self, n: usize) -> usize {
+        self.ll_sem.decrease_permits(n)
     }
 
     /// Acquires a permit from the semaphore.
