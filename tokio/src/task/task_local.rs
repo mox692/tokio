@@ -176,6 +176,7 @@ impl<T: 'static> LocalKey<T> {
         }
     }
 
+    // TODO: slotはなぜいる？
     fn scope_inner<F, R>(&'static self, slot: &mut Option<T>, f: F) -> Result<R, ScopeInnerErr>
     where
         F: FnOnce() -> R,
@@ -206,6 +207,7 @@ impl<T: 'static> LocalKey<T> {
             }
         }
 
+        // MEMO: ここでLocalKeyを、そのタスク固有のものに差し替える
         self.inner.try_with(|inner| {
             inner
                 .try_borrow_mut()
@@ -214,6 +216,7 @@ impl<T: 'static> LocalKey<T> {
 
         let guard = Guard { local: self, slot };
 
+        // MEMO: LocalKeyにslotをセットした状態でfを実行
         let res = f();
 
         drop(guard);
