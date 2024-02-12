@@ -25,71 +25,6 @@ use std::ops::Deref;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::time::Duration;
-
-// #[tokio::main]
-// pub async fn main() -> Result<(), Box<dyn Error>> {
-//     // Open a TCP stream to the socket address.
-//     //
-//     // Note that this is the Tokio TcpStream, which is fully async.
-//     let mut stream = TcpStream::connect("127.0.0.1:6142").await?;
-//     println!("created stream");
-
-//     let result = stream.write_all(b"hello world\n").await;
-//     println!("wrote to stream; success={:?}", result.is_ok());
-
-//     Ok(())
-// }
-
-// tokio::task_local! {
-//     static TASK_LOCAL_ALLOCATED_BYTES: AtomicUsize;
-// }
-
-// problem
-// #[tokio::main]
-// async fn main() {
-//     let allocated_bytes = AtomicUsize::new(0);
-//     let byte = 0;
-//     let mut input = stream::iter(vec![Ok(1), Err("")]);
-
-//     TASK_LOCAL_ALLOCATED_BYTES.scope(allocated_bytes, input.try_next())
-//     while let Ok(message) = TASK_LOCAL_ALLOCATED_BYTES
-//         .scope(allocated_bytes, input.try_next())
-//         .await
-//     {}
-// }
-
-// solve
-// #[tokio::main]
-// async fn main() {
-//     let mut allocated_bytes = Some(AtomicUsize::new(11));
-//     let mut input: stream::Iter<std::vec::IntoIter<Result<i32, &str>>> = stream::iter(vec![Ok(1)]);
-//     loop {
-//         // これは try_nextが返すFutureをwrapしたものを返す. 1つ目の引数は使われていないような気もするが...
-//         let mut f =
-//             TASK_LOCAL_ALLOCATED_BYTES.scope(allocated_bytes.take().unwrap(), input.try_next());
-
-//         // we can use `take_value` aganist not pinned TaskLocalFuture.
-//         let s = f.take_value_unpinned();
-
-//         let mut f = Box::pin(f);
-
-//         let message = (&mut f).await.unwrap();
-//         if let Some(message) = message {
-//             // yield message;
-//             // allocated_bytes = Some(f.into_value());
-//             allocated_bytes = Some(AtomicUsize::new(22));
-//             // println!("{:?}", (&mut f).await);
-//             // println!("{:?}", (&mut f).await);
-//             // println!("{:?}", (&mut f).await);
-
-//             let s = (&mut f).as_mut().take_value();
-//             println!("s: {:?}", &s);
-//             // take_valueはBoxFutureをunwrapして中のvalueを取り出す
-//         }
-//         break;
-//     }
-// }
-
 use tokio::sync::watch::channel;
 
 async fn change() {
@@ -143,9 +78,24 @@ async fn mark_change() {
     assert_eq!(*rx.borrow(), 3);
 }
 
+async fn clone_sender_exp() {
+    let (tx1, mut rx) = channel(3);
+    assert_eq!(tx1.sender_count(), 1);
+
+    let tx2 = tx1.clone();
+    assert_eq!(tx1.sender_count(), 2);
+    assert_eq!(tx2.sender_count(), 2);
+
+    drop(tx1);
+
+    assert_eq!(tx2.sender_count(), 1);
+}
+
 #[tokio::main]
 async fn main() {
     // change().await;
     // mark_change().await;
-    has_change().await;
+    // has_change().await;
+
+    clone_sender_exp().await;
 }
