@@ -98,3 +98,7 @@ path = "dump.rs"
 [[example]]
 name = "watch_play"
 path = "watch_play.rs"
+
+[[example]]
+name = "issue_5784"
+path = "issue_5784.rs"
