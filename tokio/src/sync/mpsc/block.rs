@@ -43,14 +43,17 @@ pub(crate) enum Read<T> {
     Closed,
 }
 
+// MEMO: 1つのlistのNodeがBLOCK_CAP=32個の分のslotを持つ
 #[repr(transparent)]
 struct Values<T>([UnsafeCell<MaybeUninit<T>>; BLOCK_CAP]);
 
 use super::BLOCK_CAP;
 
+// MEMO: block自体のindex
 /// Masks an index to get the block identifier.
 const BLOCK_MASK: usize = !(BLOCK_CAP - 1);
 
+// MEMO: 特定の1つのblockの中でのindex.
 /// Masks an index to get the value offset in a block.
 const SLOT_MASK: usize = BLOCK_CAP - 1;
 

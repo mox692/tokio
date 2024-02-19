@@ -94,6 +94,8 @@ impl<T> Tx<T> {
     }
 
     fn find_block(&self, slot_index: usize) -> NonNull<Block<T>> {
+        // MEMO: start_indexはBlock数で割ったものじゃなくて、slot_indexと同じ単位.
+        //       32の倍数.
         // The start index of the block that contains `index`.
         let start_index = block::start_index(slot_index);
 
@@ -106,8 +108,11 @@ impl<T> Tx<T> {
         let block = unsafe { &*block_ptr };
 
         // Calculate the distance between the tail ptr and the target block
+        // MEMO: distanceが1以上の場合は、新しいBlockを作成する必要があるかも.
         let distance = block.distance(start_index);
 
+        // MEMO: block_tailは, リアルタイムな値を提供するという保証はしていないっぽい.
+        //       なのでゆるめにチェック.
         // Decide if this call to `find_block` should attempt to update the
         // `block_tail` pointer.
         //
@@ -131,6 +136,7 @@ impl<T> Tx<T> {
             let next_block = block
                 .load_next(Acquire)
                 // There is no allocated next block, grow the linked list.
+                // MEMO: ここのgrowを最適化できないかしら.
                 .unwrap_or_else(|| block.grow());
 
             // If the block is **not** final, then the tail pointer cannot be

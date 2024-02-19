@@ -97,6 +97,7 @@ impl<S: 'static> OwnedTasks<S> {
         T: Future + Send + 'static,
         T::Output: Send + 'static,
     {
+        // MEMO: ここでtokioの内部で使われるTaskを作成している.
         let (task, notified, join) = super::new_task(task, scheduler, id);
         let notified = unsafe { self.bind_inner(task, notified) };
         (join, notified)
