@@ -198,6 +198,7 @@ type GuardedWaitList = GuardedLinkedList<Waiter, <Waiter as linked_list::Link>::
 /// [`enable`]: Notified::enable()
 /// [`Semaphore`]: crate::sync::Semaphore
 #[derive(Debug)]
+#[must_use = "futures do nothing unless you `.await` or poll them"]
 pub struct Notify {
     // `state` uses 2 bits to store one of `EMPTY`,
     // `WAITING` or `NOTIFIED`. The rest of the bits
