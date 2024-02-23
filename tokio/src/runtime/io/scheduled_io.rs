@@ -450,6 +450,7 @@ unsafe impl linked_list::Link for Waiter {
 
 // ===== impl Readiness =====
 
+// MEMO: interestに登録したeventが発生した際にreturnする
 impl Future for Readiness<'_> {
     type Output = ReadyEvent;
 

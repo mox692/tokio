@@ -168,6 +168,7 @@ impl Driver {
             } else if token == TOKEN_SIGNAL {
                 self.signal_ready = true;
             } else {
+                // MEMO: OSからのeventをmioのReadyに変換
                 let ready = Ready::from_mio(event);
                 // Use std::ptr::from_exposed_addr when stable
                 let ptr: *const ScheduledIo = token.0 as *const _;
@@ -178,6 +179,7 @@ impl Driver {
                 // an `Arc<ScheduledIo>` so we can safely cast this to a ref.
                 let io: &ScheduledIo = unsafe { &*ptr };
 
+                // MEMO: OSから受け取ったeventに加えて、user定義(mioとかtokioのレイヤ)のReady flagを付与する
                 io.set_readiness(Tick::Set, |curr| curr | ready);
                 io.wake(ready);
 

@@ -416,6 +416,7 @@ impl TcpStream {
     ///     let stream = TcpStream::connect("127.0.0.1:8080").await?;
     ///
     ///     loop {
+    ///         // MEMO: WouldBlockでloopが抜けたときは、ここで再度redinessを作成する、みたいなセマンティクスみたい.
     ///         let ready = stream.ready(Interest::READABLE | Interest::WRITABLE).await?;
     ///
     ///         if ready.is_readable() {

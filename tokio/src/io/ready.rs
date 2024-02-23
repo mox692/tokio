@@ -261,6 +261,7 @@ impl Ready {
         ready
     }
 
+    // MEMO: eventはreadable eventが来たけど、元々のinterestにはwritebleが入っている場合,ここでfilterされる
     pub(crate) fn intersection(self, interest: Interest) -> Ready {
         Ready(self.0 & Ready::from_interest(interest).0)
     }

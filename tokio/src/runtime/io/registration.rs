@@ -75,6 +75,7 @@ impl Registration {
         interest: Interest,
         handle: scheduler::Handle,
     ) -> io::Result<Registration> {
+        // MEMO: runtimeにIOsourceを登録
         let shared = handle.driver().io().add_source(io, interest)?;
 
         Ok(Registration { handle, shared })
