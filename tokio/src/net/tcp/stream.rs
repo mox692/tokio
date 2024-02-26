@@ -131,7 +131,45 @@ impl TcpStream {
             }))
         }
 
-        /// some comment
+        /// Opens a TCP connection to a remote host with custom interest
+        /// registration.
+        ///
+        /// `addr` is an address of the remote host. Anything which implements the
+        /// [`ToSocketAddrs`] trait can be supplied as the address.  If `addr`
+        /// yields multiple addresses, connect will be attempted with each of the
+        /// addresses until a connection is successful. If none of the addresses
+        /// result in a successful connection, the error returned from the last
+        /// connection attempt (the last address) is returned.
+        ///
+        /// To configure the socket before connecting, you can use the [`TcpSocket`]
+        /// type.
+        ///
+        /// [`ToSocketAddrs`]: trait@crate::net::ToSocketAddrs
+        /// [`TcpSocket`]: struct@crate::net::TcpSocket
+        ///
+        /// # Examples
+        ///
+        /// ```no_run
+        /// use tokio::net::TcpStream;
+        /// use tokio::io::{AsyncWriteExt, Interest};
+        /// use std::error::Error;
+        ///
+        /// #[tokio::main]
+        /// async fn main() -> Result<(), Box<dyn Error>> {
+        ///     // Connect to a peer
+        ///     let mut stream = TcpStream::connect_with_interest(
+        ///         "127.0.0.1:8080",
+        ///         Interest::PRIORITY
+        ///     )
+        ///     .await?;
+        ///
+        ///     // Wait for `Interest::PRIORITY` socket
+        ///     let ready = stream.ready(Interest::PRIORITY).await.unwrap();
+        ///     assert!(ready.is_priority());
+        ///
+        ///     Ok(())
+        /// }
+        /// ```
         pub async fn connect_with_interest<A: ToSocketAddrs>(addr: A, interest: Interest) -> io::Result<TcpStream> {
             let addrs = to_socket_addrs(addr).await?;
 
