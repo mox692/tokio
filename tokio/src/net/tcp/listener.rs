@@ -158,13 +158,22 @@ impl TcpListener {
     /// }
     /// ```
     pub async fn accept(&self) -> io::Result<(TcpStream, SocketAddr)> {
+        self.accept_with_interest(Interest::READABLE).await
+    }
+
+    /// comment
+    pub async fn accept_with_interest(
+        &self,
+        interest: Interest,
+    ) -> io::Result<(TcpStream, SocketAddr)> {
         let (mio, addr) = self
             .io
             .registration()
-            .async_io(Interest::READABLE, || self.io.accept())
+            .async_io(interest, || self.io.accept())
             .await?;
 
-        let stream = TcpStream::new(mio)?;
+        // TODO: clear here
+        let stream = TcpStream::new_with_interest(mio, interest)?;
         Ok((stream, addr))
     }
 

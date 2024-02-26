@@ -398,3 +398,104 @@ async fn write_closed() {
 
     assert!(!ready_event.is_write_closed());
 }
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[tokio::test]
+async fn priority_interest() {
+    use std::os::fd::AsRawFd;
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let stream = TcpStream::connect(listener.local_addr().unwrap())
+        .await
+        .unwrap();
+
+    tokio::spawn(async move {
+        let (socket, _) = listener
+            .accept_with_interest(Interest::PRIORITY)
+            .await
+            .unwrap();
+        let ready = socket.ready(Interest::PRIORITY).await.unwrap();
+        assert!(ready.is_priority());
+    });
+
+    let ready = stream
+        .ready(Interest::READABLE | Interest::WRITABLE)
+        .await
+        .unwrap();
+    if ready.is_writable() {
+        fn send_oob_data(stream: &TcpStream, data: &[u8]) -> io::Result<usize> {
+            unsafe {
+                let res = libc::send(
+                    stream.as_raw_fd(),
+                    data.as_ptr().cast(),
+                    data.len(),
+                    libc::MSG_OOB,
+                );
+                if res == -1 {
+                    Err(io::Error::last_os_error())
+                } else {
+                    Ok(res as usize)
+                }
+            }
+        }
+        send_oob_data(&stream, b"hello").unwrap();
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[tokio::test]
+async fn connect_with_interest() {
+    use std::os::fd::AsRawFd;
+    // TODO: should be minimized.
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let stream = TcpStream::connect_with_interest(
+        listener.local_addr().unwrap(),
+        Interest::PRIORITY | Interest::READABLE | Interest::WRITABLE,
+    )
+    .await
+    .unwrap();
+
+    tokio::spawn(async move {
+        let (socket, _) = listener
+            .accept_with_interest(Interest::READABLE | Interest::WRITABLE)
+            .await
+            .unwrap();
+
+        loop {
+            let ready = socket
+                .ready(Interest::READABLE | Interest::WRITABLE)
+                .await
+                .unwrap();
+            if ready.is_writable() {
+                fn send_oob_data(stream: &TcpStream, data: &[u8]) -> io::Result<usize> {
+                    unsafe {
+                        let res = libc::send(
+                            stream.as_raw_fd(),
+                            data.as_ptr().cast(),
+                            data.len(),
+                            libc::MSG_OOB,
+                        );
+                        if res == -1 {
+                            Err(io::Error::last_os_error())
+                        } else {
+                            Ok(res as usize)
+                        }
+                    }
+                }
+                send_oob_data(&socket, b"hello").unwrap();
+                break;
+            }
+            if ready.is_readable() {
+                continue;
+            }
+        }
+    });
+
+    let ready = stream.ready(Interest::WRITABLE).await.unwrap();
+    if ready.is_writable() {
+        stream.try_write(&[1, 2, 3]).unwrap();
+    }
+    let ready = stream.ready(Interest::PRIORITY).await.unwrap();
+    assert!(ready.is_priority());
+}

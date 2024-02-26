@@ -117,7 +117,28 @@ impl TcpStream {
             let mut last_err = None;
 
             for addr in addrs {
-                match TcpStream::connect_addr(addr).await {
+                match TcpStream::connect_addr_with_interest(addr, Interest::READABLE | Interest::WRITABLE).await {
+                    Ok(stream) => return Ok(stream),
+                    Err(e) => last_err = Some(e),
+                }
+            }
+
+            Err(last_err.unwrap_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "could not resolve to any address",
+                )
+            }))
+        }
+
+        /// some comment
+        pub async fn connect_with_interest<A: ToSocketAddrs>(addr: A, interest: Interest) -> io::Result<TcpStream> {
+            let addrs = to_socket_addrs(addr).await?;
+
+            let mut last_err = None;
+
+            for addr in addrs {
+                match TcpStream::connect_addr_with_interest(addr, interest).await {
                     Ok(stream) => return Ok(stream),
                     Err(e) => last_err = Some(e),
                 }
@@ -132,13 +153,17 @@ impl TcpStream {
         }
 
         /// Establishes a connection to the specified `addr`.
-        async fn connect_addr(addr: SocketAddr) -> io::Result<TcpStream> {
+        async fn connect_addr_with_interest(addr: SocketAddr, interest: Interest) -> io::Result<TcpStream> {
             let sys = mio::net::TcpStream::connect(addr)?;
-            TcpStream::connect_mio(sys).await
+            TcpStream::connect_mio_with_interest(sys, interest).await
         }
 
         pub(crate) async fn connect_mio(sys: mio::net::TcpStream) -> io::Result<TcpStream> {
-            let stream = TcpStream::new(sys)?;
+            Self::connect_mio_with_interest(sys, Interest::READABLE | Interest::WRITABLE).await
+        }
+
+        pub(crate) async fn connect_mio_with_interest(sys: mio::net::TcpStream, interest: Interest) -> io::Result<TcpStream> {
+            let stream = TcpStream::new_with_interest(sys, interest)?;
 
             // Once we've connected, wait for the stream to be writable as
             // that's when the actual connection has been initiated. Once we're
@@ -157,8 +182,7 @@ impl TcpStream {
     }
 
     pub(crate) fn new(connected: mio::net::TcpStream) -> io::Result<TcpStream> {
-        let io = PollEvented::new(connected)?;
-        Ok(TcpStream { io })
+        Self::new_with_interest(connected, Interest::READABLE | Interest::WRITABLE)
     }
 
     /// Creates new `TcpStream` from a `std::net::TcpStream`.
@@ -202,6 +226,14 @@ impl TcpStream {
     pub fn from_std(stream: std::net::TcpStream) -> io::Result<TcpStream> {
         let io = mio::net::TcpStream::from_std(stream);
         let io = PollEvented::new(io)?;
+        Ok(TcpStream { io })
+    }
+
+    pub(crate) fn new_with_interest(
+        connected: mio::net::TcpStream,
+        interest: Interest,
+    ) -> io::Result<TcpStream> {
+        let io = PollEvented::new_with_interest(connected, interest)?;
         Ok(TcpStream { io })
     }
 
