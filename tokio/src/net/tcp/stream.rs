@@ -131,7 +131,7 @@ impl TcpStream {
             }))
         }
 
-        /// Opens a TCP connection to a remote host with custom interest
+        /// Opens a TCP connection to a remote host with custom [`Interest`]
         /// registration.
         ///
         /// `addr` is an address of the remote host. Anything which implements the

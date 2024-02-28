@@ -162,7 +162,7 @@ impl TcpListener {
     }
 
     /// Accepts a new incoming connection from this listener with custom
-    /// interest registration.
+    /// [`Interest`] registration.
     ///
     /// This function will yield once a new TCP connection is established. When
     /// established, the corresponding [`TcpStream`] and the remote peer's
@@ -213,7 +213,6 @@ impl TcpListener {
             .async_io(interest, || self.io.accept())
             .await?;
 
-        // TODO: clear here
         let stream = TcpStream::new_with_interest(mio, interest)?;
         Ok((stream, addr))
     }
