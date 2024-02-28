@@ -159,13 +159,13 @@ impl TcpStream {
         ///     // Connect to a peer
         ///     let stream = TcpStream::connect_with_interest(
         ///         "127.0.0.1:8080",
-        ///         Interest::PRIORITY
+        ///         Interest::READABLE | Interest::WRITABLE
         ///     )
         ///     .await?;
         ///
-        ///     // Wait for `Interest::PRIORITY` socket
-        ///     let ready = stream.ready(Interest::PRIORITY).await.unwrap();
-        ///     assert!(ready.is_priority());
+        ///     // Wait for `Interest::WRITABLE` data
+        ///     let ready = stream.ready(Interest::WRITABLE).await.unwrap();
+        ///     assert!(ready.is_writable());
         ///
         ///     Ok(())
         /// }

@@ -190,13 +190,13 @@ impl TcpListener {
     ///     let listener = TcpListener::bind("127.0.0.1:8080").await?;
     ///
     ///     match listener
-    ///         .accept_with_interest(Interest::PRIORITY)
+    ///         .accept_with_interest(Interest::READABLE | Interest::WRITABLE)
     ///         .await
     ///     {
     ///         Ok((_socket, addr)) => {
-    ///             // Wait for `Interest::PRIORITY` socket
-    ///             let ready = _socket.ready(Interest::PRIORITY).await.unwrap();
-    ///             assert!(ready.is_priority());
+    ///             // Wait for `Interest::WRITABLE` data
+    ///             let ready = _socket.ready(Interest::WRITABLE).await.unwrap();
+    ///             assert!(ready.is_writable());
     ///         }
     ///         Err(e) => println!("couldn't get client: {:?}", e),
     ///     }
