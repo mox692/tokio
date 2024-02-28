@@ -418,7 +418,7 @@ fn send_oob_data<S: std::os::fd::AsRawFd>(stream: &S, data: &[u8]) -> io::Result
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[tokio::test]
-async fn priority_interest() {
+async fn accept_with_interest() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let stream = TcpStream::connect(listener.local_addr().unwrap())
         .await
@@ -438,6 +438,7 @@ async fn priority_interest() {
         .await
         .unwrap();
     if ready.is_writable() {
+        // Sending out of band data should trigger priority event.
         send_oob_data(&stream, b"hello").unwrap();
     }
 }
@@ -445,41 +446,21 @@ async fn priority_interest() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[tokio::test]
 async fn connect_with_interest() {
-    // TODO: should be minimized.
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let stream = TcpStream::connect_with_interest(
         listener.local_addr().unwrap(),
-        Interest::PRIORITY | Interest::READABLE | Interest::WRITABLE,
+        Interest::READABLE | Interest::WRITABLE | Interest::PRIORITY,
     )
     .await
     .unwrap();
 
     tokio::spawn(async move {
-        let (socket, _) = listener
-            // TODO: accept work?
-            .accept_with_interest(Interest::READABLE | Interest::WRITABLE)
-            .await
-            .unwrap();
+        let (socket, _) = listener.accept().await.unwrap();
 
-        loop {
-            let ready = socket
-                .ready(Interest::READABLE | Interest::WRITABLE)
-                .await
-                .unwrap();
-            if ready.is_writable() {
-                send_oob_data(&socket, b"hello").unwrap();
-                break;
-            }
-            if ready.is_readable() {
-                continue;
-            }
-        }
+        // Sending out of band data should trigger priority event.
+        send_oob_data(&socket, b"hello").unwrap();
     });
 
-    let ready = stream.ready(Interest::WRITABLE).await.unwrap();
-    if ready.is_writable() {
-        stream.try_write(&[1, 2, 3]).unwrap();
-    }
     let ready = stream.ready(Interest::PRIORITY).await.unwrap();
     assert!(ready.is_priority());
 }
