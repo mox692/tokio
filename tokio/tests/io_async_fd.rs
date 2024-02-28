@@ -20,6 +20,11 @@ use futures::poll;
 use tokio::io::unix::{AsyncFd, AsyncFdReadyGuard};
 use tokio_test::{assert_err, assert_pending};
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+mod support {
+    pub(crate) mod oob_data;
+}
+
 struct TestWaker {
     inner: Arc<TestWakerInner>,
     waker: Waker,
@@ -627,6 +632,8 @@ fn driver_shutdown_wakes_poll_race() {
 #[tokio::test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 async fn priority_event_on_oob_data() {
+    use support::oob_data::send_oob_data;
+
     use std::net::SocketAddr;
 
     use tokio::io::Interest;
@@ -645,23 +652,6 @@ async fn priority_event_on_oob_data() {
     send_oob_data(&stream, b"hello").unwrap();
 
     let _ = client.ready(Interest::PRIORITY).await.unwrap();
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn send_oob_data<S: AsRawFd>(stream: &S, data: &[u8]) -> io::Result<usize> {
-    unsafe {
-        let res = libc::send(
-            stream.as_raw_fd(),
-            data.as_ptr().cast(),
-            data.len(),
-            libc::MSG_OOB,
-        );
-        if res == -1 {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok(res as usize)
-        }
-    }
 }
 
 #[tokio::test]

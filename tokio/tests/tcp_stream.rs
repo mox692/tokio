@@ -13,6 +13,11 @@ use std::time::Duration;
 
 use futures::future::poll_fn;
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+mod support {
+    pub(crate) mod oob_data;
+}
+
 #[tokio::test]
 async fn set_linger() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -400,25 +405,10 @@ async fn write_closed() {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn send_oob_data<S: std::os::fd::AsRawFd>(stream: &S, data: &[u8]) -> io::Result<usize> {
-    unsafe {
-        let res = libc::send(
-            stream.as_raw_fd(),
-            data.as_ptr().cast(),
-            data.len(),
-            libc::MSG_OOB,
-        );
-        if res == -1 {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok(res as usize)
-        }
-    }
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
 #[tokio::test]
 async fn accept_with_interest() {
+    use support::oob_data::send_oob_data;
+
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let stream = TcpStream::connect(listener.local_addr().unwrap())
         .await
@@ -446,6 +436,8 @@ async fn accept_with_interest() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[tokio::test]
 async fn connect_with_interest() {
+    use support::oob_data::send_oob_data;
+
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let stream = TcpStream::connect_with_interest(
         listener.local_addr().unwrap(),
