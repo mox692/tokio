@@ -158,7 +158,8 @@ impl TcpListener {
     /// }
     /// ```
     pub async fn accept(&self) -> io::Result<(TcpStream, SocketAddr)> {
-        self.accept_with_interest(Interest::READABLE).await
+        self.accept_with_interest(Interest::READABLE | Interest::WRITABLE)
+            .await
     }
 
     /// Accepts a new incoming connection from this listener with custom
