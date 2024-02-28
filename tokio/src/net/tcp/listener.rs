@@ -195,7 +195,7 @@ impl TcpListener {
     ///     {
     ///         Ok((_socket, addr)) => {
     ///             // Wait for `Interest::PRIORITY` socket
-    ///             let ready = socket.ready(Interest::PRIORITY).await.unwrap();
+    ///             let ready = _socket.ready(Interest::PRIORITY).await.unwrap();
     ///             assert!(ready.is_priority());
     ///         }
     ///         Err(e) => println!("couldn't get client: {:?}", e),
