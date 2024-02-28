@@ -117,7 +117,7 @@ impl TcpStream {
             let mut last_err = None;
 
             for addr in addrs {
-                match TcpStream::connect_addr_with_interest(addr, Interest::READABLE | Interest::WRITABLE).await {
+                match TcpStream::connect_addr(addr, Interest::READABLE | Interest::WRITABLE).await {
                     Ok(stream) => return Ok(stream),
                     Err(e) => last_err = Some(e),
                 }
@@ -176,7 +176,7 @@ impl TcpStream {
             let mut last_err = None;
 
             for addr in addrs {
-                match TcpStream::connect_addr_with_interest(addr, interest).await {
+                match TcpStream::connect_addr(addr, interest).await {
                     Ok(stream) => return Ok(stream),
                     Err(e) => last_err = Some(e),
                 }
@@ -191,16 +191,12 @@ impl TcpStream {
         }
 
         /// Establishes a connection to the specified `addr`.
-        async fn connect_addr_with_interest(addr: SocketAddr, interest: Interest) -> io::Result<TcpStream> {
+        async fn connect_addr(addr: SocketAddr, interest: Interest) -> io::Result<TcpStream> {
             let sys = mio::net::TcpStream::connect(addr)?;
-            TcpStream::connect_mio_with_interest(sys, interest).await
+            TcpStream::connect_mio(sys, interest).await
         }
 
-        pub(crate) async fn connect_mio(sys: mio::net::TcpStream) -> io::Result<TcpStream> {
-            Self::connect_mio_with_interest(sys, Interest::READABLE | Interest::WRITABLE).await
-        }
-
-        pub(crate) async fn connect_mio_with_interest(sys: mio::net::TcpStream, interest: Interest) -> io::Result<TcpStream> {
+        pub(crate) async fn connect_mio(sys: mio::net::TcpStream, interest: Interest) -> io::Result<TcpStream> {
             let stream = TcpStream::new_with_interest(sys, interest)?;
 
             // Once we've connected, wait for the stream to be writable as

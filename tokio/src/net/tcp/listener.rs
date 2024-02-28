@@ -210,7 +210,7 @@ impl TcpListener {
         let (mio, addr) = self
             .io
             .registration()
-            .async_io(interest, || self.io.accept())
+            .async_io(Interest::READABLE, || self.io.accept())
             .await?;
 
         let stream = TcpStream::new_with_interest(mio, interest)?;

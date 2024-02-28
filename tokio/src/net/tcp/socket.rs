@@ -1,3 +1,4 @@
+use crate::io::Interest;
 use crate::net::{TcpListener, TcpStream};
 
 use std::fmt;
@@ -660,7 +661,7 @@ impl TcpSocket {
             unsafe { mio::net::TcpStream::from_raw_socket(raw_socket) }
         };
 
-        TcpStream::connect_mio(mio).await
+        TcpStream::connect_mio(mio, Interest::READABLE | Interest::WRITABLE).await
     }
 
     /// Converts the socket into a `TcpListener`.
