@@ -194,7 +194,7 @@ impl TcpListener {
     ///         .await
     ///     {
     ///         Ok((_socket, addr)) => {
-    ///             // Wait for `Interest::PRIORITY` socket
+    ///             // Wait for _`Interest::PRIORITY` socket
     ///             let ready = socket.ready(Interest::PRIORITY).await.unwrap();
     ///             assert!(ready.is_priority());
     ///         }

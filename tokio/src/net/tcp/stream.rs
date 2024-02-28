@@ -151,13 +151,13 @@ impl TcpStream {
         ///
         /// ```no_run
         /// use tokio::net::TcpStream;
-        /// use tokio::io::{AsyncWriteExt, Interest};
+        /// use tokio::io::Interest;
         /// use std::error::Error;
         ///
         /// #[tokio::main]
         /// async fn main() -> Result<(), Box<dyn Error>> {
         ///     // Connect to a peer
-        ///     let mut stream = TcpStream::connect_with_interest(
+        ///     let stream = TcpStream::connect_with_interest(
         ///         "127.0.0.1:8080",
         ///         Interest::PRIORITY
         ///     )
