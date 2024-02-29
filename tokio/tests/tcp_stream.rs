@@ -441,11 +441,9 @@ async fn connect_with_interest() {
     .await
     .unwrap();
 
-    task::spawn(async move {
-        let (socket, _) = listener.accept().await.unwrap();
-        // Sending out of band data should trigger priority event.
-        send_oob_data(&socket, b"hello").unwrap();
-    });
+    let (socket, _) = listener.accept().await.unwrap();
+    // Sending out of band data should trigger priority event.
+    send_oob_data(&socket, b"hello").unwrap();
 
     let ready = stream.ready(Interest::PRIORITY).await.unwrap();
     assert!(ready.is_priority());
