@@ -414,7 +414,7 @@ async fn accept_with_interest() {
         .await
         .unwrap();
 
-    tokio::spawn(async move {
+    let task = task::spawn(async move {
         let (socket, _) = listener
             .accept_with_interest(Interest::PRIORITY)
             .await
@@ -423,14 +423,9 @@ async fn accept_with_interest() {
         assert!(ready.is_priority());
     });
 
-    let ready = stream
-        .ready(Interest::READABLE | Interest::WRITABLE)
-        .await
-        .unwrap();
-    if ready.is_writable() {
-        // Sending out of band data should trigger priority event.
-        send_oob_data(&stream, b"hello").unwrap();
-    }
+    // Sending out of band data should trigger priority event.
+    send_oob_data(&stream, b"hello").unwrap();
+    task.await;
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -446,9 +441,8 @@ async fn connect_with_interest() {
     .await
     .unwrap();
 
-    tokio::spawn(async move {
+    task::spawn(async move {
         let (socket, _) = listener.accept().await.unwrap();
-
         // Sending out of band data should trigger priority event.
         send_oob_data(&socket, b"hello").unwrap();
     });
