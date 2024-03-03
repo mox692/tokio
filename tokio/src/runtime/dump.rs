@@ -2,9 +2,12 @@
 //!
 //! See [Handle::dump][crate::runtime::Handle::dump].
 
-use crate::runtime::task::trace::tree::Tree;
+use crate::runtime::task::Symbol as SymbolInner;
+use crate::runtime::task::Tree as TreeInner;
 use crate::task::Id;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::path::PathBuf;
 
 /// A snapshot of a runtime's state.
 ///
@@ -34,7 +37,60 @@ pub struct Task {
 impl Task {
     /// Returns a trace tree of this task.
     pub fn task_trace(&self) -> Tree {
-        self.trace.inner.trace_tree()
+        let inner = self.trace.inner.trace_tree();
+        Tree::from(inner)
+    }
+}
+
+/// docs
+#[allow(missing_debug_implementations)]
+pub struct Tree {
+    /// The roots of the trees.
+    ///
+    /// There should only be one root, but the code is robust to multiple roots.
+    pub roots: HashSet<Symbol>,
+
+    /// The adjacency list of symbols in the execution tree(s).
+    pub edges: HashMap<Symbol, HashSet<Symbol>>,
+}
+
+/// docs
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
+pub struct Symbol {
+    /// docs
+    pub name: Option<Vec<u8>>,
+    /// docs
+    pub addr: Option<usize>,
+    /// docs
+    pub filename: Option<PathBuf>,
+    /// docs
+    pub lineno: Option<u32>,
+    /// docs
+    pub colno: Option<u32>,
+}
+
+impl From<SymbolInner> for Symbol {
+    fn from(symbol: SymbolInner) -> Self {
+        Self {
+            name: symbol.symbol.name().map(|s| s.as_bytes().to_vec()),
+            addr: symbol.symbol.addr().map(|a| a as usize),
+            filename: symbol.symbol.filename().map(PathBuf::from),
+            lineno: symbol.symbol.lineno(),
+            colno: symbol.symbol.colno(),
+        }
+    }
+}
+
+impl From<TreeInner> for Tree {
+    fn from(tree: TreeInner) -> Self {
+        Self {
+            roots: tree.roots.into_iter().map(Symbol::from).collect(),
+            edges: tree
+                .edges
+                .into_iter()
+                .map(|(k, v)| (Symbol::from(k), v.into_iter().map(Symbol::from).collect()))
+                .collect(),
+        }
     }
 }
 

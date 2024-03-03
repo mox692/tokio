@@ -204,6 +204,9 @@ mod waker;
 
 cfg_taskdump! {
     pub(crate) mod trace;
+
+    pub(crate) use trace::tree::Tree;
+    pub(crate) use trace::symbol::Symbol;
 }
 
 use crate::future::Future;

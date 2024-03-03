@@ -13,11 +13,11 @@ use std::pin::Pin;
 use std::ptr::{self, NonNull};
 use std::task::{self, Poll};
 
-mod symbol;
+pub(crate) mod symbol;
 pub(crate) mod tree;
 
-use symbol::Symbol;
-use tree::Tree;
+pub(crate) use symbol::Symbol;
+pub(crate) use tree::Tree;
 
 use super::{Notified, OwnedTasks, Schedule};
 

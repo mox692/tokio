@@ -13,10 +13,10 @@ pub struct Tree {
     /// The roots of the trees.
     ///
     /// There should only be one root, but the code is robust to multiple roots.
-    roots: HashSet<Symbol>,
+    pub(crate) roots: HashSet<Symbol>,
 
     /// The adjacency list of symbols in the execution tree(s).
-    edges: HashMap<Symbol, HashSet<Symbol>>,
+    pub(crate) edges: HashMap<Symbol, HashSet<Symbol>>,
 }
 
 impl Tree {
