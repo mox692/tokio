@@ -14,7 +14,7 @@ use std::ptr::{self, NonNull};
 use std::task::{self, Poll};
 
 mod symbol;
-mod tree;
+pub(crate) mod tree;
 
 use symbol::Symbol;
 use tree::Tree;
@@ -51,6 +51,12 @@ pub(crate) struct Trace {
     // The linear backtraces that comprise this trace. These linear traces can
     // be re-knitted into a tree.
     backtraces: Vec<Backtrace>,
+}
+
+impl Trace {
+    pub(crate) fn trace_tree(&self) -> Tree {
+        Tree::from_trace(self.clone())
+    }
 }
 
 pin_project_lite::pin_project! {

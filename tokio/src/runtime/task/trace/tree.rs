@@ -8,7 +8,8 @@ use super::{Backtrace, Symbol, SymbolTrace, Trace};
 ///
 /// This tree provides a convenient intermediate representation for formatting
 /// [`Trace`] as a tree.
-pub(super) struct Tree {
+#[allow(missing_debug_implementations)]
+pub struct Tree {
     /// The roots of the trees.
     ///
     /// There should only be one root, but the code is robust to multiple roots.

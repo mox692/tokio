@@ -2,6 +2,7 @@
 //!
 //! See [Handle::dump][crate::runtime::Handle::dump].
 
+use crate::runtime::task::trace::tree::Tree;
 use crate::task::Id;
 use std::fmt;
 
@@ -28,6 +29,13 @@ pub struct Tasks {
 pub struct Task {
     id: Id,
     trace: Trace,
+}
+
+impl Task {
+    /// Returns a trace tree of this task.
+    pub fn task_trace(&self) -> Tree {
+        self.trace.inner.trace_tree()
+    }
 }
 
 /// An execution trace of a task's last poll.
