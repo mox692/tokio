@@ -43,7 +43,7 @@ impl Task {
 }
 
 /// docs
-#[allow(missing_debug_implementations)]
+#[derive(Debug)]
 pub struct Tree {
     /// The roots of the trees.
     ///
