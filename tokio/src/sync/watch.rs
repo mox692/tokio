@@ -1320,9 +1320,11 @@ impl<T> Drop for Sender<T> {
 
             // We try to update the state with compare_exchange.
             //
-            // If another task closes the sender or clones the sender again while loading
-            // the latest state, the `compare_exchange` here will fail. In that case,
-            // we do nothing in this sender's drop.
+            // If another task closes the sender, or clones the sender again while loading
+            // the latest state, the `compare_exchange` here will fail. In former case,
+            // this sender don't need to notify the receivers. In latter case, newly cloned
+            // sender should notify the receivers when it is dropped later.
+            // So if `compare_exchange` fails here, we do nothing in this sender's drop.
             if self
                 .shared
                 .state
