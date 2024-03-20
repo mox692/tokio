@@ -56,6 +56,25 @@ use std::fs::File as StdFile;
 /// [`AsyncReadExt`]: trait@crate::io::AsyncReadExt
 /// [`AsyncWriteExt`]: trait@crate::io::AsyncWriteExt
 ///
+/// # `tokio::fs::File` vs `tokio::fs::read`, `tokio::fs::write`
+///
+/// In Tokio, there are other APIs for handling file IO, `tokio::fs::write` and `tokio::fs::read`.
+/// The implementation details of these APIs are as follows:
+///
+/// * tokio::fs::File: Utilizes AsyncRead and AsyncWrite that File implements.
+/// Inside its poll_read and poll_write, it performs spawn_blocking to execute
+/// blocking system calls in its own thread. Note that a single operation on the
+/// File may often trigger multiple spawn_blocking calls.
+/// * tokio::fs::read, tokio::fs::write: TODO
+///
+/// While both of these methods can be used for file I/O processing, note that
+/// they might exhibit different performance characteristics due to the above
+/// implementation details. The general guidelines are as follows:
+///
+/// * For files that are not too large, tokio::fs::write and tokio::fs::read might perform better since they can limit the number of spawn_blocking calls.
+/// * For reading and writing very large files (over 1GB), tokio::fs::File might offer better performance.
+/// * When using tokio::fs::File, changing the max_buffer_size from its default value might improve performance.
+///
 /// # Examples
 ///
 /// Create a new file and asynchronously write bytes to it:
