@@ -108,3 +108,6 @@ path = "issue_5784.rs"
 [[example]]
 name = "framed_read"
 path = "framed_read.rs"
+[[example]]
+name = "tokio_util_mpsc"
+path = "tokio_util_mpsc.rs"

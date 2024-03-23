@@ -120,6 +120,8 @@ async fn async_read() {
     println!("frame_reader state: {:?}", frame_reader);
 }
 
+async fn try_to_non_cancel_safe_poll_read() {}
+
 async fn tcp_example() {
     let listener = TcpListener::bind("127.0.0.1:12345").await.unwrap();
     loop {
