@@ -111,7 +111,9 @@ impl<R: AsyncRead> AsyncRead for BufReader<R> {
             self.discard_buffer();
             return Poll::Ready(res);
         }
+        // rem: 読んだbyte
         let rem = ready!(self.as_mut().poll_fill_buf(cx))?;
+        // 読んだbyte数
         let amt = std::cmp::min(rem.len(), buf.remaining());
         buf.put_slice(&rem[..amt]);
         self.consume(amt);

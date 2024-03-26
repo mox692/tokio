@@ -118,3 +118,9 @@ path = "stream_map.rs"
 [[example]]
 name = "file_perf_experiment"
 path = "file_perf_experiment.rs"
+[[example]]
+name = "async_buf_read_ext"
+path = "async_buf_read_ext.rs"
+[[example]]
+name = "async_read_cancel_not_safe"
+path = "async_read_cancel_not_safe.rs"

@@ -692,6 +692,7 @@ impl AsyncWrite for File {
                 State::Idle(ref mut buf_cell) => {
                     let mut buf = buf_cell.take().unwrap();
 
+                    // 初回はNone
                     let seek = if !buf.is_empty() {
                         Some(SeekFrom::Current(buf.discard_read()))
                     } else {
