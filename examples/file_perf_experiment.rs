@@ -1,6 +1,3 @@
-use std::sync::Arc;
-
-use futures::stream;
 use tokio::{
     fs::{self, File},
     io::{AsyncReadExt, AsyncWriteExt},
@@ -8,7 +5,7 @@ use tokio::{
     time::Instant,
 };
 
-const BLOCK_COUNT: usize = 1;
+const BLOCK_COUNT: usize = 1024;
 
 const DATA_SIZE_1G: usize = 1024 * 1024 * 1024;
 const DATA_SIZE_1M: usize = 1024 * 1024;
@@ -16,6 +13,7 @@ const DATA_SIZE_1K: usize = 1024;
 
 const TASK_COUNT_1K: usize = 1000;
 const TASK_COUNT_10K: usize = 1000 * 10;
+const TASK_COUNT_100K: usize = 1000 * 100;
 const TASK_COUNT_1M: usize = 1000 * 1000;
 
 const DEV_ZERO: &str = "/dev/zero";
@@ -25,7 +23,12 @@ const DEV_NULL: &str = "/dev/null";
 
 #[tokio::main]
 async fn main() {
-    write_many_task().await;
+    // write().await;
+    // write_many_task().await;
+    // write_many_task_fs_write().await;
+
+    read_many_task().await;
+    read_many_task_fs_read().await;
 }
 
 async fn read() {
@@ -46,33 +49,91 @@ async fn read() {
 async fn write() {
     let now = Instant::now();
     for _i in 0..BLOCK_COUNT {
-        let mut file = File::create(TMP_FILE).await.unwrap();
+        let mut file = File::create(DEV_NULL).await.unwrap();
         file.set_max_buf_size(1024);
-        let buf = vec![77; DATA_SIZE_1G];
+        let buf = vec![77; DATA_SIZE_1K];
         file.write_all(&buf[..]).await.unwrap();
+        file.flush().await.unwrap()
     }
 
     println!("time: {}", now.elapsed().as_millis());
 }
 
-async fn write_many_task() {
-    std::fs::remove_dir_all(TMP_DIR).unwrap();
-    std::fs::create_dir_all(TMP_DIR).unwrap();
+async fn read_many_task() {
+    // std::fs::remove_dir_all(TMP_DIR).unwrap();
+    // println!("rm dir done.");
+    // std::fs::create_dir_all(TMP_DIR).unwrap();
+    // println!("create dir done.");
 
     let mut set = JoinSet::new();
 
     let mut files = vec![];
 
-    for i in 0..TASK_COUNT_10K {
-        let file = File::create(format!("{}_{}", TMP_DIR, i)).await.unwrap();
+    for _ in 0..TASK_COUNT_10K {
+        let file = File::open(DEV_ZERO).await.unwrap();
         files.push(file);
     }
 
     let now = Instant::now();
     for mut file in files.into_iter() {
         set.spawn(async move {
-            let buf = vec![77; DATA_SIZE_1K];
+            let mut buf = vec![77; DATA_SIZE_1M];
+            file.read_exact(&mut buf[..]).await.unwrap()
+        });
+    }
+
+    while let Some(res) = set.join_next().await {
+        res.unwrap();
+    }
+
+    println!("time: {}", now.elapsed().as_millis());
+}
+
+async fn read_many_task_fs_read() {
+    // std::fs::remove_dir_all(TMP_DIR).unwrap();
+    // println!("rm dir done.");
+    // std::fs::create_dir_all(TMP_DIR).unwrap();
+    // println!("create dir done.");
+
+    let mut set = JoinSet::new();
+
+    let now = tokio::time::Instant::now();
+    for i in 0..TASK_COUNT_10K {
+        set.spawn(async move {
+            let mut buf = vec![77; DATA_SIZE_1M];
+            // fs::write(DEV_NULL, buf).await.unwrap();
+            fs::read(DEV_NULL).await.unwrap()
+        });
+    }
+
+    while let Some(res) = set.join_next().await {
+        res.unwrap();
+    }
+
+    println!("time: {}", now.elapsed().as_millis());
+}
+
+async fn write_many_task() {
+    // std::fs::remove_dir_all(TMP_DIR).unwrap();
+    // println!("rm dir done.");
+    // std::fs::create_dir_all(TMP_DIR).unwrap();
+    // println!("create dir done.");
+
+    let mut set = JoinSet::new();
+
+    let mut files = vec![];
+
+    for _ in 0..TASK_COUNT_10K {
+        let file = File::create(DEV_NULL).await.unwrap();
+        files.push(file);
+    }
+
+    let now = Instant::now();
+    for mut file in files.into_iter() {
+        set.spawn(async move {
+            let buf = vec![77; DATA_SIZE_1M];
             file.write_all(&buf[..]).await.unwrap();
+            file.flush().await.unwrap();
         });
     }
 
@@ -84,16 +145,18 @@ async fn write_many_task() {
 }
 
 async fn write_many_task_fs_write() {
-    std::fs::remove_dir_all(TMP_DIR).unwrap();
-    std::fs::create_dir_all(TMP_DIR).unwrap();
+    // std::fs::remove_dir_all(TMP_DIR).unwrap();
+    // println!("rm dir done.");
+    // std::fs::create_dir_all(TMP_DIR).unwrap();
+    // println!("create dir done.");
 
     let mut set = JoinSet::new();
 
     let now = tokio::time::Instant::now();
     for i in 0..TASK_COUNT_10K {
         set.spawn(async move {
-            let buf = vec![77; DATA_SIZE_1K];
-            fs::write(format!("{}_{}", TMP_DIR, i), buf).await.unwrap();
+            let buf = vec![77; DATA_SIZE_1M];
+            fs::write(DEV_NULL, buf).await.unwrap();
         });
     }
 
