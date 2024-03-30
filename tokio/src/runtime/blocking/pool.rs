@@ -239,6 +239,7 @@ impl BlockingPool {
         &self.spawner
     }
 
+    // MEMO: runtime(のdrop等)から呼ばれる
     pub(crate) fn shutdown(&mut self, timeout: Option<Duration>) {
         let mut shared = self.spawner.inner.shared.lock();
 
@@ -251,13 +252,16 @@ impl BlockingPool {
 
         shared.shutdown = true;
         shared.shutdown_tx = None;
+        // MEMO: 全てのsleepしていたworker threadを起こす
         self.spawner.inner.condvar.notify_all();
 
         let last_exited_thread = std::mem::take(&mut shared.last_exiting_thread);
         let workers = std::mem::take(&mut shared.worker_threads);
 
+        // MEMO: lockを解放
         drop(shared);
 
+        // MEMO: 他のthreadからの通知を待つ
         if self.shutdown_rx.wait(timeout) {
             let _ = last_exited_thread.map(thread::JoinHandle::join);
 
@@ -389,6 +393,10 @@ impl Spawner {
     }
 
     fn spawn_task(&self, task: Task, rt: &Handle) -> Result<(), SpawnError> {
+        // MEMO: かなり長いクリティカルセクションになってるので、issueにもあるとおり
+        // パフォーマンスがきつそう
+
+        // lockを取得
         let mut shared = self.inner.shared.lock();
 
         if shared.shutdown {
@@ -401,11 +409,11 @@ impl Spawner {
             return Err(SpawnError::ShuttingDown);
         }
 
-        // MEMO: local queueじゃなくてshared_queueにtask入れるのか？
+        // blocking poolのqueueにtaskを追加
         shared.queue.push_back(task);
         self.inner.metrics.inc_queue_depth();
 
-        // MEMO:まだスレッドを起動する余地があれば起動(?)
+        // まだスレッドを起動する余地があれば起動(?)
         if self.inner.metrics.num_idle_threads() == 0 {
             // No threads are able to process the task.
 
@@ -450,6 +458,7 @@ impl Spawner {
             // consistent state.
             self.inner.metrics.dec_num_idle_threads();
             shared.num_notify += 1;
+            // condvarが複数のスレッドを持ってて、1つだけ解放するイメージ
             self.inner.condvar.notify_one();
         }
 
@@ -470,10 +479,13 @@ impl Spawner {
 
         let rt = rt.clone();
 
+        // stdのthrea::spawn
         builder.spawn(move || {
             // Only the reference should be moved into the closure
+            // MEMO: なんでここで enter() が必要なのかなぞ
             let _enter = rt.enter();
             rt.inner.blocking_spawner().inner.run(id);
+            // MEMO: ここのdropが何か大事そう
             drop(shutdown_tx);
         })
     }
@@ -513,11 +525,13 @@ impl Inner {
 
         'main: loop {
             // BUSY
-            // TODO: poolのqueueってなんだっけ？workerとpoolの違いgaよくわかってないかも
+            // queueからtaskを取り出して実行
             while let Some(task) = shared.queue.pop_front() {
                 // MEMO: taskが見つかったらrun
                 self.metrics.dec_queue_depth();
                 drop(shared);
+
+                // MEMO: ここでtaskを実行してるっぽい
                 task.run();
 
                 shared = self.shared.lock();
@@ -527,8 +541,12 @@ impl Inner {
             self.metrics.inc_num_idle_threads();
 
             while !shared.shutdown {
+                // MEMO: ここで wait_timeout がErrを返した際にunwrapを呼ぶとどうなる？ (多分, wait_timeoutの仕様が、unwrapしても問題ないものになってそう)
                 let lock_result = self.condvar.wait_timeout(shared, self.keep_alive).unwrap();
 
+                // wakeup, もしくはtimeoutを受けて, このスレッドが再始動
+
+                // lockを保有
                 shared = lock_result.0;
                 let timeout_result = lock_result.1;
 
