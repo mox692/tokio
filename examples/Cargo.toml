@@ -124,3 +124,6 @@ path = "async_buf_read_ext.rs"
 [[example]]
 name = "async_read_cancel_not_safe"
 path = "async_read_cancel_not_safe.rs"
+[[example]]
+name = "global_queue_interval_bugs"
+path = "global_queue_interval_bugs.rs"

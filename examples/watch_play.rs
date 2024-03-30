@@ -80,15 +80,15 @@ async fn mark_change() {
 
 async fn clone_sender_exp() {
     let (tx1, mut rx) = channel(3);
-    assert_eq!(tx1.sender_count(), 1);
+    // assert_eq!(tx1.sender_count(), 1);
 
-    let tx2 = tx1.clone();
-    assert_eq!(tx1.sender_count(), 2);
-    assert_eq!(tx2.sender_count(), 2);
+    // let tx2 = tx1.clone();
+    // assert_eq!(tx1.sender_count(), 2);
+    // assert_eq!(tx2.sender_count(), 2);
 
-    drop(tx1);
+    // drop(tx1);
 
-    assert_eq!(tx2.sender_count(), 1);
+    // assert_eq!(tx2.sender_count(), 1);
 }
 
 #[tokio::main]
