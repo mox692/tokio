@@ -341,6 +341,7 @@ impl AsyncRead for ChildStdio {
 }
 
 fn set_nonblocking<T: AsRawFd>(fd: &mut T, nonblocking: bool) -> io::Result<()> {
+    // TODO: change:
     unsafe {
         let fd = fd.as_raw_fd();
         let previous = libc::fcntl(fd, libc::F_GETFL);

@@ -243,6 +243,8 @@ impl<T: Future> Future for Root<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
         // SAFETY: The context's current frame is restored to its original state
         // before `frame` is dropped.
+
+        // TODO: change:
         unsafe {
             let mut frame = Frame {
                 inner_addr: Self::poll as *const c_void,

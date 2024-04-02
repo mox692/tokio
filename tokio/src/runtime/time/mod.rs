@@ -315,6 +315,7 @@ impl Handle {
     /// SAFETY: The timer must not be registered with some other driver, and
     /// `add_entry` must not be called concurrently.
     pub(self) unsafe fn clear_entry(&self, entry: NonNull<TimerShared>) {
+        // TODO: change:
         unsafe {
             let mut lock = self.inner.lock();
 
@@ -338,6 +339,7 @@ impl Handle {
         new_tick: u64,
         entry: NonNull<TimerShared>,
     ) {
+        // TODO: change:
         let waker = unsafe {
             let mut lock = self.inner.lock();
 
@@ -358,6 +360,7 @@ impl Handle {
                 // Note: We don't have to worry about racing with some other resetting
                 // thread, because add_entry and reregister require exclusive control of
                 // the timer entry.
+                // TODO: change:
                 match unsafe { lock.wheel.insert(entry) } {
                     Ok(when) => {
                         if lock

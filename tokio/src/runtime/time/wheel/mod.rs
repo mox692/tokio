@@ -117,6 +117,7 @@ impl Wheel {
 
     /// Removes `item` from the timing wheel.
     pub(crate) unsafe fn remove(&mut self, item: NonNull<TimerShared>) {
+        // TODO: change:
         unsafe {
             let when = item.as_ref().cached_when();
             if when == u64::MAX {

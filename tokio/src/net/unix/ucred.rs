@@ -82,6 +82,7 @@ pub(crate) mod impl_linux {
     pub(crate) fn get_peer_cred(sock: &UnixStream) -> io::Result<super::UCred> {
         use std::os::unix::io::AsRawFd;
 
+        // TODO: change: このファイル全部
         unsafe {
             let raw_fd = sock.as_raw_fd();
 
@@ -129,6 +130,7 @@ pub(crate) mod impl_netbsd {
     use std::os::unix::io::AsRawFd;
 
     pub(crate) fn get_peer_cred(sock: &UnixStream) -> io::Result<super::UCred> {
+        // TODO: change:
         unsafe {
             let raw_fd = sock.as_raw_fd();
 

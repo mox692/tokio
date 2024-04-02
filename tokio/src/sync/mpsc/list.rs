@@ -331,6 +331,7 @@ impl<T> Rx<T> {
 
     fn reclaim_blocks(&mut self, tx: &Tx<T>) {
         while self.free_head != self.head {
+            // TODO: change:
             unsafe {
                 // Get a handle to the block that will be freed and update
                 // `free_head` to point to the next block.

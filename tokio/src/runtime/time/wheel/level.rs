@@ -201,6 +201,7 @@ impl Level {
         Some(slot)
     }
 
+    // TODO: change:
     pub(crate) unsafe fn add_entry(&mut self, item: TimerHandle) {
         let slot = slot_for(item.cached_when(), self.level);
 
@@ -209,6 +210,7 @@ impl Level {
         self.occupied |= occupied_bit(slot);
     }
 
+    // TODO: change:
     pub(crate) unsafe fn remove_entry(&mut self, item: NonNull<TimerShared>) {
         let slot = slot_for(unsafe { item.as_ref().cached_when() }, self.level);
 

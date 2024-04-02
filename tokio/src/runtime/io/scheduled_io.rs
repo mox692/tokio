@@ -457,6 +457,7 @@ impl Future for Readiness<'_> {
         use std::sync::atomic::Ordering::SeqCst;
 
         let (scheduled_io, state, waiter) = unsafe {
+            // TODO: change:
             let me = self.get_unchecked_mut();
             (&me.scheduled_io, &mut me.state, &me.waiter)
         };

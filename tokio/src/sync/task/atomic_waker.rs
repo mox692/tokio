@@ -186,6 +186,7 @@ impl AtomicWaker {
             .unwrap_or_else(|x| x)
         {
             WAITING => {
+                // TODO: change:
                 unsafe {
                     // If `into_waker` panics (because it's code outside of
                     // AtomicWaker) we need to prime a guard that is called on

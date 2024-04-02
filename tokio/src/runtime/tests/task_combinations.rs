@@ -274,6 +274,7 @@ fn test_combination(
         type Output = F::Output;
         fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<F::Output> {
             unsafe {
+                // TODO: change:
                 let me = Pin::into_inner_unchecked(self);
                 let inner = Pin::new_unchecked(&mut me.inner);
                 inner.poll(cx)
