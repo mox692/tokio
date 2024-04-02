@@ -210,6 +210,7 @@ impl Driver {
             }
         }
 
+        // MEMO: unparkして、まずtimerのcheckを行う
         // Process pending timers after waking up
         handle.process(rt_handle.clock());
     }

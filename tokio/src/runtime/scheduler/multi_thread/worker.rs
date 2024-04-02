@@ -518,6 +518,7 @@ impl Context {
             self.assert_lifo_enabled_is_correct(&core);
 
             if core.is_traced {
+                // MEMO: taskdump系のhogehogeやってる
                 core = self.worker.handle.trace_core(core);
             }
 
@@ -713,6 +714,7 @@ impl Context {
         core
     }
 
+    // MEMO: durationは今の所, 0かNoneしか指定されないっぽい
     fn park_timeout(&self, mut core: Box<Core>, duration: Option<Duration>) -> Box<Core> {
         self.assert_lifo_enabled_is_correct(&core);
 
