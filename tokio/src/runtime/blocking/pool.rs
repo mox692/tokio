@@ -101,6 +101,7 @@ struct Inner {
 }
 
 struct Shared {
+    // Blockign poolのtask queue
     queue: VecDeque<Task>,
     num_notify: u32,
     shutdown: bool,
