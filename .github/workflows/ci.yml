@@ -758,7 +758,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # Run clippy
       - name: "clippy --all"
-        run: cargo clippy --workspace --all-targets --all-features --no-deps
+        run: cargo clippy --workspace --all-targets --all-features --no-deps -- -D warnings
 
   docs:
     name: docs
