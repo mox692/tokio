@@ -660,7 +660,7 @@ mod unstable {
             .rng_seed(RngSeed::from_bytes(seed))
             .build()
             .unwrap();
-        let rt1_values = rt1.block_on(async {
+        let _ = rt1.block_on(async {
             let _ = tokio::spawn(async { (select_0_to_9().await, select_0_to_9().await) }).await;
         });
 
@@ -669,11 +669,9 @@ mod unstable {
             .rng_seed(RngSeed::from_bytes(seed))
             .build()
             .unwrap();
-        let rt2_values = rt2.block_on(async {
+        let _ = rt2.block_on(async {
             let _ = tokio::spawn(async { (select_0_to_9().await, select_0_to_9().await) }).await;
         });
-
-        assert_eq!(rt1_values, rt2_values);
     }
 
     async fn select_0_to_9() -> u32 {
