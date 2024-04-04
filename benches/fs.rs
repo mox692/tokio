@@ -1,15 +1,20 @@
 #![cfg(unix)]
 
+use tokio::task::JoinSet;
 use tokio_stream::StreamExt;
 
 use tokio::fs::File;
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, Join};
 use tokio_util::codec::{BytesCodec, FramedRead /*FramedWrite*/};
 
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use std::fs::File as StdFile;
 use std::io::Read as StdRead;
+use std::sync::atomic::AtomicUsize;
+use std::sync::Arc;
+use std::time::Duration;
+use std::vec;
 
 fn rt() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_multi_thread()
@@ -65,6 +70,80 @@ fn async_read_buf(c: &mut Criterion) {
     });
 }
 
+fn spawn_blocking_many(c: &mut Criterion) {
+    let rt = rt();
+
+    let spawn_count = 10_000;
+    c.bench_function("spawn_blocking_many", |b| {
+        b.iter(|| {
+            rt.block_on(async {
+                let count = Arc::new(AtomicUsize::new(0));
+                let mut vec = vec![];
+                let mut set = JoinSet::new();
+                for _ in 0..spawn_count {
+                    let count = count.clone();
+                    let h = set.spawn_blocking(move || {
+                        count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        std::thread::sleep(Duration::from_millis(100))
+                    });
+                    vec.push(h);
+                }
+                while let Some(v) = set.join_next().await {
+                    v.unwrap();
+                }
+                assert_eq!(
+                    count.load(std::sync::atomic::Ordering::Relaxed),
+                    spawn_count
+                );
+            });
+        });
+    });
+}
+
+// fn many_spawn_blocking_thread(c: &mut Criterion) {
+//     const BLOCK_COUNT: usize = 1024;
+//     const DATA_SIZE_1G: usize = 1024 * 1024 * 1024;
+//     const DATA_SIZE_1M: usize = 1024 * 1024;
+//     const DATA_SIZE_1K: usize = 1024;
+//     const TASK_COUNT_1: usize = 1;
+//     const TASK_COUNT_4: usize = 4;
+//     const TASK_COUNT_1K: usize = 1000;
+//     const TASK_COUNT_8K: usize = 8000;
+//     const TASK_COUNT_10K: usize = 1000 * 10;
+//     const TASK_COUNT_100K: usize = 1000 * 100;
+//     const TASK_COUNT_1M: usize = 1000 * 1000;
+//     const DEV_ZERO: &str = "/dev/zero";
+//     const TMP_FILE: &str = "./examples/tmp/foo";
+//     const TMP_DIR: &str = "./examples/tmp/";
+//     const DEV_NULL: &str = "/dev/null";
+
+//     let rt = rt();
+
+//     c.bench_function("many_spawn_blocking_thread", |b| {
+//         b.iter(|| {
+//             rt.block_on(async {
+//                 let mut set = JoinSet::new();
+//                 let mut files = vec![];
+
+//                 for _ in 0..TASK_COUNT_1K {
+//                     let file = File::open(DEV_ZERO).await.unwrap();
+//                     files.push(file);
+//                 }
+//                 for mut file in files.into_iter() {
+//                     set.spawn(async move {
+//                         let mut buf = vec![77; DATA_SIZE_1M];
+//                         file.read_exact(&mut buf[..]).await.unwrap()
+//                     });
+//                 }
+
+//                 while let Some(res) = set.join_next().await {
+//                     res.unwrap();
+//                 }
+//             })
+//         });
+//     });
+// }
+
 fn async_read_std_file(c: &mut Criterion) {
     let rt = rt();
 
@@ -106,7 +185,9 @@ criterion_group!(
     file,
     async_read_std_file,
     async_read_buf,
+    // many_spawn_blocking_thread,
     async_read_codec,
-    sync_read
+    sync_read,
+    spawn_blocking_many
 );
 criterion_main!(file);

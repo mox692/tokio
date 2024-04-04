@@ -11,7 +11,7 @@ use crate::runtime::{Builder, Callback, Handle};
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::io;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::time::Duration;
 
 pub(crate) struct BlockingPool {
@@ -73,7 +73,8 @@ impl SpawnerMetrics {
 
 struct Inner {
     /// State shared between worker threads.
-    shared: Mutex<Shared>,
+    // shared: Mutex<Shared>,
+    shared2: Shared2,
 
     /// Pool threads wait on this.
     condvar: Condvar,
@@ -101,6 +102,7 @@ struct Inner {
 }
 
 struct Shared {
+    // Blockign poolのtask queue
     queue: VecDeque<Task>,
     num_notify: u32,
     shutdown: bool,
@@ -117,6 +119,26 @@ struct Shared {
     /// This is a counter used to iterate `worker_threads` in a consistent order (for loom's
     /// benefit).
     worker_thread_index: usize,
+}
+
+struct Shared2 {
+    // Blockign poolのtask queue
+    queue: Mutex<VecDeque<Task>>,
+    num_notify: AtomicU32,
+    shutdown: AtomicBool,
+    shutdown_tx: Mutex<Option<shutdown::Sender>>,
+    /// Prior to shutdown, we clean up `JoinHandles` by having each timed-out
+    /// thread join on the previous timed-out thread. This is not strictly
+    /// necessary but helps avoid Valgrind false positives, see
+    /// <https://github.com/tokio-rs/tokio/commit/646fbae76535e397ef79dbcaacb945d4c829f666>
+    /// for more information.
+    last_exiting_thread: Mutex<Option<thread::JoinHandle<()>>>,
+    /// This holds the `JoinHandles` for all running threads; on shutdown, the thread
+    /// calling shutdown handles joining on these.
+    worker_threads: Mutex<HashMap<usize, thread::JoinHandle<()>>>,
+    /// This is a counter used to iterate `worker_threads` in a consistent order (for loom's
+    /// benefit).
+    worker_thread_index: AtomicUsize,
 }
 
 pub(crate) struct Task {
@@ -207,20 +229,30 @@ cfg_fs! {
 impl BlockingPool {
     pub(crate) fn new(builder: &Builder, thread_cap: usize) -> BlockingPool {
         let (shutdown_tx, shutdown_rx) = shutdown::channel();
+        // let shutdown_tx2 = shutdown_tx.clone();
         let keep_alive = builder.keep_alive.unwrap_or(KEEP_ALIVE);
 
         BlockingPool {
             spawner: Spawner {
                 inner: Arc::new(Inner {
-                    shared: Mutex::new(Shared {
-                        queue: VecDeque::new(),
-                        num_notify: 0,
-                        shutdown: false,
-                        shutdown_tx: Some(shutdown_tx),
-                        last_exiting_thread: None,
-                        worker_threads: HashMap::new(),
-                        worker_thread_index: 0,
-                    }),
+                    // shared: Mutex::new(Shared {
+                    //     queue: VecDeque::new(),
+                    //     num_notify: 0,
+                    //     shutdown: false,
+                    //     shutdown_tx: Some(shutdown_tx),
+                    //     last_exiting_thread: None,
+                    //     worker_threads: HashMap::new(),
+                    //     worker_thread_index: 0,
+                    // }),
+                    shared2: Shared2 {
+                        queue: Mutex::new(VecDeque::new()),
+                        num_notify: 0.into(),
+                        shutdown: AtomicBool::new(false),
+                        shutdown_tx: Mutex::new(Some(shutdown_tx)),
+                        last_exiting_thread: Mutex::new(None),
+                        worker_threads: Mutex::new(HashMap::new()),
+                        worker_thread_index: 0.into(),
+                    },
                     condvar: Condvar::new(),
                     thread_name: builder.thread_name.clone(),
                     stack_size: builder.thread_stack_size,
@@ -239,31 +271,39 @@ impl BlockingPool {
         &self.spawner
     }
 
+    // MEMO: runtime(のdrop等)から呼ばれる
     pub(crate) fn shutdown(&mut self, timeout: Option<Duration>) {
-        let mut shared = self.spawner.inner.shared.lock();
+        // let mut shared = self.spawner.inner.shared.lock();
+        let shared = &self.spawner.inner.shared2;
 
         // The function can be called multiple times. First, by explicitly
         // calling `shutdown` then by the drop handler calling `shutdown`. This
         // prevents shutting down twice.
-        if shared.shutdown {
+        if shared.shutdown.load(Ordering::Relaxed) {
             return;
         }
 
-        shared.shutdown = true;
-        shared.shutdown_tx = None;
+        shared.shutdown.store(true, Ordering::SeqCst);
+        *shared.shutdown_tx.lock() = None;
+        // MEMO: 全てのsleepしていたworker threadを起こす
         self.spawner.inner.condvar.notify_all();
 
-        let last_exited_thread = std::mem::take(&mut shared.last_exiting_thread);
-        let workers = std::mem::take(&mut shared.worker_threads);
+        // TODO:
+        // let last_exited_thread = shared.last_exiting_thread.lock().take();
+        // MEMO: lockを解放
+        // drop(shared);
 
-        drop(shared);
-
+        // MEMO: 他のthreadからの通知を待つ
         if self.shutdown_rx.wait(timeout) {
-            let _ = last_exited_thread.map(thread::JoinHandle::join);
+            // TODO:
+            // let _ = last_exited_thread.map(thread::JoinHandle::join);
 
             // Loom requires that execution be deterministic, so sort by thread ID before joining.
             // (HashMaps use a randomly-seeded hash function, so the order is nondeterministic)
-            let mut workers: Vec<(usize, thread::JoinHandle<()>)> = workers.into_iter().collect();
+
+            let mut workers = shared.worker_threads.lock();
+            let mut workers: Vec<(usize, thread::JoinHandle<()>)> =
+                workers.drain().into_iter().collect();
             workers.sort_by_key(|(id, _)| *id);
 
             for (_id, handle) in workers {
@@ -358,6 +398,7 @@ impl Spawner {
         F: FnOnce() -> R + Send + 'static,
         R: Send + 'static,
     {
+        // TODO: blockingTaskとはなんぞ？
         let fut = BlockingTask::new(func);
         let id = task::Id::next();
         #[cfg(all(tokio_unstable, feature = "tracing"))]
@@ -388,9 +429,13 @@ impl Spawner {
     }
 
     fn spawn_task(&self, task: Task, rt: &Handle) -> Result<(), SpawnError> {
-        let mut shared = self.inner.shared.lock();
+        // MEMO: かなり長いクリティカルセクションになってるので、issueにもあるとおり
+        // パフォーマンスがきつそう
 
-        if shared.shutdown {
+        // lockを取得
+        let shared = &self.inner.shared2;
+
+        if shared.shutdown.load(Ordering::SeqCst) {
             // Shutdown the task: it's fine to shutdown this task (even if
             // mandatory) because it was scheduled after the shutdown of the
             // runtime began.
@@ -400,26 +445,33 @@ impl Spawner {
             return Err(SpawnError::ShuttingDown);
         }
 
-        shared.queue.push_back(task);
+        // blocking poolのqueueにtaskを追加
+        println!("gonna push a task!");
+        shared.queue.lock().push_back(task);
+        println!("push a task done!");
         self.inner.metrics.inc_queue_depth();
 
+        // まだスレッドを起動する余地があれば起動(?)
         if self.inner.metrics.num_idle_threads() == 0 {
             // No threads are able to process the task.
 
             if self.inner.metrics.num_threads() == self.inner.thread_cap {
                 // At max number of threads
             } else {
-                assert!(shared.shutdown_tx.is_some());
-                let shutdown_tx = shared.shutdown_tx.clone();
+                // MEMO: まだスレッドを作る余地がある
+                // TODO:
+                // assert!(shared.shutdown_tx.is_some());
+                let shutdown_tx = shared.shutdown_tx.lock().clone();
 
                 if let Some(shutdown_tx) = shutdown_tx {
-                    let id = shared.worker_thread_index;
+                    let id = shared.worker_thread_index.load(Ordering::SeqCst);
 
+                    // MEMO: WorkerThreadを起動.
                     match self.spawn_thread(shutdown_tx, rt, id) {
                         Ok(handle) => {
                             self.inner.metrics.inc_num_threads();
-                            shared.worker_thread_index += 1;
-                            shared.worker_threads.insert(id, handle);
+                            shared.worker_thread_index.fetch_add(1, Ordering::SeqCst);
+                            shared.worker_threads.lock().insert(id, handle);
                         }
                         Err(ref e)
                             if is_temporary_os_thread_error(e)
@@ -444,7 +496,9 @@ impl Spawner {
             // wakeups, this counter is used to keep us in a
             // consistent state.
             self.inner.metrics.dec_num_idle_threads();
-            shared.num_notify += 1;
+            shared.num_notify.fetch_add(1, Ordering::SeqCst);
+
+            // condvarが複数のスレッドを持ってて、1つだけ解放するイメージ
             self.inner.condvar.notify_one();
         }
 
@@ -465,10 +519,13 @@ impl Spawner {
 
         let rt = rt.clone();
 
+        // stdのthrea::spawn
         builder.spawn(move || {
             // Only the reference should be moved into the closure
+            // MEMO: なんでここで enter() が必要なのかなぞ
             let _enter = rt.enter();
             rt.inner.blocking_spawner().inner.run(id);
+            // MEMO: ここのdropが何か大事そう
             drop(shutdown_tx);
         })
     }
@@ -497,49 +554,80 @@ fn is_temporary_os_thread_error(error: &std::io::Error) -> bool {
 }
 
 impl Inner {
+    // MEMO: worker threadのloop
     fn run(&self, worker_thread_id: usize) {
         if let Some(f) = &self.after_start {
             f();
         }
 
-        let mut shared = self.shared.lock();
+        let shared = &self.shared2;
         let mut join_on_thread = None;
 
         'main: loop {
             // BUSY
-            while let Some(task) = shared.queue.pop_front() {
-                self.metrics.dec_queue_depth();
-                drop(shared);
-                task.run();
+            // queueからtaskを取り出して実行
+            loop {
+                let mut g = shared.queue.lock();
+                if let Some(task) = g.pop_front() {
+                    drop(g);
+                    println!("get a task to run!!");
+                    // MEMO: taskが見つかったらrun
+                    self.metrics.dec_queue_depth();
+                    // drop(shared);
 
-                shared = self.shared.lock();
+                    // MEMO: ここでtaskを実行してるっぽい
+                    task.run();
+                    // shared = self.shared.lock();
+                } else {
+                    drop(g);
+                    break;
+                }
             }
+            // while let Some(task) = shared.queue.lock().pop_front() {
+            //     println!("get a task to run!!");
+            //     // MEMO: taskが見つかったらrun
+            //     self.metrics.dec_queue_depth();
+            //     // drop(shared);
+
+            //     // MEMO: ここでtaskを実行してるっぽい
+            //     task.run();
+
+            //     // shared = self.shared.lock();
+            // }
 
             // IDLE
             self.metrics.inc_num_idle_threads();
 
-            while !shared.shutdown {
-                let lock_result = self.condvar.wait_timeout(shared, self.keep_alive).unwrap();
+            while !shared.shutdown.load(Ordering::SeqCst) {
+                // MEMO: ここで wait_timeout がErrを返した際にunwrapを呼ぶとどうなる？ (多分, wait_timeoutの仕様が、unwrapしても問題ないものになってそう)
+                let lock_result = self
+                    .condvar
+                    .wait_timeout(shared.queue.lock(), self.keep_alive)
+                    .unwrap();
 
-                shared = lock_result.0;
+                // wakeup, もしくはtimeoutを受けて, このスレッドが再始動
+
+                // lockを保有
+                // shared = lock_result.0;
                 let timeout_result = lock_result.1;
 
-                if shared.num_notify != 0 {
+                if shared.num_notify.load(Ordering::SeqCst) != 0 {
                     // We have received a legitimate wakeup,
                     // acknowledge it by decrementing the counter
                     // and transition to the BUSY state.
-                    shared.num_notify -= 1;
+                    shared.num_notify.fetch_sub(1, Ordering::SeqCst);
                     break;
                 }
 
                 // Even if the condvar "timed out", if the pool is entering the
                 // shutdown phase, we want to perform the cleanup logic.
-                if !shared.shutdown && timeout_result.timed_out() {
+                if !shared.shutdown.load(Ordering::SeqCst) && timeout_result.timed_out() {
                     // We'll join the prior timed-out thread's JoinHandle after dropping the lock.
                     // This isn't done when shutting down, because the thread calling shutdown will
                     // handle joining everything.
-                    let my_handle = shared.worker_threads.remove(&worker_thread_id);
-                    join_on_thread = std::mem::replace(&mut shared.last_exiting_thread, my_handle);
+                    let my_handle = shared.worker_threads.lock().remove(&worker_thread_id);
+                    join_on_thread =
+                        std::mem::replace(&mut *shared.last_exiting_thread.lock(), my_handle);
 
                     break 'main;
                 }
@@ -547,15 +635,15 @@ impl Inner {
                 // Spurious wakeup detected, go back to sleep.
             }
 
-            if shared.shutdown {
+            if shared.shutdown.load(Ordering::SeqCst) {
                 // Drain the queue
-                while let Some(task) = shared.queue.pop_front() {
+                while let Some(task) = shared.queue.lock().pop_front() {
                     self.metrics.dec_queue_depth();
-                    drop(shared);
+                    // drop(shared);
 
                     task.shutdown_or_run_if_mandatory();
 
-                    shared = self.shared.lock();
+                    // shared = self.shared.lock();
                 }
 
                 // Work was produced, and we "took" it (by decrementing num_notify).
@@ -580,7 +668,7 @@ impl Inner {
             "num_idle_threads underflowed on thread exit"
         );
 
-        if shared.shutdown && self.metrics.num_threads() == 0 {
+        if shared.shutdown.load(Ordering::SeqCst) && self.metrics.num_threads() == 0 {
             self.condvar.notify_one();
         }
 
