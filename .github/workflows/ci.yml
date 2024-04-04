@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  RUSTFLAGS: -Dwarnings
+  # RUSTFLAGS: -Dwarnings
   RUST_BACKTRACE: 1
   # Change to specific Rust release to pin
   rust_stable: stable
@@ -745,20 +745,29 @@ jobs:
             exit 1
           fi
 
+  # clippy:
+  #   name: clippy
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Install Rust ${{ env.rust_clippy }}
+  #       uses: dtolnay/rust-toolchain@stable
+  #       with:
+  #         toolchain: ${{ env.rust_clippy }}
+  #         components: clippy
+  #     # - uses: Swatinem/rust-cache@v2
+  #     # Run clippy
+  #     - name: "clippy --all"
+  #       run: cargo clippy --workspace --lib --tests --benches --examples --all-features --no-deps -- -D warnings
+
   clippy:
     name: clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Install Rust ${{ env.rust_clippy }}
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.rust_clippy }}
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-      # Run clippy
-      - name: "clippy --all"
-        run: cargo clippy --workspace --all-targets --all-features --no-deps -- -D warnings
+      - uses: taiki-e/checkout-action@v1
+      - name: Install Rust
+        run: rustup toolchain install stable --component clippy && rustup default stable
+      - run: cargo clippy --workspace --all-features --all-targets --no-deps -- -D warnings
 
   docs:
     name: docs
