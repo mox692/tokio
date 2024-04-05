@@ -28,10 +28,10 @@ const DEV_NULL: &str = "/dev/null";
 #[tokio::main]
 async fn main() {
     // write().await;
-    // write_many_task().await;
+    write_many_task().await;
     // write_many_task_fs_write().await;
 
-    read_many_task().await;
+    // read_many_task().await;
     // read_many_task_fs_read().await;
 }
 
