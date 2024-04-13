@@ -426,6 +426,10 @@ impl<S: Schedule> LocalNotified<S> {
         mem::forget(self);
         raw.poll();
     }
+
+    pub(crate) fn id(&self) -> Id {
+        unsafe { Header::get_id(self.task.header_ptr()) }
+    }
 }
 
 impl<S: Schedule> UnownedTask<S> {
