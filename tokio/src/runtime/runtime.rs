@@ -330,7 +330,7 @@ impl Runtime {
             tokio_unstable,
             tokio_taskdump,
             feature = "rt",
-            target_os = "linux",
+            target_os = "macos",
             any(target_arch = "aarch64", target_arch = "x86", target_arch = "x86_64")
         ))]
         let future = super::task::trace::Trace::root(future);

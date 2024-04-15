@@ -404,7 +404,7 @@ macro_rules! cfg_taskdump {
                 tokio_unstable,
                 tokio_taskdump,
                 feature = "rt",
-                target_os = "linux",
+                target_os = "macos",
                 any(
                     target_arch = "aarch64",
                     target_arch = "x86",
@@ -423,7 +423,7 @@ macro_rules! cfg_not_taskdump {
                 tokio_unstable,
                 tokio_taskdump,
                 feature = "rt",
-                target_os = "linux",
+                target_os = "macos",
                 any(
                     target_arch = "aarch64",
                     target_arch = "x86",

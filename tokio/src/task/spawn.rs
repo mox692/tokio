@@ -187,7 +187,7 @@ cfg_rt! {
             tokio_unstable,
             tokio_taskdump,
             feature = "rt",
-            target_os = "linux",
+            target_os = "macos",
             any(
                 target_arch = "aarch64",
                 target_arch = "x86",

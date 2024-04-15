@@ -275,7 +275,7 @@ impl State {
         tokio_unstable,
         tokio_taskdump,
         feature = "rt",
-        target_os = "linux",
+        target_os = "macos",
         any(target_arch = "aarch64", target_arch = "x86", target_arch = "x86_64")
     ))]
     pub(super) fn transition_to_notified_for_tracing(&self) -> bool {
