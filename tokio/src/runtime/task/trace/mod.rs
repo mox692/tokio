@@ -31,6 +31,8 @@ pub(crate) struct Context {
     active_frame: Cell<Option<NonNull<Frame>>>,
     /// The place to stash backtraces.
     collector: Cell<Option<Trace>>,
+    /// The place to stash backtraces.
+    collector2: Cell<Option<Trace2>>,
 }
 
 /// A [`Frame`] in an intrusive, doubly-linked tree of [`Frame`]s.
@@ -53,6 +55,15 @@ pub(crate) struct Trace {
     backtraces: Vec<Backtrace>,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct Trace2 {
+    // The linear backtraces that comprise this trace. These linear traces can
+    // be re-knitted into a tree.
+    backtraces: Vec<Backtrace>,
+
+    is_traced: bool,
+}
+
 pin_project_lite::pin_project! {
     #[derive(Debug, Clone)]
     #[must_use = "futures do nothing unless you `.await` or poll them"]
@@ -72,6 +83,7 @@ impl Context {
         Context {
             active_frame: Cell::new(None),
             collector: Cell::new(None),
+            collector2: Cell::new(None),
         }
     }
 
@@ -99,6 +111,17 @@ impl Context {
         // break the trace frame linked list.
         unsafe {
             Self::try_with_current(|context| f(&context.collector)).expect(FAIL_NO_THREAD_LOCAL)
+        }
+    }
+
+    fn with_current_collector2<F, R>(f: F) -> R
+    where
+        F: FnOnce(&Cell<Option<Trace2>>) -> R,
+    {
+        // SAFETY: This call can only access the collector field, so it cannot
+        // break the trace frame linked list.
+        unsafe {
+            Self::try_with_current(|context| f(&context.collector2)).expect(FAIL_NO_THREAD_LOCAL)
         }
     }
 
@@ -133,6 +156,34 @@ impl Trace {
         (result, collector)
     }
 
+    #[inline(never)]
+    pub(crate) fn capture2<F, R>(f: F) -> (R, Trace2)
+    where
+        F: FnOnce() -> R,
+    {
+        let collector = Trace2 {
+            backtraces: vec![],
+            is_traced: false,
+        };
+
+        let previous = Context::with_current_collector2(|current| {
+            let s = current.replace(Some(collector));
+
+            s
+        });
+
+        println!("before: {:?}", &previous);
+
+        let result = f();
+
+        let collector =
+            Context::with_current_collector2(|current| current.replace(previous)).unwrap();
+
+        println!("after: {:?}", &collector);
+
+        (result, collector)
+    }
+
     /// The root of a trace.
     #[inline(never)]
     pub(crate) fn root<F>(future: F) -> Root<F> {
@@ -154,11 +205,18 @@ pub(crate) fn trace_leaf(cx: &mut task::Context<'_>) -> Poll<()> {
     // Safety: We don't manipulate the current context's active frame.
     let did_trace = unsafe {
         Context::try_with_current(|context_cell| {
-            if let Some(mut collector) = context_cell.collector.take() {
+            let c = context_cell.collector2.take();
+
+            if let Some(mut collector) = c {
+                if collector.is_traced == true {
+                    return false;
+                }
+
                 let mut frames = vec![];
                 let mut above_leaf = false;
 
                 if let Some(active_frame) = context_cell.active_frame.get() {
+                    println!("aaaaaaaaaaaaaaaa");
                     let active_frame = active_frame.as_ref();
 
                     backtrace::trace(|frame| {
@@ -178,44 +236,61 @@ pub(crate) fn trace_leaf(cx: &mut task::Context<'_>) -> Poll<()> {
                         below_root
                     });
                 }
+                println!("frames: {:?}", &frames);
                 collector.backtraces.push(frames);
-                context_cell.collector.set(Some(collector));
+                collector.is_traced = true;
+                context_cell.collector2.set(Some(collector));
                 true
             } else {
+                // For some reason, trace is not embedded in the thread local.
+                // TODO: we should not do this, change.
+                let collector = Trace2 {
+                    backtraces: vec![],
+                    is_traced: false,
+                };
+                context_cell.collector2.set(Some(collector));
                 false
             }
         })
         .unwrap_or(false)
     };
 
-    if did_trace {
-        // Use the same logic that `yield_now` uses to send out wakeups after
-        // the task yields.
-        context::with_scheduler(|scheduler| {
-            if let Some(scheduler) = scheduler {
-                match scheduler {
-                    scheduler::Context::CurrentThread(s) => s.defer.defer(cx.waker()),
-                    #[cfg(all(feature = "rt-multi-thread", not(target_os = "wasi")))]
-                    scheduler::Context::MultiThread(s) => s.defer.defer(cx.waker()),
-                    #[cfg(all(
-                        tokio_unstable,
-                        feature = "rt-multi-thread",
-                        not(target_os = "wasi")
-                    ))]
-                    scheduler::Context::MultiThreadAlt(_) => unimplemented!(),
-                }
-            }
-        });
+    Poll::Ready(())
 
-        Poll::Pending
-    } else {
-        Poll::Ready(())
-    }
+    // if did_trace {
+    //     // Use the same logic that `yield_now` uses to send out wakeups after
+    //     // the task yields.
+    //     context::with_scheduler(|scheduler| {
+    //         if let Some(scheduler) = scheduler {
+    //             match scheduler {
+    //                 scheduler::Context::CurrentThread(s) => s.defer.defer(cx.waker()),
+    //                 #[cfg(all(feature = "rt-multi-thread", not(target_os = "wasi")))]
+    //                 scheduler::Context::MultiThread(s) => s.defer.defer(cx.waker()),
+    //                 #[cfg(all(
+    //                     tokio_unstable,
+    //                     feature = "rt-multi-thread",
+    //                     not(target_os = "wasi")
+    //                 ))]
+    //                 scheduler::Context::MultiThreadAlt(_) => unimplemented!(),
+    //             }
+    //         }
+    //     });
+
+    //     Poll::Pending
+    // } else {
+    //     Poll::Ready(())
+    // }
 }
 
 impl fmt::Display for Trace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         Tree::from_trace(self.clone()).fmt(f)
+    }
+}
+
+impl fmt::Display for Trace2 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Tree::from_trace2(self.clone()).fmt(f)
     }
 }
 

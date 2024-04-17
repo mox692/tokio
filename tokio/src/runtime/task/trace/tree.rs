@@ -2,7 +2,7 @@ use std::collections::{hash_map::DefaultHasher, HashMap, HashSet};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
-use super::{Backtrace, Symbol, SymbolTrace, Trace};
+use super::{Backtrace, Symbol, SymbolTrace, Trace, Trace2};
 
 /// An adjacency list representation of an execution tree.
 ///
@@ -21,6 +21,29 @@ pub(super) struct Tree {
 impl Tree {
     /// Constructs a [`Tree`] from [`Trace`]
     pub(super) fn from_trace(trace: Trace) -> Self {
+        let mut roots: HashSet<Symbol> = HashSet::default();
+        let mut edges: HashMap<Symbol, HashSet<Symbol>> = HashMap::default();
+
+        for trace in trace.backtraces {
+            let trace = to_symboltrace(trace);
+
+            if let Some(first) = trace.first() {
+                roots.insert(first.to_owned());
+            }
+
+            let mut trace = trace.into_iter().peekable();
+            while let Some(frame) = trace.next() {
+                let subframes = edges.entry(frame).or_default();
+                if let Some(subframe) = trace.peek() {
+                    subframes.insert(subframe.clone());
+                }
+            }
+        }
+
+        Tree { roots, edges }
+    }
+
+    pub(super) fn from_trace2(trace: Trace2) -> Self {
         let mut roots: HashSet<Symbol> = HashSet::default();
         let mut edges: HashMap<Symbol, HashSet<Symbol>> = HashMap::default();
 

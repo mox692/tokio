@@ -13,19 +13,63 @@
 
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
+use tokio::spawn;
+use tokio::task::JoinSet;
 
 use std::error::Error;
+use std::sync::atomic::AtomicUsize;
+use std::sync::Arc;
 
 #[tokio::main]
-pub async fn main() -> Result<(), Box<dyn Error>> {
-    // Open a TCP stream to the socket address.
-    //
-    // Note that this is the Tokio TcpStream, which is fully async.
-    let mut stream = TcpStream::connect("127.0.0.1:6142").await?;
-    println!("created stream");
+pub async fn main() {
+    basic().await;
+    // sleep_little_task().await;
+}
 
-    let result = stream.write_all(b"hello world\n").await;
-    println!("wrote to stream; success={:?}", result.is_ok());
+/// expected event:
+/// * RunTask(a, b)
+/// * Park(a) // because there are no tasks to run.
+/// * RunTask(c, b) // task might run on a different worker.
+async fn sleep_little_task() {
+    spawn(async {
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    })
+    .await
+    .unwrap();
+}
 
-    Ok(())
+#[inline(never)]
+async fn foo() {
+    bar().await
+}
+
+#[inline(never)]
+async fn bar() {
+    baz().await
+}
+
+#[inline(never)]
+async fn baz() {
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+}
+
+/// expected event:
+/// * RunTask(a, b) // sould happen 10 times. (These often seem to be scheduled concentrating on one or two workers.)
+async fn basic() {
+    let mut set = JoinSet::new();
+
+    let count = Arc::new(AtomicUsize::new(0));
+    for _ in 0..10 {
+        let count = count.clone();
+        let _ = set.spawn(async move {
+            foo().await;
+            count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        });
+    }
+
+    while let Some(s) = set.join_next().await {
+        s.unwrap();
+    }
+
+    assert_eq!(count.load(std::sync::atomic::Ordering::Relaxed), 10)
 }
