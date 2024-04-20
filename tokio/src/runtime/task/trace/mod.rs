@@ -1,6 +1,5 @@
 use crate::loom::sync::Arc;
-use crate::runtime::context;
-use crate::runtime::scheduler::{self, current_thread, Inject};
+use crate::runtime::scheduler::{current_thread, Inject};
 use crate::task::Id;
 
 use backtrace::BacktraceFrame;
@@ -12,6 +11,11 @@ use std::future::Future;
 use std::pin::Pin;
 use std::ptr::{self, NonNull};
 use std::task::{self, Poll};
+use std::time::Instant;
+
+#[cfg(all(tokio_unstable, feature = "tracing"))]
+#[cfg_attr(docsrs, doc(cfg(all(tokio_unstable, feature = "tracing"))))]
+use tracing::info;
 
 mod symbol;
 mod tree;
@@ -208,6 +212,7 @@ pub(crate) fn trace_leaf(cx: &mut task::Context<'_>) -> Poll<()> {
             let c = context_cell.collector2.take();
 
             if let Some(mut collector) = c {
+                let start = Instant::now();
                 if collector.is_traced == true {
                     return false;
                 }
@@ -216,7 +221,6 @@ pub(crate) fn trace_leaf(cx: &mut task::Context<'_>) -> Poll<()> {
                 let mut above_leaf = false;
 
                 if let Some(active_frame) = context_cell.active_frame.get() {
-                    println!("aaaaaaaaaaaaaaaa");
                     let active_frame = active_frame.as_ref();
 
                     backtrace::trace(|frame| {
@@ -236,10 +240,16 @@ pub(crate) fn trace_leaf(cx: &mut task::Context<'_>) -> Poll<()> {
                         below_root
                     });
                 }
-                println!("frames: {:?}", &frames);
                 collector.backtraces.push(frames);
                 collector.is_traced = true;
                 context_cell.collector2.set(Some(collector));
+
+                let duration = start.elapsed().as_millis();
+
+                #[cfg(all(tokio_unstable, feature = "tracing"))]
+                #[cfg_attr(docsrs, doc(cfg(all(tokio_unstable, feature = "tracing"))))]
+                info!("実行にかかった時間: {:?} millis", duration);
+
                 true
             } else {
                 // For some reason, trace is not embedded in the thread local.

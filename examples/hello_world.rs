@@ -19,9 +19,14 @@ use tokio::task::JoinSet;
 use std::error::Error;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
+use tracing_subscriber::layer::SubscriberExt;
 
 #[tokio::main]
 pub async fn main() {
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::TRACE)
+        .init();
+
     basic().await;
     // sleep_little_task().await;
 }
@@ -50,7 +55,7 @@ async fn bar() {
 
 #[inline(never)]
 async fn baz() {
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    tokio::time::sleep(std::time::Duration::from_nanos(1)).await;
 }
 
 /// expected event:
