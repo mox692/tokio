@@ -173,12 +173,6 @@ struct Core {
 
     /// Fast random number generator.
     rand: FastRand,
-
-    /// Timer
-    timer: Instant,
-
-    /// buffer
-    worker_log_buf: AtomicCell<String>,
 }
 
 /// State shared across all workers
@@ -229,23 +223,6 @@ pub(crate) struct Shared {
     _counters: Counters,
 }
 
-impl Shared {
-    fn flush_worker_log(&self, mut buf: String) {
-        let mut file = self.worker_log_file.lock();
-        if file.is_none() {
-            *file = Some(File::create(file_name).unwrap());
-            let mut str = "const input = [".to_string();
-            str.push_str(buf.as_str());
-            buf = str;
-        }
-
-        let buf = buf.as_bytes();
-        let _ = file.as_mut().unwrap().write_all(buf).unwrap();
-        let _ = file.as_mut().unwrap().flush().unwrap();
-
-        drop(file);
-    }
-}
 /// Data synchronized by the scheduler mutex
 pub(crate) struct Synced {
     /// Synchronized state for `Idle`.
@@ -330,8 +307,6 @@ pub(super) fn create(
             global_queue_interval: stats.tuned_global_queue_interval(&config),
             stats,
             rand: FastRand::from_seed(config.seed_generator.next_seed()),
-            timer: Instant::now(),
-            worker_log_buf: AtomicCell::new(Some(Box::new(String::new()))),
         }));
 
         remotes.push(Remote { steal, unpark });
@@ -547,7 +522,12 @@ fn run(worker: Arc<Worker>) {
         context::set_scheduler(&cx, || {
             let cx = cx.expect_multi_thread();
 
-            core = worker.worker_log(core, WorkerEvent::Start);
+            #[cfg(all(tokio_unstable, feature = "tracing"))]
+            tracing::trace!(
+                target: "tokio::runtime::scheduler::multi_thread::worker::worker_log",
+                typ = WorkerEvent::Start.to_string(),
+                worker.id = worker.index
+            );
 
             // This should always be an error. It only returns a `Result` to support
             // using `?` to short circuit.
@@ -613,7 +593,12 @@ impl Context {
         core.pre_shutdown(&self.worker);
         // Signal shutdown
 
-        core = self.worker.worker_log(core, WorkerEvent::Shutdown);
+        #[cfg(all(tokio_unstable, feature = "tracing"))]
+        tracing::trace!(
+            target: "tokio::runtime::scheduler::multi_thread::worker::worker_log",
+            typ = WorkerEvent::Shutdown.to_string(),
+            worker.id = self.worker.index
+        );
 
         self.worker.handle.shutdown_core(core);
         Err(())
@@ -635,7 +620,6 @@ impl Context {
         core.stats.start_poll();
 
         let task_id = task.id().0;
-        let time = core.timer.elapsed().as_micros();
 
         // Make the core available to the runtime context
         *self.core.borrow_mut() = Some(core);
@@ -664,10 +648,13 @@ impl Context {
                 };
 
                 // worker logging
-                core = self.worker.worker_log_with_elapsed(
-                    core,
-                    WorkerEvent::RunTask(task_id, bt.to_string()),
-                    time,
+                #[cfg(all(tokio_unstable, feature = "tracing"))]
+                tracing::trace!(
+                    target: "tokio::runtime::scheduler::multi_thread::worker::worker_log",
+                    typ = WorkerEvent::Start.to_string(),
+                    worker.id = self.worker.index,
+                    task.id = task_id,
+                    backtrace = bt.to_string(),
                 );
 
                 // Check for a task in the LIFO slot
@@ -791,7 +778,12 @@ impl Context {
         // Take the parker out of core
         let mut park = core.park.take().expect("park missing");
 
-        core = self.worker.worker_log(core, WorkerEvent::Park);
+        #[cfg(all(tokio_unstable, feature = "tracing"))]
+        tracing::trace!(
+            target: "tokio::runtime::scheduler::multi_thread::worker::worker_log",
+            typ = WorkerEvent::Park.to_string(),
+            worker.id = self.worker.index
+        );
 
         // Store `core` in context
         *self.core.borrow_mut() = Some(core);
@@ -1057,9 +1049,6 @@ impl Core {
         // Drain the queue
         while self.next_local_task().is_some() {}
 
-        let buf = self.worker_log_buf.take().unwrap();
-        handle.shared.flush_worker_log(buf.to_string());
-
         park.shutdown(&handle.driver);
     }
 
@@ -1079,53 +1068,6 @@ impl Worker {
     /// Returns a reference to the scheduler's injection queue.
     fn inject(&self) -> &inject::Shared<Arc<Handle>> {
         &self.handle.shared.inject
-    }
-
-    // TODO: change to tracing log
-    fn worker_log(&self, core: Box<Core>, event: WorkerEvent) -> Box<Core> {
-        let time = core.timer.elapsed().as_micros();
-
-        let json_log = match &event {
-            WorkerEvent::RunTask(_, trace) => format!(
-                "{{ \"time\": {:>10}, \"id\": {:>4}, \"type\": \"{}\", \"trace\": `{}` }},",
-                time, self.index, &event, trace
-            ),
-            _ => format!(
-                "{{ \"time\": {:>10}, \"id\": {:>4}, \"type\": \"{}\" }},",
-                time, self.index, &event
-            ),
-        };
-
-        let mut buf = core.worker_log_buf.take().unwrap();
-        buf.push_str(&json_log);
-        core.worker_log_buf.set(buf);
-
-        core
-    }
-
-    // TODO: change to tracing log
-    fn worker_log_with_elapsed(
-        &self,
-        core: Box<Core>,
-        event: WorkerEvent,
-        time: u128,
-    ) -> Box<Core> {
-        let json_log = match &event {
-            WorkerEvent::RunTask(_, trace) => format!(
-                "{{ \"time\": {:>10}, \"id\": {:>4}, \"type\": \"{}\", \"trace\": `{}` }},",
-                time, self.index, &event, trace
-            ),
-            _ => format!(
-                "{{ \"time\": {:>10}, \"id\": {:>4}, \"type\": \"{}\" }},",
-                time, self.index, &event
-            ),
-        };
-
-        let mut buf = core.worker_log_buf.take().unwrap();
-        buf.push_str(&json_log);
-        core.worker_log_buf.set(buf);
-
-        core
     }
 }
 
@@ -1293,12 +1235,6 @@ impl Handle {
         for mut core in cores.drain(..) {
             core.shutdown(self);
         }
-
-        let mut file = self.shared.worker_log_file.lock();
-        let buf = b"]";
-        let _ = file.as_mut().unwrap().write_all(buf).unwrap();
-        let _ = file.as_mut().unwrap().flush().unwrap();
-        drop(file);
 
         // Drain the injection queue
         //

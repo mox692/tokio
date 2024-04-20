@@ -176,14 +176,10 @@ impl Trace {
             s
         });
 
-        println!("before: {:?}", &previous);
-
         let result = f();
 
         let collector =
             Context::with_current_collector2(|current| current.replace(previous)).unwrap();
-
-        println!("after: {:?}", &collector);
 
         (result, collector)
     }
