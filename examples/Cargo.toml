@@ -130,3 +130,6 @@ path = "global_queue_interval_bugs.rs"
 [[example]]
 name = "test_macro"
 path = "test_macro.rs"
+[[example]]
+name = "see_runtime_embeded_tracing"
+path = "see_runtime_embeded_tracing.rs"
