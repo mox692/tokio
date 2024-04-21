@@ -13,7 +13,8 @@ tokio-stream = { version = "0.1", path = "../tokio-stream" }
 
 async-stream = "0.3"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3.1", default-features = false, features = ["fmt", "ansi", "env-filter", "tracing-log"] }
+tracing-subscriber = { version = "0.3.1", default-features = false, features = ["fmt", "ansi", "env-filter", "tracing-log", "time", "std", "json"] }
+tracing-appender = "0.2.3"
 bytes = "1.0.0"
 futures = { version = "0.3.0", features = ["thread-pool"]}
 futures-sink = "0.3.0"
