@@ -252,6 +252,9 @@ impl StateCell {
     fn extend_expiration(&self, new_timestamp: u64) -> Result<(), ()> {
         let mut prior = self.state.load(Ordering::Relaxed);
         loop {
+            // MEMO: 既にfireされている場合はErrを返す.
+            // 別のtaskから, より遅い時間に再設定された場合ということなのだろうか？
+            // 追記: いや, これ最初は(prior = u64::MAXなので)絶対にErrを返すようになって, その後reregisterされそう？
             if new_timestamp < prior || prior >= STATE_MIN_VALUE {
                 return Err(());
             }
@@ -533,6 +536,7 @@ impl TimerEntry {
             return;
         }
 
+        // 初回は上のifがtrueにならないはずなので、ここにくるはず
         if reregister {
             unsafe {
                 self.driver()
@@ -551,6 +555,7 @@ impl TimerEntry {
             crate::util::error::RUNTIME_SHUTTING_DOWN_ERROR
         );
 
+        // MEMO: 初回は必ず登録する. (TimerEntry::new()ではfalseになる)
         if !self.registered {
             let deadline = self.deadline;
             self.as_mut().reset(deadline, true);

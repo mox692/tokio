@@ -247,6 +247,7 @@ impl Driver {
 }
 
 impl Handle {
+    // Worker threadのルーチンから呼ばれる.
     /// Runs timer related logic, and returns the next wakeup time
     pub(self) fn process(&self, clock: &Clock) {
         let now = self.time_source().now(clock);
@@ -257,6 +258,7 @@ impl Handle {
     pub(self) fn process_at_time(&self, mut now: u64) {
         let mut waker_list = WakeList::new();
 
+        // lockが発生.
         let mut lock = self.inner.lock();
 
         if now < lock.wheel.elapsed() {
@@ -269,9 +271,11 @@ impl Handle {
             now = lock.wheel.elapsed();
         }
 
+        // fireできるtimerをwheelからpollする
         while let Some(entry) = lock.wheel.poll(now) {
             debug_assert!(unsafe { entry.is_pending() });
 
+            // timerのstateを完了に変更
             // SAFETY: We hold the driver lock, and just removed the entry from any linked lists.
             if let Some(waker) = unsafe { entry.fire(Ok(())) } {
                 waker_list.push(waker);
@@ -297,6 +301,7 @@ impl Handle {
         waker_list.wake_all();
     }
 
+    // TimerEntryのdropから呼ばれる.
     /// Removes a registered timer from the driver.
     ///
     /// The timer will be moved to the cancelled state. Wakers will _not_ be
@@ -332,6 +337,9 @@ impl Handle {
         entry: NonNull<TimerShared>,
     ) {
         let waker = unsafe {
+            // ここからクリティカルセクション.
+            // 1つのtimerが1つのthreadだけからreregisterを呼ばれることは保証されてるっぽいが、
+            // wheelをいじるときにlockが必要?
             let mut lock = self.inner.lock();
 
             // We may have raced with a firing/deregistration, so check before
@@ -358,6 +366,7 @@ impl Handle {
                             .map(|next_wake| when < next_wake.get())
                             .unwrap_or(true)
                         {
+                            // TODO: なんでunpark(ioをpollingしているworkerをwakeup)する必要がある？
                             unpark.unpark();
                         }
 

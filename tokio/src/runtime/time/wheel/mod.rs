@@ -138,15 +138,19 @@ impl Wheel {
         self.next_expiration().map(|expiration| expiration.deadline)
     }
 
+    /// Runtime側 -> TimeHandle から呼ばれる.
     /// Advances the timer up to the instant represented by `now`.
     pub(crate) fn poll(&mut self, now: u64) -> Option<TimerHandle> {
         loop {
+            // pending timer(fireできるtimer)があればそれを返す
             if let Some(handle) = self.pending.pop_back() {
                 return Some(handle);
             }
 
+            // pending timer(fireできるtimer)がemptyの場合, pending timerを作成できないかcheck
             match self.next_expiration() {
                 Some(ref expiration) if expiration.deadline <= now => {
+                    // pending timerを作成できる.
                     self.process_expiration(expiration);
 
                     self.set_elapsed(expiration.deadline);
