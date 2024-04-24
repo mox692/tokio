@@ -27,6 +27,8 @@ httpdate = "1.0"
 once_cell = "1.5.2"
 rand = "0.8.3"
 pin-project-lite = "0.2.11"
+test-log = "0.2.15"
+test-case = "3.3.1"
 
 [target.'cfg(windows)'.dev-dependencies.windows-sys]
 version = "0.48"
@@ -134,3 +136,6 @@ path = "test_macro.rs"
 [[example]]
 name = "see_runtime_embeded_tracing"
 path = "see_runtime_embeded_tracing.rs"
+[[example]]
+name = "pr_6497"
+path = "pr_6497.rs"
