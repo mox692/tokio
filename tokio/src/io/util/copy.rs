@@ -9,6 +9,7 @@ use std::task::{Context, Poll};
 pub(super) struct CopyBuffer {
     read_done: bool,
     need_flush: bool,
+    need_flush_before_write: bool,
     pos: usize,
     cap: usize,
     amt: u64,
@@ -20,6 +21,7 @@ impl CopyBuffer {
         Self {
             read_done: false,
             need_flush: false,
+            need_flush_before_write: false,
             pos: 0,
             cap: 0,
             amt: 0,
@@ -134,24 +136,40 @@ impl CopyBuffer {
                         // Try flushing when the reader has no progress to avoid deadlock
                         // when the reader depends on buffered writer.
                         if self.need_flush {
-                            ready!(writer.as_mut().poll_flush(cx))?;
-                            #[cfg(any(
-                                feature = "fs",
-                                feature = "io-std",
-                                feature = "net",
-                                feature = "process",
-                                feature = "rt",
-                                feature = "signal",
-                                feature = "sync",
-                                feature = "time",
-                            ))]
-                            coop.made_progress();
-                            self.need_flush = false;
+                            let res = writer.as_mut().poll_flush(cx);
+                            match res {
+                                Poll::Ready(Ok(())) => {
+                                    #[cfg(any(
+                                        feature = "fs",
+                                        feature = "io-std",
+                                        feature = "net",
+                                        feature = "process",
+                                        feature = "rt",
+                                        feature = "signal",
+                                        feature = "sync",
+                                        feature = "time",
+                                    ))]
+                                    coop.made_progress();
+                                    self.need_flush = false;
+                                    self.need_flush_before_write = false;
+                                }
+                                Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
+                                Poll::Pending => {
+                                    self.need_flush_before_write = true;
+                                }
+                            }
                         }
 
                         return Poll::Pending;
                     }
                 }
+            }
+
+            if self.need_flush_before_write && self.need_flush {
+                ready!(writer.as_mut().poll_flush(cx))?;
+
+                self.need_flush_before_write = false;
+                self.need_flush = false;
             }
 
             // If our buffer has some data, let's write it out!
@@ -191,7 +209,16 @@ impl CopyBuffer {
             // If we've written all the data and we've seen EOF, flush out the
             // data and finish the transfer.
             if self.pos == self.cap && self.read_done {
-                ready!(writer.as_mut().poll_flush(cx))?;
+                let res = writer.as_mut().poll_flush(cx);
+                match res {
+                    Poll::Ready(Ok(())) => {}
+                    Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
+                    Poll::Pending => {
+                        self.need_flush_before_write = true;
+                        return Poll::Pending;
+                    }
+                }
+
                 #[cfg(any(
                     feature = "fs",
                     feature = "io-std",
@@ -203,6 +230,8 @@ impl CopyBuffer {
                     feature = "time",
                 ))]
                 coop.made_progress();
+                self.need_flush_before_write = false;
+                self.need_flush = false;
                 return Poll::Ready(Ok(self.amt));
             }
         }
