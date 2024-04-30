@@ -72,6 +72,8 @@ impl CopyBuffer {
         }
     }
 
+    // Readerのデータを, self.bufに読み込む
+    // -> self.bufのデータをwriterに書き込む
     pub(super) fn poll_copy<R, W>(
         &mut self,
         cx: &mut Context<'_>,
@@ -102,6 +104,8 @@ impl CopyBuffer {
                 self.pos = 0;
                 self.cap = 0;
 
+                // Readerのデータを, self.bufに読み込む
+                // fill_bufで一回returnすることもあるっぽい
                 match self.poll_fill_buf(cx, reader.as_mut()) {
                     Poll::Ready(Ok(())) => {
                         #[cfg(any(
@@ -133,6 +137,8 @@ impl CopyBuffer {
                     Poll::Pending => {
                         // Try flushing when the reader has no progress to avoid deadlock
                         // when the reader depends on buffered writer.
+                        // `If we've written all the data and we've seen EOF` 以外の場合、
+                        // ここのpathを通る
                         if self.need_flush {
                             ready!(writer.as_mut().poll_flush(cx))?;
                             #[cfg(any(
@@ -155,6 +161,7 @@ impl CopyBuffer {
             }
 
             // If our buffer has some data, let's write it out!
+            // self.bufのデータをwriterに書き込む
             while self.pos < self.cap {
                 let i = ready!(self.poll_write_buf(cx, reader.as_mut(), writer.as_mut()))?;
                 #[cfg(any(

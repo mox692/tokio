@@ -47,13 +47,19 @@ where
     let (a, mut a1) = make_socketpair().await;
     let (b, mut b1) = make_socketpair().await;
 
-    let handle = tokio::spawn(async move { copy_bidirectional(&mut a1, &mut b1).await });
+    let handle = tokio::spawn(async move {
+        // socketにデータが来るまで, waitするっぽい
+        copy_bidirectional(&mut a1, &mut b1).await
+    });
     cb(handle, a, b).await;
 
     let (a, mut a1) = make_socketpair().await;
     let (b, mut b1) = make_socketpair().await;
 
-    let handle = tokio::spawn(async move { copy_bidirectional(&mut b1, &mut a1).await });
+    let handle = tokio::spawn(async move {
+        // socketにデータが来るまで, waitするっぽい
+        copy_bidirectional(&mut b1, &mut a1).await
+    });
 
     cb(handle, b, a).await;
 }
@@ -61,6 +67,9 @@ where
 #[tokio::test]
 async fn test_basic_transfer() {
     symmetric(|_handle, mut a, mut b| async move {
+        tokio::time::sleep(Duration::from_millis(2000)).await;
+        // writeが走ったタイミングで、copy_bidirectionalに通知がいく. (どのようにwakeされるのだろう？...)
+        // wakeされるのは、おそらくioモジュールに従って実行されるはず.
         a.write_all(b"test").await.unwrap();
         let mut tmp = [0; 4];
         b.read_exact(&mut tmp).await.unwrap();

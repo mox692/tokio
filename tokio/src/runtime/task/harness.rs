@@ -88,6 +88,7 @@ impl RawTask {
         }
     }
 
+    // MEMO: tokioのwake_by_refの実装. 中身的にはscheduleが呼ばれてるっぽい？
     /// This call notifies the task. It will not consume any ref-counts, but the
     /// caller should hold a ref-count.  This will create a new Notified and
     /// submit it if necessary.

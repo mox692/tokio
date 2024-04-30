@@ -93,6 +93,7 @@ unsafe fn wake_by_ref(ptr: *const ()) {
     raw.wake_by_ref();
 }
 
+// Wakerと、その仲間達.
 static WAKER_VTABLE: RawWakerVTable =
     RawWakerVTable::new(clone_waker, wake_by_val, wake_by_ref, drop_waker);
 

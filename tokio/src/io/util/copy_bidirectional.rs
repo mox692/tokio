@@ -13,6 +13,7 @@ enum TransferState {
     Done(u64),
 }
 
+// r -> w にデータをコピーする
 fn transfer_one_direction<A, B>(
     cx: &mut Context<'_>,
     state: &mut TransferState,

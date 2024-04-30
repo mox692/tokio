@@ -1023,6 +1023,8 @@ impl task::Schedule for Arc<Handle> {
 }
 
 impl Handle {
+    // MEMO: tokio/src/runtime/task/raw.rs から呼ばれる. schedule関数は tokio/src/runtime/task/raw.rs の
+    // pub(super) fn vtable<T: Future, S: Schedule>() -> &'static Vtable で登録されている
     pub(super) fn schedule_task(&self, task: Notified, is_yield: bool) {
         with_current(|maybe_cx| {
             if let Some(cx) = maybe_cx {
