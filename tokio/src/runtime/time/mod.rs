@@ -169,6 +169,8 @@ impl Driver {
         self.park.shutdown(rt_handle);
     }
 
+    // 1. IoStack.park_timeout でIO eventをpoll (tokio/src/runtime/io/driver.rs#turn)
+    // 2. time::Driver::Handle::process でtimer eventをpoll (tokio/src/runtime/time/mod.rs#Handle::process)
     fn park_internal(&mut self, rt_handle: &driver::Handle, limit: Option<Duration>) {
         let handle = rt_handle.time();
         let mut lock = handle.inner.state.lock();
@@ -280,6 +282,8 @@ impl Handle {
             if let Some(waker) = unsafe { entry.fire(Ok(())) } {
                 waker_list.push(waker);
 
+                // このwhile loopの中で, wakelistのwakerがいっぱいになる可能性がある.
+                // その場合は, このタイミングでwakeする
                 if !waker_list.can_push() {
                     // Wake a batch of wakers. To avoid deadlock, we must do this with the lock temporarily dropped.
                     drop(lock);
@@ -291,6 +295,8 @@ impl Handle {
             }
         }
 
+        // MEMO: next_wakeが何に使われるかについては, park_internalの実装を見る.
+        // 雑に見ると、park_timeoutに渡すための, sleepのdurationを決めるための変数っぽい.
         lock.next_wake = lock
             .wheel
             .poll_at()

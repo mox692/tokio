@@ -137,7 +137,8 @@ impl Driver {
         }
     }
 
-    // MEMO: io eventをpollしてそう. parkといいつつ、実際はpollしてる的な
+    // MEMO: io eventをpollしてそう. parkといいつつ、実際はpollしてる的な.
+    //       timer eventは
     fn turn(&mut self, handle: &Handle, max_wait: Option<Duration>) {
         debug_assert!(!handle.registrations.is_shutdown(&handle.synced.lock()));
 
