@@ -526,7 +526,7 @@ fn run(worker: Arc<Worker>) {
             tracing::trace!(
                 target: "tokio::runtime::scheduler::multi_thread::worker::worker_log",
                 typ = WorkerEvent::Start.to_string(),
-                worker.id = worker.index
+                worker_id = worker.index
             );
 
             // This should always be an error. It only returns a `Result` to support
@@ -597,7 +597,7 @@ impl Context {
         tracing::trace!(
             target: "tokio::runtime::scheduler::multi_thread::worker::worker_log",
             typ = WorkerEvent::Shutdown.to_string(),
-            worker.id = self.worker.index
+            worker_id = self.worker.index
         );
 
         self.worker.handle.shutdown_core(core);
@@ -651,9 +651,9 @@ impl Context {
                 #[cfg(all(tokio_unstable, feature = "tracing"))]
                 tracing::trace!(
                     target: "tokio::runtime::scheduler::multi_thread::worker::worker_log",
-                    typ = WorkerEvent::Start.to_string(),
-                    worker.id = self.worker.index,
-                    task.id = task_id,
+                    typ = WorkerEvent::RunTask(task_id, bt.to_string()).to_string(),
+                    worker_id = self.worker.index,
+                    task_id = task_id,
                     backtrace = bt.to_string(),
                 );
 
@@ -782,7 +782,7 @@ impl Context {
         tracing::trace!(
             target: "tokio::runtime::scheduler::multi_thread::worker::worker_log",
             typ = WorkerEvent::Park.to_string(),
-            worker.id = self.worker.index
+            worker_id = self.worker.index
         );
 
         // Store `core` in context

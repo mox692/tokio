@@ -11,30 +11,56 @@
 
 #![warn(rust_2018_idioms)]
 
-use tokio::io::AsyncWriteExt;
-use tokio::net::TcpStream;
-use tokio::spawn;
-use tokio::task::JoinSet;
-use tracing_subscriber::EnvFilter;
-
-use std::error::Error;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
-use tracing_subscriber::fmt::{self, format::FmtSpan};
+use tokio::spawn;
+use tokio::task::JoinSet;
+use tracing::Subscriber;
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
+use tracing_subscriber::fmt::format::Format;
+use tracing_subscriber::fmt::{self, FormatEvent, FormatFields};
 use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::registry::LookupSpan;
+use tracing_subscriber::{EnvFilter, Registry};
 
 #[tokio::main]
 pub async fn main() {
+    let worker_log_rolling_appender = RollingFileAppender::builder()
+        // 1時間ごとにログファイルをローテーション
+        .rotation(Rotation::HOURLY)
+        // ファイル名のプレフィックス
+        .filename_prefix("worker_log")
+        // 24時間分のログファイルを保持
+        .max_log_files(24)
+        .build("logs")
+        .unwrap();
+
+    // TODO: なぜかaysncにするとlogが出ない
+    // let (worker_log_non_blocking, _worker_log_guard) = NonBlockingBuilder::default()
+    //     // バッファがいっぱいになった時にログの欠損を許容しない
+    //     .lossy(false)
+    //     .thread_name("thread")
+    //     .finish(worker_log_rolling_appender);
+
     let filter = EnvFilter::from_default_env().add_directive(
         "tokio::runtime::scheduler::multi_thread::worker::worker_log"
             .parse()
             .unwrap(),
-    ); // my_target だけをトレースレベルでフィルタ
+    );
 
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_max_level(tracing::Level::TRACE)
-        .init();
+    let trace_layer_stdout = fmt::layer().with_writer(std::io::stdout);
+    let trace_layer_file = fmt::layer()
+        // .event_format(JsonLogFormatter)
+        .event_format(Format::default().json())
+        .with_ansi(false)
+        .with_writer(worker_log_rolling_appender);
+
+    let subscriber = Registry::default()
+        .with(filter)
+        .with(trace_layer_stdout)
+        .with(trace_layer_file);
+
+    tracing::subscriber::set_global_default(subscriber).expect("Unable to set global subscriber");
 
     basic().await;
     // sleep_little_task().await;
@@ -86,4 +112,43 @@ async fn basic() {
     }
 
     assert_eq!(count.load(std::sync::atomic::Ordering::Relaxed), 10)
+}
+
+///
+/// if we want to customize the log format, these code can be used
+///
+use tracing::field::{Field, Visit};
+struct WorkerLogEventBuf<'a> {
+    buf: &'a mut String,
+}
+impl<'a> Visit for WorkerLogEventBuf<'a> {
+    fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
+        self.buf
+            .push_str(format!("field: {:?}, value: {:?}\n", field.name(), value).as_str());
+    }
+}
+
+struct JsonLogFormatter;
+
+impl<S, N> FormatEvent<S, N> for JsonLogFormatter
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+    N: for<'a> FormatFields<'a> + 'static,
+{
+    fn format_event(
+        &self,
+        ctx: &fmt::FmtContext<'_, S, N>,
+        mut writer: fmt::format::Writer<'_>,
+        event: &tracing::Event<'_>,
+    ) -> std::fmt::Result {
+        for f in event.fields() {
+            println!("{}", f);
+        }
+
+        let mut buf = String::new();
+        let mut root_span_entry = WorkerLogEventBuf { buf: &mut buf };
+        event.record(&mut root_span_entry);
+
+        write!(&mut writer, "{}", buf)
+    }
 }
