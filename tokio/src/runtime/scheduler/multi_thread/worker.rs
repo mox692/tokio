@@ -595,6 +595,16 @@ impl Context {
         // Signal shutdown
 
         #[cfg(all(tokio_unstable, feature = "tracing"))]
+        let shutdown_span = tracing::trace_span!(
+            "tokio::runtime::scheduler::multi_thread::worker::worker_log",
+            typ = WorkerEvent::Shutdown.to_string(),
+            worker_id = self.worker.index
+        );
+
+        #[cfg(all(tokio_unstable, feature = "tracing"))]
+        let _guard = shutdown_span.enter();
+
+        #[cfg(all(tokio_unstable, feature = "tracing"))]
         tracing::trace!(
             target: "tokio::runtime::scheduler::multi_thread::worker::worker_log",
             typ = WorkerEvent::Shutdown.to_string(),
@@ -602,6 +612,7 @@ impl Context {
         );
 
         self.worker.handle.shutdown_core(core);
+
         Err(())
     }
 
@@ -637,7 +648,10 @@ impl Context {
                 #[cfg(target_os = "linux")]
                 let (_, bt) = Trace::capture2(|| current_task.run());
                 #[cfg(not(target_os = "linux"))]
-                let bt = String::from("");
+                let bt = {
+                    current_task.run();
+                    String::from("")
+                };
 
                 // Check if we still have the core. If not, the core was stolen
                 // by another worker.

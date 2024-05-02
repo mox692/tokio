@@ -51,12 +51,12 @@ pub fn main() {
     let trace_layer_stdout = fmt::layer().with_writer(std::io::stdout);
     let trace_layer_file = fmt::layer()
         // .event_format(JsonLogFormatter)
-        .event_format(Format::default().json())
+        // .event_format(Format::default().json())
         .with_ansi(false)
         .with_writer(worker_log_rolling_appender);
 
     let subscriber = Registry::default()
-        .with(filter)
+        // .with(filter)
         .with(trace_layer_stdout)
         .with(trace_layer_file);
 
@@ -65,8 +65,8 @@ pub fn main() {
     let rt = Runtime::new().unwrap();
 
     rt.block_on(async {
-        basic().await;
-        // sleep_little_task().await;
+        // basic().await;
+        sleep_little_task().await;
     });
 }
 
@@ -122,37 +122,37 @@ async fn basic() {
 /// if we want to customize the log format, these code can be used
 ///
 use tracing::field::{Field, Visit};
-struct WorkerLogEventBuf<'a> {
-    buf: &'a mut String,
-}
-impl<'a> Visit for WorkerLogEventBuf<'a> {
-    fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
-        self.buf
-            .push_str(format!("field: {:?}, value: {:?}\n", field.name(), value).as_str());
-    }
-}
+// struct WorkerLogEventBuf<'a> {
+//     buf: &'a mut String,
+// }
+// impl<'a> Visit for WorkerLogEventBuf<'a> {
+//     fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
+//         self.buf
+//             .push_str(format!("field: {:?}, value: {:?}\n", field.name(), value).as_str());
+//     }
+// }
 
-struct JsonLogFormatter;
+// struct JsonLogFormatter;
 
-impl<S, N> FormatEvent<S, N> for JsonLogFormatter
-where
-    S: Subscriber + for<'a> LookupSpan<'a>,
-    N: for<'a> FormatFields<'a> + 'static,
-{
-    fn format_event(
-        &self,
-        ctx: &fmt::FmtContext<'_, S, N>,
-        mut writer: fmt::format::Writer<'_>,
-        event: &tracing::Event<'_>,
-    ) -> std::fmt::Result {
-        for f in event.fields() {
-            println!("{}", f);
-        }
+// impl<S, N> FormatEvent<S, N> for JsonLogFormatter
+// where
+//     S: Subscriber + for<'a> LookupSpan<'a>,
+//     N: for<'a> FormatFields<'a> + 'static,
+// {
+//     fn format_event(
+//         &self,
+//         ctx: &fmt::FmtContext<'_, S, N>,
+//         mut writer: fmt::format::Writer<'_>,
+//         event: &tracing::Event<'_>,
+//     ) -> std::fmt::Result {
+//         for f in event.fields() {
+//             println!("{}", f);
+//         }
 
-        let mut buf = String::new();
-        let mut root_span_entry = WorkerLogEventBuf { buf: &mut buf };
-        event.record(&mut root_span_entry);
+//         let mut buf = String::new();
+//         let mut root_span_entry = WorkerLogEventBuf { buf: &mut buf };
+//         event.record(&mut root_span_entry);
 
-        write!(&mut writer, "{}", buf)
-    }
-}
+//         write!(&mut writer, "{}", buf)
+//     }
+// }
