@@ -36,6 +36,9 @@ impl WakeList {
         self.curr += 1;
     }
 
+    // wake_allが複数回呼ばれるとどうなる?
+    // WakeListはdropされないけど、wake_allが複数回呼ばれることってある？
+    // 変更あとはself.currが変更されていない
     pub(crate) fn wake_all(&mut self) {
         struct DropGuard {
             start: *mut Waker,
@@ -55,6 +58,7 @@ impl WakeList {
         debug_assert!(self.curr <= NUM_WAKERS);
 
         let mut guard = {
+            // startは常に配列の先頭を指す
             let start = self.inner.as_mut_ptr().cast::<Waker>();
             // SAFETY: The resulting pointer is in bounds or one after the length of the same object.
             let end = unsafe { start.add(self.curr) };
