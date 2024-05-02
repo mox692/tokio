@@ -13,6 +13,7 @@
 
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
+use tokio::runtime::Runtime;
 use tokio::spawn;
 use tokio::task::JoinSet;
 use tracing::Subscriber;
@@ -23,8 +24,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::{EnvFilter, Registry};
 
-#[tokio::main]
-pub async fn main() {
+pub fn main() {
     let worker_log_rolling_appender = RollingFileAppender::builder()
         // 1時間ごとにログファイルをローテーション
         .rotation(Rotation::HOURLY)
@@ -62,8 +62,12 @@ pub async fn main() {
 
     tracing::subscriber::set_global_default(subscriber).expect("Unable to set global subscriber");
 
-    basic().await;
-    // sleep_little_task().await;
+    let rt = Runtime::new().unwrap();
+
+    rt.block_on(async {
+        basic().await;
+        // sleep_little_task().await;
+    });
 }
 
 /// expected event:
