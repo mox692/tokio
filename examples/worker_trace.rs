@@ -16,12 +16,10 @@ use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::spawn;
 use tokio::task::JoinSet;
-use tracing::Subscriber;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
-use tracing_subscriber::fmt::format::Format;
-use tracing_subscriber::fmt::{self, FormatEvent, FormatFields};
+use tracing_subscriber::fmt;
+use tracing_subscriber::fmt::format::{FmtSpan, Format, JsonFields};
 use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::{EnvFilter, Registry};
 
 pub fn main() {
@@ -42,21 +40,32 @@ pub fn main() {
     //     .thread_name("thread")
     //     .finish(worker_log_rolling_appender);
 
-    let filter = EnvFilter::from_default_env().add_directive(
-        "tokio::runtime::scheduler::multi_thread::worker::worker_log"
-            .parse()
-            .unwrap(),
-    );
+    let filter = EnvFilter::from_default_env()
+        // directive for target names
+        .add_directive(
+            "tokio::runtime::scheduler::multi_thread::worker::worker_log=trace"
+                .parse()
+                .unwrap(),
+        )
+        // directive for span names
+        .add_directive("[span_name_shutdown]=trace".parse().unwrap());
 
-    let trace_layer_stdout = fmt::layer().with_writer(std::io::stdout);
+    let trace_layer_stdout = fmt::layer()
+        .with_span_events(FmtSpan::ENTER | FmtSpan::EXIT)
+        .with_writer(std::io::stdout);
+
+    let json_format = Format::default().with_ansi(false).json();
+
     let trace_layer_file = fmt::layer()
+        .with_span_events(FmtSpan::ENTER | FmtSpan::EXIT)
         // .event_format(JsonLogFormatter)
         // .event_format(Format::default().json())
-        .with_ansi(false)
+        .event_format(json_format)
+        .fmt_fields(JsonFields::default())
         .with_writer(worker_log_rolling_appender);
 
     let subscriber = Registry::default()
-        // .with(filter)
+        .with(filter)
         .with(trace_layer_stdout)
         .with(trace_layer_file);
 

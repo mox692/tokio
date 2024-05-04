@@ -596,20 +596,13 @@ impl Context {
 
         #[cfg(all(tokio_unstable, feature = "tracing"))]
         let shutdown_span = tracing::trace_span!(
-            "tokio::runtime::scheduler::multi_thread::worker::worker_log",
+            "span_name_shutdown",
             typ = WorkerEvent::Shutdown.to_string(),
             worker_id = self.worker.index
         );
 
         #[cfg(all(tokio_unstable, feature = "tracing"))]
         let _guard = shutdown_span.enter();
-
-        #[cfg(all(tokio_unstable, feature = "tracing"))]
-        tracing::trace!(
-            target: "tokio::runtime::scheduler::multi_thread::worker::worker_log",
-            typ = WorkerEvent::Shutdown.to_string(),
-            worker_id = self.worker.index
-        );
 
         self.worker.handle.shutdown_core(core);
 
