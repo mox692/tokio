@@ -50,11 +50,14 @@ pub fn main() {
         // directive for span names
         .add_directive("[span_name_shutdown]=trace".parse().unwrap());
 
+    let json_format = Format::default().with_ansi(false).json();
+
     let trace_layer_stdout = fmt::layer()
         .with_span_events(FmtSpan::ENTER | FmtSpan::EXIT)
+        // json表示にしたくない場合は下記2行をコメントアウト
+        .event_format(json_format.clone())
+        .fmt_fields(JsonFields::default())
         .with_writer(std::io::stdout);
-
-    let json_format = Format::default().with_ansi(false).json();
 
     let trace_layer_file = fmt::layer()
         .with_span_events(FmtSpan::ENTER | FmtSpan::EXIT)
