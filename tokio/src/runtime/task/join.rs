@@ -335,6 +335,8 @@ impl<T> Future for JoinHandle<T> {
         // Safety:
         //
         // The type of `T` must match the task's output type.
+        //
+        // retに結果を書き込んでる
         unsafe {
             self.raw
                 .try_read_output(&mut ret as *mut _ as *mut (), cx.waker());
@@ -351,6 +353,7 @@ impl<T> Future for JoinHandle<T> {
 
 impl<T> Drop for JoinHandle<T> {
     fn drop(&mut self) {
+        // issue #6505 的には, ここで Waker がdropされないっぽい
         if self.raw.state().drop_join_handle_fast().is_ok() {
             return;
         }

@@ -11,6 +11,7 @@ use std::panic;
 use std::ptr::NonNull;
 use std::task::{Context, Poll, Waker};
 
+// Taskに対するハンドル的な
 /// Typed raw task handle.
 pub(super) struct Harness<T: Future, S: 'static> {
     cell: NonNull<Cell<T, S>>,
@@ -48,6 +49,7 @@ where
     }
 }
 
+// いわゆる `wake_by_ref` とか, task一般の関数が定義されてる
 /// Task operations that can be implemented without being generic over the
 /// scheduler or task. Only one version of these methods should exist in the
 /// final binary.
@@ -175,6 +177,7 @@ where
         }
     }
 
+    // taskをpollするrootコードっぽい!
     /// Polls the task and cancel it if necessary. This takes ownership of a
     /// ref-count.
     ///
@@ -206,6 +209,8 @@ where
                 let header_ptr = self.header_ptr();
                 let waker_ref = waker_ref::<S>(&header_ptr);
                 let cx = Context::from_waker(&waker_ref);
+
+                // MEMO: ここで実際にpollしてそう
                 let res = poll_future(self.core(), cx);
 
                 if res == Poll::Ready(()) {

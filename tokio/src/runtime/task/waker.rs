@@ -97,6 +97,7 @@ unsafe fn wake_by_ref(ptr: *const ()) {
 static WAKER_VTABLE: RawWakerVTable =
     RawWakerVTable::new(clone_waker, wake_by_val, wake_by_ref, drop_waker);
 
+// Header -> Waker
 fn raw_waker(header: NonNull<Header>) -> RawWaker {
     let ptr = header.as_ptr() as *const ();
     RawWaker::new(ptr, &WAKER_VTABLE)

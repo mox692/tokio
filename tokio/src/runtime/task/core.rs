@@ -111,6 +111,7 @@ use std::task::{Context, Poll, Waker};
     )),
     repr(align(64))
 )]
+// Taskの大元の構造
 #[repr(C)]
 pub(super) struct Cell<T: Future, S> {
     /// Hot task state data

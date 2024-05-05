@@ -163,6 +163,7 @@ impl RawTask {
         S: Schedule,
     {
         let ptr = Box::into_raw(Cell::<_, S>::new(task, scheduler, State::new(), id));
+        // TODO: なんで Cell を Header にcastできるんだ??
         let ptr = unsafe { NonNull::new_unchecked(ptr.cast()) };
 
         RawTask { ptr }
@@ -195,6 +196,7 @@ impl RawTask {
         &self.header().state
     }
 
+    // Runtimeから task.poll() 的な感じで呼ばれる
     /// Safety: mutual exclusion is required to call this function.
     pub(crate) fn poll(self) {
         let vtable = self.header().vtable;
@@ -266,6 +268,7 @@ impl RawTask {
 
 impl Copy for RawTask {}
 
+// Runtimeから呼ばれる task.run の行き先
 unsafe fn poll<T: Future, S: Schedule>(ptr: NonNull<Header>) {
     let harness = Harness::<T, S>::from_raw(ptr);
     harness.poll();
@@ -285,6 +288,7 @@ unsafe fn dealloc<T: Future, S: Schedule>(ptr: NonNull<Header>) {
     harness.dealloc();
 }
 
+// try_read_outputの具体的な実装？
 unsafe fn try_read_output<T: Future, S: Schedule>(
     ptr: NonNull<Header>,
     dst: *mut (),
