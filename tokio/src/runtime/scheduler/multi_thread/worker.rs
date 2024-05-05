@@ -452,6 +452,7 @@ impl Launch {
 
 // MEMO: workerのエントリポイント
 fn run(worker: Arc<Worker>) {
+    #[allow(dead_code)]
     struct AbortOnPanic;
 
     impl Drop for AbortOnPanic {
