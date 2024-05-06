@@ -1,10 +1,13 @@
+use crate::runtime::task::waker::raw_waker;
 use crate::runtime::task::{Header, RawTask};
 
 use std::fmt;
 use std::future::Future;
 use std::marker::PhantomData;
+use std::mem::ManuallyDrop;
 use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::pin::Pin;
+use std::ptr::NonNull;
 use std::task::{Context, Poll, Waker};
 
 cfg_rt! {
@@ -352,13 +355,18 @@ impl<T> Future for JoinHandle<T> {
 }
 
 impl<T> Drop for JoinHandle<T> {
+    // issue #6505 的には, ここで Waker がdropされないっぽい
     fn drop(&mut self) {
-        // issue #6505 的には, ここで Waker がdropされないっぽい
         if self.raw.state().drop_join_handle_fast().is_ok() {
             return;
         }
 
         self.raw.drop_join_handle_slow();
+
+        // let ptr =
+        //     unsafe { NonNull::new_unchecked(self.raw.header() as *const Header as *mut Header) };
+        // let waker = unsafe { ManuallyDrop::new(Waker::from_raw(raw_waker(ptr))) };
+        // drop(std::mem::ManuallyDrop::into_inner(waker));
     }
 }
 

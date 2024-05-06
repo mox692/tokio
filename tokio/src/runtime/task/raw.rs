@@ -289,6 +289,7 @@ unsafe fn dealloc<T: Future, S: Schedule>(ptr: NonNull<Header>) {
 }
 
 // try_read_outputの具体的な実装？
+// JoinHandleのpollから呼ばれる.
 unsafe fn try_read_output<T: Future, S: Schedule>(
     ptr: NonNull<Header>,
     dst: *mut (),

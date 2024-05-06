@@ -142,6 +142,8 @@ where
     S: Schedule,
 {
     pub(super) fn drop_reference(self) {
+        // TODO: ここがfalseになるのはどういう時?
+        //       ここがfalseになる = deallocされない = wakerが生き延びてる??
         if self.state().ref_dec() {
             self.dealloc();
         }
@@ -306,6 +308,11 @@ where
             }));
         }
 
+        // // Try to drop Waker
+        // let ptr = unsafe { NonNull::new_unchecked(self.header() as *const Header as *mut Header) };
+        // let waker = unsafe { ManuallyDrop::new(Waker::from_raw(raw_waker(ptr))) };
+        // drop(std::mem::ManuallyDrop::into_inner(waker));
+
         // Drop the `JoinHandle` reference, possibly deallocating the task
         self.drop_reference();
     }
@@ -373,6 +380,7 @@ where
     }
 }
 
+// taskが完了したかどうかを確認
 fn can_read_output(header: &Header, trailer: &Trailer, waker: &Waker) -> bool {
     // Load a snapshot of the current task state
     let snapshot = header.state.load();
@@ -414,6 +422,12 @@ fn can_read_output(header: &Header, trailer: &Trailer, waker: &Waker) -> bool {
             }
         }
     }
+
+    // // Try to drop Waker
+    // let ptr = unsafe { NonNull::new_unchecked(header as *const Header as *mut Header) };
+    // let waker = unsafe { ManuallyDrop::new(Waker::from_raw(raw_waker(ptr))) };
+    // drop(std::mem::ManuallyDrop::into_inner(waker));
+
     true
 }
 
@@ -488,6 +502,7 @@ fn poll_future<T: Future, S: Schedule>(core: &Core<T, S>, cx: Context<'_>) -> Po
             }
         }
         let guard = Guard { core };
+        // 実際にpoll
         let res = guard.core.poll(cx);
         mem::forget(guard);
         res
