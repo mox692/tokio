@@ -5,6 +5,10 @@ use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+// cap: init -> 0, incre -> poll_fill_bufで書いた量でMaxでbuf.lenまでありうる ,decre -> pos = capの時
+// pos: init -> 0, incre -> poll_write_bufが成功した時に書いた量でMaxでcapまで ,decre -> pos = capの時
+// buf: init -> custom, incre -> x,decre -> x
+// read_done -> me.cap == filled_len を返す
 #[derive(Debug)]
 pub(super) struct CopyBuffer {
     read_done: bool,
@@ -42,7 +46,9 @@ impl CopyBuffer {
         let res = reader.poll_read(cx, &mut buf);
         if let Poll::Ready(Ok(())) = res {
             let filled_len = buf.filled().len();
+            // 前回と同じ量だったら, いっぱいと判断
             me.read_done = me.cap == filled_len;
+            // filled_lenを更新
             me.cap = filled_len;
         }
         res
