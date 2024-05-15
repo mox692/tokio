@@ -14,6 +14,7 @@ impl TimeSource {
         }
     }
 
+    // MEMO: Instant -> tick の変換
     pub(crate) fn deadline_to_tick(&self, t: Instant) -> u64 {
         // Round up to the end of a ms
         self.instant_to_tick(t + Duration::from_nanos(999_999))

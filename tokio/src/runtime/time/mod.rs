@@ -360,19 +360,23 @@ impl Handle {
             if self.is_shutdown() {
                 unsafe { entry.fire(Err(crate::time::error::Error::shutdown())) }
             } else {
+                // MEMO: Cellにexpirationを書き込む
                 entry.set_expiration(new_tick);
 
                 // Note: We don't have to worry about racing with some other resetting
                 // thread, because add_entry and reregister require exclusive control of
                 // the timer entry.
                 match unsafe { lock.wheel.insert(entry) } {
+                    // MEMO: when = StateCell に書き込まれてる, timerがexpireする時間
                     Ok(when) => {
                         if lock
                             .next_wake
+                            // 新しく追加したtimerのexpireと, wheelにあるexpireを比較
                             .map(|next_wake| when < next_wake.get())
                             .unwrap_or(true)
                         {
                             // TODO: なんでunpark(ioをpollingしているworkerをwakeup)する必要がある？
+                            //       仮説としては, whenが比較的早く起きるので, そのunparkを試みる？
                             unpark.unpark();
                         }
 
