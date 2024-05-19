@@ -214,9 +214,6 @@ pub(crate) struct Shared {
 
     pub(super) worker_metrics: Box<[WorkerMetrics]>,
 
-    /// worker log file
-    worker_log_file: Mutex<Option<File>>,
-
     /// Only held to trigger some code on drop. This is used to get internal
     /// runtime metrics that can be useful when doing performance
     /// investigations. This does nothing (empty struct, no drop impl) unless
@@ -334,7 +331,6 @@ pub(super) fn create(
             scheduler_metrics: SchedulerMetrics::new(),
             worker_metrics: worker_metrics.into_boxed_slice(),
             _counters: Counters,
-            worker_log_file: Mutex::new(None),
         },
         driver: driver_handle,
         blocking_spawner,
@@ -602,7 +598,6 @@ impl Context {
         );
 
         self.worker.handle.shutdown_core(core);
-
         Err(())
     }
 
