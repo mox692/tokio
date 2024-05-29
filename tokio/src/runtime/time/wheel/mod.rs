@@ -118,6 +118,7 @@ impl Wheel {
         unsafe {
             let when = item.as_ref().cached_when();
             if when == u64::MAX {
+                // これどういう状況?
                 self.pending.remove(item);
             } else {
                 debug_assert!(
@@ -157,6 +158,8 @@ impl Wheel {
 
                     // Wheelの elapsed を更新
                     self.set_elapsed(expiration.deadline);
+
+                    // このあと, まだloopに戻り, 今追加した pending list から pop_backする
                 }
                 _ => {
                     // in this case the poll did not indicate an expiration
@@ -218,6 +221,7 @@ impl Wheel {
         res
     }
 
+    // pending listが空の場合に呼ばれる
     /// iteratively find entries that are between the wheel's current
     /// time and the expiration time.  for each in that population either
     /// queue it for notification (in the case of the last level) or tier
@@ -244,9 +248,11 @@ impl Wheel {
             // the timer is not expired, and updates cached_when.
             match unsafe { item.mark_pending(expiration.deadline) } {
                 Ok(()) => {
+                    // ここで pending listにpush
                     // Item was expired
                     self.pending.push_front(item);
                 }
+                // ここになるケースがよくわからん
                 Err(expiration_tick) => {
                     let level = level_for(expiration.deadline, expiration_tick);
                     unsafe {

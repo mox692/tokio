@@ -308,6 +308,10 @@ impl Handle {
         self.inner.next_wake.store(next_wake_time(expiration_time));
     }
 
+    // ハイレベルには,
+    // * pollでfireできそうなentryを取得
+    // * wakerlistに突っ込む
+    //
     // Returns the next wakeup time of this shard.
     pub(self) fn process_at_sharded_time(&self, id: u32, mut now: u64) -> Option<u64> {
         let mut waker_list = WakeList::new();
