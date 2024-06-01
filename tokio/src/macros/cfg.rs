@@ -216,7 +216,7 @@ macro_rules! cfg_macros {
     }
 }
 
-macro_rules! cfg_metrics {
+macro_rules! cfg_unstable_metrics {
     ($($item:item)*) => {
         $(
             #[cfg(tokio_unstable)]
@@ -246,7 +246,7 @@ macro_rules! cfg_no_64bit_metrics {
     }
 }
 
-macro_rules! cfg_not_metrics {
+macro_rules! cfg_not_unstable_metrics {
     ($($item:item)*) => {
         $(
             #[cfg(not(tokio_unstable))]
