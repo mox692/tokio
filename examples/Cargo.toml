@@ -151,3 +151,6 @@ path = "issue_6505.rs"
 [[example]]
 name = "notify_play"
 path = "notify_play.rs"
+[[example]]
+name = "trace_macro_decrust"
+path = "trace_macro_decrust.rs"
