@@ -98,6 +98,12 @@ use std::task::{Context, Poll, Waker};
     )),
     repr(align(64))
 )]
+
+// [ScheduledIo] - [ScheduledIo] - [ScheduledIo] - [ScheduledIo]
+//      |               |                |               |
+//    waiters
+//      L Waiter - Waiter ...
+//
 pub(crate) struct ScheduledIo {
     pub(super) linked_list_pointers: UnsafeCell<linked_list::Pointers<Self>>,
 
@@ -145,6 +151,7 @@ generate_addr_of_methods! {
     }
 }
 
+// 1つの ready() callに対応しそう
 /// Future returned by `readiness()`.
 struct Readiness<'a> {
     scheduled_io: &'a ScheduledIo,
@@ -465,11 +472,13 @@ impl Future for Readiness<'_> {
         loop {
             match *state {
                 State::Init => {
+                    // MEMO: これ最初どういう値なんやろ. TODOS: どこでこれが書き込まれるか
                     // Optimistically check existing readiness
                     let curr = scheduled_io.readiness.load(SeqCst);
                     let ready = Ready::from_usize(READINESS.unpack(curr));
                     let is_shutdown = SHUTDOWN.unpack(curr) != 0;
 
+                    // 初期化した際のinterestを取得c
                     // Safety: `waiter.interest` never changes
                     let interest = unsafe { (*waiter.get()).interest };
                     let ready = ready.intersection(interest);

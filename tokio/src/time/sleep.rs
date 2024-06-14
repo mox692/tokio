@@ -266,6 +266,18 @@ impl Sleep {
             let duration = deadline_tick.saturating_sub(time_source.now(clock));
 
             let location = location.expect("should have location if tracing");
+
+            // spanのsetを作成する
+            // spanの構造はこんな感じ. TODOS: なんで3つもspanがいるん？1つで良くね?...
+            //
+            //
+            // |                  runtime.resource                           |
+            //                       |
+            //          runtime::resource::state_update event
+            //
+            //         |          runtime.resource.async_op           |
+            //
+            //                |  runtime.resource.async_op.poll  |
             let resource_span = tracing::trace_span!(
                 "runtime.resource",
                 concrete_type = "Sleep",
@@ -276,6 +288,7 @@ impl Sleep {
             );
 
             let async_op_span = resource_span.in_scope(|| {
+                // eager に, resource_span のcontextの中でlogを吐く.
                 tracing::trace!(
                     target: "runtime::resource::state_update",
                     duration = duration,
@@ -283,11 +296,15 @@ impl Sleep {
                     duration.op = "override",
                 );
 
+                // resource_span のcontextの中のruntime.resource.async_opというspanを作成
                 tracing::trace_span!("runtime.resource.async_op", source = "Sleep::new_timeout")
             });
 
             let async_op_poll_span =
-                async_op_span.in_scope(|| tracing::trace_span!("runtime.resource.async_op.poll"));
+                async_op_span.in_scope(|| 
+                    // async_op_poll_span のcontextの中の runtime.resource.async_op.poll というspanを作成
+                    tracing::trace_span!("runtime.resource.async_op.poll")
+                );
 
             let ctx = trace::AsyncOpTracingCtx {
                 async_op_span,

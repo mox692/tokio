@@ -1,8 +1,8 @@
 //! Expand me with `cargo expand --tests --example test_macro`.
 
-#[bar]
+// #[bar]
 #[tokio::test]
-#[foo]
+// #[foo]
 async fn foo() {}
 
 fn main() {}
