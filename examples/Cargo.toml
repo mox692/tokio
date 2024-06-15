@@ -157,3 +157,6 @@ path = "trace_macro_decrust.rs"
 [[example]]
 name = "tokio_trace_logs"
 path = "tokio_trace_logs.rs"
+[[example]]
+name = "get_resume_point_experiment"
+path = "get_resume_point_experiment.rs"

@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use tokio::time::sleep;
-use tracing::Subscriber;
+use tracing::{Span, Subscriber};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::{
     fmt::{self, format::Format, FormatEvent},
@@ -37,6 +37,23 @@ fn main() {
     tracing::subscriber::set_global_default(subscriber).expect("Unable to set global subscriber");
 
     rt.block_on(async {
+        sleep(Duration::from_secs(1)).await;
+
+        // spawn another named task.
+        let jh = tokio::task::Builder::new()
+            .spawn(async {
+                println!("hello!");
+                let current_span = tracing::Span::current();
+                println!(
+                    "@@@@@@@@@@@@@@ task creating!!, current_span: {:?}",
+                    &current_span
+                );
+                sleep(Duration::from_secs(1)).await;
+            })
+            .unwrap();
+
+        jh.await.unwrap();
+
         sleep(Duration::from_secs(1)).await;
     });
 }
