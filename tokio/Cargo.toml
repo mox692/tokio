@@ -90,6 +90,7 @@ time = []
 
 [dependencies]
 tokio-macros = { version = "~2.3.0", path = "../tokio-macros", optional = true }
+tracing-flight-recorder = { version = "0.2", path = "../tracing-flight-recorder" }
 
 pin-project-lite = "0.2.11"
 

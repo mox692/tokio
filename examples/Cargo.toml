@@ -8,6 +8,7 @@ edition = "2021"
 # [dependencies] instead, and delete the **path**.
 [dev-dependencies]
 tokio = { version = "1.0.0", path = "../tokio", features = ["full", "tracing"] }
+tracing-flight-recorder = { version = "0.2.0", path = "../tracing-flight-recorder" }
 tokio-util = { version = "0.7.0", path = "../tokio-util", features = ["full"] }
 tokio-stream = { version = "0.1", path = "../tokio-stream" }
 

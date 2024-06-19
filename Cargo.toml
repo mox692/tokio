@@ -11,6 +11,7 @@ members = [
   "benches",
   "examples",
   "stress-test",
+  "tracing-flight-recorder",
   "tests-build",
   "tests-integration",
 ]

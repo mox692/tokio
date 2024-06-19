@@ -492,6 +492,9 @@ fn run(worker: Arc<Worker>) {
             defer: Defer::new(),
         });
 
+        #[cfg(all(tokio_unstable, feature = "tracing"))]
+        tracing::trace!(target = "flihgt_recorder", data = "start");
+
         context::set_scheduler(&cx, || {
             let cx = cx.expect_multi_thread();
 
@@ -588,6 +591,9 @@ impl Context {
             // As long as there is budget remaining and a task exists in the
             // `lifo_slot`, then keep running.
             loop {
+                #[cfg(all(tokio_unstable, feature = "tracing"))]
+                tracing::trace!(target = "flihgt_recorder", data = "run_task");
+
                 // Check if we still have the core. If not, the core was stolen
                 // by another worker.
                 let mut core = match self.core.borrow_mut().take() {

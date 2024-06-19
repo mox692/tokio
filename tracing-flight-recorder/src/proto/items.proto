@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+package tracing_flihgt_recorder.items;
+
+enum EventType {
+    UNKNOWN = 0;
+    ACTIVE = 1;
+    INACTIVE = 2;
+    SUSPENDED = 3;
+}
+
+message Event {
+    google.protobuf.Timestamp event_time = 1;
+    EventType event_type = 2;
+    string payload = 3;
+}

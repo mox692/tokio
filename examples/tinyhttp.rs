@@ -16,6 +16,7 @@
 use bytes::BytesMut;
 use futures::SinkExt;
 use http::{header::HeaderValue, Request, Response, StatusCode};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 #[macro_use]
 extern crate serde_derive;
 use std::{env, error::Error, fmt, io};
@@ -25,6 +26,10 @@ use tokio_util::codec::{Decoder, Encoder, Framed};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let layer = tracing_flight_recorder::Layer::new();
+
+    tracing_subscriber::registry().with(layer).init();
+
     // Parse the arguments, bind the TCP socket we'll be listening to, spin up
     // our worker threads, and start shipping sockets to those worker threads.
     let addr = env::args()
