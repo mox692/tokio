@@ -13,6 +13,9 @@ criterion = "0.5.1"
 rand = "0.8"
 rand_chacha = "0.3"
 num_cpus = "1.16.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "ansi", "env-filter", "tracing-log", "time", "std", "json"] }
+tracing-appender = "0.2"
 
 [dev-dependencies]
 tokio-util = { version = "0.7.0", path = "../tokio-util", features = ["full"] }
@@ -94,4 +97,9 @@ harness = false
 [[bench]]
 name = "time_timeout"
 path = "time_timeout.rs"
+harness = false
+
+[[bench]]
+name = "tracing"
+path = "tracing.rs"
 harness = false
