@@ -16,9 +16,10 @@ use std::ptr;
 /// would not be able to distinguish between recursive calls of a function at
 /// different depths.
 #[derive(Clone)]
-pub(super) struct Symbol {
-    pub(super) symbol: BacktraceSymbol,
-    pub(super) parent_hash: u64,
+#[allow(missing_debug_implementations)]
+pub struct Symbol {
+    pub symbol: BacktraceSymbol,
+    pub parent_hash: u64,
 }
 
 impl Hash for Symbol {
