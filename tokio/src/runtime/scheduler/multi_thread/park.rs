@@ -71,6 +71,10 @@ impl Parker {
         // Only parking with zero is supported...
         assert_eq!(duration, Duration::from_millis(0));
 
+        // MEMO: ここでdriverのlockを取得しようとしてる!...
+        //       え, lockの取得に失敗したら何もしない, でいいの？
+        //       他のdriverのlockを持っているthreadが, taskを作ってくれるだろうと言う想定?
+        //       あれ、しかもこれlock保有したまま, parkしてるってことだよね?...
         if let Some(mut driver) = self.inner.shared.driver.try_lock() {
             driver.park_timeout(handle, duration);
         }

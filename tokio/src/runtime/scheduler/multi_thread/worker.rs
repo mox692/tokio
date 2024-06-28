@@ -214,6 +214,7 @@ pub(crate) struct Context {
     /// Core data
     core: RefCell<Option<Box<Core>>>,
 
+    // TODOS: yield nowで実施されるやつら？
     /// Tasks to wake after resource drivers are polled. This is mostly to
     /// handle yielded tasks.
     pub(crate) defer: Defer,
@@ -553,10 +554,14 @@ impl Context {
                 core.stats.start_processing_scheduled_tasks();
                 core = self.run_task(task, core)?;
             } else {
+                // strealが失敗した場合
+
                 // Wait for work
                 core = if !self.defer.is_empty() {
+                    // deferがある場合, そいつを起こすために, 0sでwakeupをする
                     self.park_timeout(core, Some(Duration::from_millis(0)))
                 } else {
+                    // deferがない場合, 一定時間ガチでparkする
                     self.park(core)
                 };
                 core.stats.start_processing_scheduled_tasks();
@@ -698,6 +703,18 @@ impl Context {
     /// from where other workers can pick them up.
     /// Also, we rely on the workstealing algorithm to spread the tasks amongst workers
     /// after all the IOs get dispatched
+    ///
+    /// タスクを実行する間、ワーカースレッドを待機状態にします。
+    ///
+    /// この関数は、待機する前に本当に残りの作業がないかどうかを確認します。
+    /// また重要なのは、待機する前に、ワーカースレッドがDriver（IO/Time）の所有権を取得し、
+    /// 発生した可能性のあるイベントをディスパッチしようとすることです。
+    /// ワーカースレッドがDriverループを実行するとき、すべての起床したタスクは
+    /// 自身のローカルキューにスケジュールされ、そのキューが飽和するまで（ntasks > `LOCAL_QUEUE_CAPACITY`）
+    /// スケジュールされます。ローカルキューが飽和すると、溢れたタスクは他のワーカーが拾うことができる
+    /// インジェクションキューに追加されます。
+    /// また、すべてのIOがディスパッチされた後、ワークスティーリングアルゴリズムに頼って
+    /// タスクをワーカー間で分散させます。
     fn park(&self, mut core: Box<Core>) -> Box<Core> {
         if let Some(f) = &self.worker.handle.shared.config.before_park {
             f();
@@ -908,6 +925,9 @@ impl Core {
         // When the final worker transitions **out** of searching to parked, it
         // must check all the queues one last time in case work materialized
         // between the last work scan and transitioning out of searching.
+        // 最後のワーカーが検索状態から待機状態に移行するとき、
+        // 最後の作業スキャンと検索状態からの移行の間に作業が発生した場合に備えて、
+        // すべてのキューを最後にもう一度チェックしなければなりません。
         let is_last_searcher = worker.handle.shared.idle.transition_worker_to_parked(
             &worker.handle.shared,
             worker.index,

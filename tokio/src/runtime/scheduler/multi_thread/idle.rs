@@ -81,6 +81,7 @@ impl Idle {
         ret
     }
 
+    // sleepersにworkwrをpush
     /// Returns `true` if the worker needs to do a final check for submitted
     /// work.
     pub(super) fn transition_worker_to_parked(

@@ -220,8 +220,10 @@ impl Driver {
                         duration = std::cmp::min(limit, duration);
                     }
 
+                    // 実際にいくらかsleepさせたいケース
                     self.park_thread_timeout(rt_handle, duration);
                 } else {
+                    // すぐに起こしたいケース
                     self.park.park_timeout(rt_handle, Duration::from_secs(0));
                 }
             }
