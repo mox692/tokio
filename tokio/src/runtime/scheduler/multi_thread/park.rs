@@ -117,6 +117,7 @@ impl Inner {
             return;
         }
 
+        // MEMO: driverでparkする場合と, condvarでparkする場合がありそう
         if let Some(mut driver) = self.shared.driver.try_lock() {
             self.park_driver(&mut driver, handle);
         } else {

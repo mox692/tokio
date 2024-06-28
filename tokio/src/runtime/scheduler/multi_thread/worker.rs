@@ -752,8 +752,10 @@ impl Context {
 
         // Park thread
         if let Some(timeout) = duration {
+            // durationがある時 = yieldとかで, すぐに起床したい時
             park.park_timeout(&self.worker.handle.driver, timeout);
         } else {
+            // durationがNoneの時 = taskがなくて純粋にparkするとき
             park.park(&self.worker.handle.driver);
         }
 
