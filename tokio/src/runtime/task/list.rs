@@ -171,6 +171,12 @@ impl<S: 'static> OwnedTasks<S> {
         self.list.len()
     }
 
+    cfg_64bit_metrics! {
+        pub(crate) fn spawned_tasks_count(&self) -> u64 {
+            self.list.added()
+        }
+    }
+
     pub(crate) fn remove(&self, task: &Task<S>) -> Option<Task<S>> {
         // If the task's owner ID is `None` then it is not part of any list and
         // doesn't need removing.

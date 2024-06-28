@@ -22,6 +22,12 @@ impl Handle {
         self.shared.owned.active_tasks_count()
     }
 
+    cfg_64bit_metrics! {
+        pub(crate) fn spawned_tasks_count(&self) -> u64 {
+            self.shared.owned.spawned_tasks_count()
+        }
+    }
+
     pub(crate) fn scheduler_metrics(&self) -> &SchedulerMetrics {
         &self.shared.scheduler_metrics
     }

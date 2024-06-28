@@ -179,6 +179,12 @@ cfg_rt! {
         use crate::runtime::{SchedulerMetrics, WorkerMetrics};
 
         impl Handle {
+            cfg_64bit_metrics! {
+                pub(crate) fn spawned_tasks_count(&self) -> u64 {
+                    match_flavor!(self, Handle(handle) => handle.spawned_tasks_count())
+                }
+            }
+
             pub(crate) fn num_blocking_threads(&self) -> usize {
                 match_flavor!(self, Handle(handle) => handle.num_blocking_threads())
             }
