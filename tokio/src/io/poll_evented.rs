@@ -62,6 +62,40 @@ cfg_io_driver! {
     /// [`clear_readiness`]: Registration::clear_readiness
     /// [`poll_read_ready`]: Registration::poll_read_ready
     /// [`poll_write_ready`]: Registration::poll_write_ready
+    ///
+    /// [`std::io::Read`] および/または [`std::io::Write`] トレイトを実装する I/O リソースを、これを駆動するリアクターに関連付けます。
+    ///
+    /// `PollEvented` は内部的に [`Registration`] を使用して、[`mio::event::Source`] および [`std::io::Read`] および/または [`std::io::Write`] を実装する型を取得し、
+    /// それを駆動するリアクターに関連付けます。
+    ///
+    /// [`mio::event::Source`] 型が `PollEvented` にラップされると、将来の実行モデル内で使用できるようになります。
+    /// このため、`PollEvented` 型は、基盤となる I/O リソースおよびリアクターが提供する準備完了イベントを使用して、[`AsyncRead`] および [`AsyncWrite`] 実装を提供します。
+    ///
+    /// **注意**:
+    /// `PollEvented` は（基盤となる I/O 型が `Sync` である場合）`Sync` ですが、呼び出し側は `PollEvented`
+    /// インスタンスを同時に使用するタスクが最大で 2 つであることを確認する必要があります。1つは読み取り用、もう1つは書き込み用です。
+    /// この要件を満たさない場合、Rust のメモリモデルの観点からは「安全」ですが、通知が失われたりタスクがハングしたりする形で予期しない動作が発生します。
+    ///
+    /// ## 準備完了イベント
+    ///
+    /// [`AsyncRead`] および [`AsyncWrite`] 実装を提供するだけでなく、この型は基盤となる準備完了イベントストリームへのアクセスもサポートしています。
+    /// これは [`Registration`] が提供するものと機能は似ていますが、セマンティクスが少し異なります。
+    /// 準備完了イベントにアクセスするための関数が 2 つ提供されています：[`poll_read_ready`] と [`poll_write_ready`] です。これらの関数は `PollEvented` インスタンスの現在の準備状態を返します。もし [`poll_read_ready`] が読み取りの準備完了を示す場合、再度 [`poll_read_ready`] を呼び出しても読み取りの準備完了を示します。
+    /// 操作が試みられ、I/O リソースが準備完了でないために成功できない場合、呼び出し側は [`clear_readiness`] を呼び出す必要があります。
+    /// これにより、新しい準備完了イベントが受信されるまで準備状態がクリアされます。
+    ///
+    /// これにより、呼び出し側は追加の関数を実装できます。例えば、[`TcpListener`] は [`poll_read_ready`] と [`clear_readiness`] を使用して `poll_accept` を実装します。
+    ///
+    /// ## プラットフォーム固有のイベント
+    ///
+    /// `PollEvented` はプラットフォーム固有の `mio::Ready` イベントの受信も可能にします。
+    /// これらのイベントは読み取り準備完了イベントストリームの一部として含まれます。書き込み準備完了イベントストリームには `Ready::writable()` イベントのみが含まれます。
+    ///
+    /// [`AsyncRead`]: crate::io::AsyncRead
+    /// [`AsyncWrite`]: crate::io::AsyncWrite
+    /// [`TcpListener`]: crate::net::TcpListener
+    /// [`clear_readiness`]: Registration::clear_readiness
+    /// [`poll_read_ready`]: Registration::poll_read_ready
     pub(crate) struct PollEvented<E: Source> {
         io: Option<E>,
         registration: Registration,
@@ -163,6 +197,7 @@ feature! {
     use crate::io::ReadBuf;
     use std::task::{Context, Poll};
 
+    // MEMO: Eは TcpStreamの場合は mio::net::TcpStream, TcpListenerの場合は mio::net::TcpListener
     impl<E: Source> PollEvented<E> {
         // Safety: The caller must ensure that `E` can read into uninitialized memory
         pub(crate) unsafe fn poll_read<'a>(

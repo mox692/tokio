@@ -42,6 +42,32 @@ cfg_io_driver! {
     /// [`new_with_interest_and_handle`]: method@Self::new_with_interest_and_handle
     /// [`poll_read_ready`]: method@Self::poll_read_ready`
     /// [`poll_write_ready`]: method@Self::poll_write_ready`
+    ///
+    ///
+    /// リアクターインスタンスにI/Oリソースを関連付けます。
+    ///
+    /// レジストレーションは、リアクターに登録されたI/Oリソースを表し、準備完了時にタスク通知を受け取ります。
+    /// これは、リアクターと統合するための最も低レベルのAPIです。
+    ///
+    /// I/Oリソースとの関連付けは[`new_with_interest_and_handle`]を呼び出すことで行われます。
+    /// 一度関連付けが確立されると、レジストレーションインスタンスが削除されるまで関連付けは維持されます。
+    ///
+    /// レジストレーションインスタンスは、読み取り準備と書き込み準備の2つの独立した準備ストリームを表します。
+    /// これらのストリームは独立しており、別々のタスクから消費することができます。
+    ///
+    /// **注意**: `Registration`は`Sync`ですが、呼び出し元はレジストレーションインスタンスを同時に使用するタスクが最大で2つであることを保証しなければなりません。
+    /// 一つは[`poll_read_ready`]のためのタスク、もう一つは[`poll_write_ready`]のためのタスクです。
+    /// この要件に違反してもRustのメモリ安全性の観点からは「安全」ですが、通知の消失やタスクのハングなどの予期しない動作が発生します。
+    ///
+    /// ## プラットフォーム固有のイベント
+    ///
+    /// `Registration`は、プラットフォーム固有の`mio::Ready`イベントを受け取ることもできます。
+    /// これらのイベントは読み取り準備完了イベントストリームの一部として含まれます。
+    /// 書き込み準備完了イベントストリームは`Ready::writable()`イベントのみのためのものです。
+    ///
+    /// [`new_with_interest_and_handle`]: method@Self::new_with_interest_and_handle
+    /// [`poll_read_ready`]: method@Self::poll_read_ready
+    /// [`poll_write_ready`]: method@Self::poll_write_ready
     #[derive(Debug)]
     pub(crate) struct Registration {
         /// Handle to the associated runtime.
@@ -218,6 +244,7 @@ impl Registration {
         mut f: impl FnMut() -> io::Result<R>,
     ) -> io::Result<R> {
         loop {
+            // ここで async boudary
             let event = self.readiness(interest).await?;
 
             let coop = crate::future::poll_fn(crate::runtime::coop::poll_proceed).await;

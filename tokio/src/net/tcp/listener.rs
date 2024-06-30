@@ -161,6 +161,7 @@ impl TcpListener {
         let (mio, addr) = self
             .io
             .registration()
+            // MEMO: ここでasync boundary. (reqが来るまでsuspend)
             .async_io(Interest::READABLE, || self.io.accept())
             .await?;
 
