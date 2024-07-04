@@ -29,6 +29,8 @@ rand = "0.8.3"
 pin-project-lite = "0.2.11"
 test-log = "0.2.15"
 test-case = "3.3.1"
+framehop = "0.12"
+wholesym = "0.7"
 
 [target.'cfg(windows)'.dev-dependencies.windows-sys]
 version = "0.48"
@@ -160,3 +162,6 @@ path = "tokio_trace_logs.rs"
 [[example]]
 name = "get_resume_point_experiment"
 path = "get_resume_point_experiment.rs"
+[[example]]
+name = "framehop_experiment"
+path = "framehop_experiment.rs"
