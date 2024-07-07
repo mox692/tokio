@@ -165,3 +165,6 @@ path = "get_resume_point_experiment.rs"
 [[example]]
 name = "framehop_experiment"
 path = "framehop_experiment.rs"
+[[example]]
+name = "check_future_size"
+path = "check_future_size.rs"
