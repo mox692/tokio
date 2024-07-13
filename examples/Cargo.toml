@@ -168,3 +168,6 @@ path = "framehop_experiment.rs"
 [[example]]
 name = "check_future_size"
 path = "check_future_size.rs"
+[[example]]
+name = "issue_6682"
+path = "issue_6682.rs"
