@@ -5,9 +5,10 @@
 #[cfg(any(feature = "macros", feature = "process"))]
 pub(crate) mod maybe_done;
 
-mod poll_fn;
-#[allow(unused_imports)]
-pub use poll_fn::poll_fn;
+// mod poll_fn;
+// #[allow(unused_imports)]
+// pub use poll_fn::poll_fn;
+pub use std::future::poll_fn;
 
 cfg_process! {
     mod try_join;
