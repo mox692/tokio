@@ -294,38 +294,80 @@ impl<T, S: Semaphore> Rx<T, S> {
         self.inner.rx_fields.with_mut(|rx_fields_ptr| {
             let rx_fields = unsafe { &mut *rx_fields_ptr };
 
-            macro_rules! try_recv {
-                () => {
-                    match rx_fields.list.pop(&self.inner.tx) {
-                        Some(Read::Value(value)) => {
-                            self.inner.semaphore.add_permit();
-                            coop.made_progress();
-                            return Ready(Some(value));
-                        }
-                        Some(Read::Closed) => {
-                            // TODO: This check may not be required as it most
-                            // likely can only return `true` at this point. A
-                            // channel is closed when all tx handles are
-                            // dropped. Dropping a tx handle releases memory,
-                            // which ensures that if dropping the tx handle is
-                            // visible, then all messages sent are also visible.
-                            assert!(self.inner.semaphore.is_idle());
-                            coop.made_progress();
-                            return Ready(None);
-                        }
-                        None => {} // fall through
-                    }
-                };
+            // macro_rules! try_recv {
+            //     () => {
+            //         match rx_fields.list.pop(&self.inner.tx) {
+            //             Some(Read::Value(value)) => {
+            //                 self.inner.semaphore.add_permit();
+            //                 coop.made_progress();
+            //                 return Ready(Some(value));
+            //             }
+            //             Some(Read::Closed) => {
+            //                 // TODO: This check may not be required as it most
+            //                 // likely can only return `true` at this point. A
+            //                 // channel is closed when all tx handles are
+            //                 // dropped. Dropping a tx handle releases memory,
+            //                 // which ensures that if dropping the tx handle is
+            //                 // visible, then all messages sent are also visible.
+            //                 assert!(self.inner.semaphore.is_idle());
+            //                 coop.made_progress();
+            //                 return Ready(None);
+            //             }
+            //             None => {} // fall through
+            //         }
+            //     };
+            // }
+
+            // try_recv!();
+
+            // MEMO: waitlistから1つpopする. ここではlockはいらないのか？？
+            match rx_fields.list.pop(&self.inner.tx) {
+                Some(Read::Value(value)) => {
+                    self.inner.semaphore.add_permit();
+                    coop.made_progress();
+                    return Ready(Some(value));
+                }
+                Some(Read::Closed) => {
+                    // TODO: This check may not be required as it most
+                    // likely can only return `true` at this point. A
+                    // channel is closed when all tx handles are
+                    // dropped. Dropping a tx handle releases memory,
+                    // which ensures that if dropping the tx handle is
+                    // visible, then all messages sent are also visible.
+                    assert!(self.inner.semaphore.is_idle());
+                    coop.made_progress();
+                    return Ready(None);
+                }
+                // senderから値が送られていない
+                None => {} // fall through
             }
 
-            try_recv!();
-
+            // senderがsendするとwakeされる
             self.inner.rx_waker.register_by_ref(cx.waker());
 
             // It is possible that a value was pushed between attempting to read
             // and registering the task, so we have to check the channel a
             // second time here.
-            try_recv!();
+            // try_recv!();
+            match rx_fields.list.pop(&self.inner.tx) {
+                Some(Read::Value(value)) => {
+                    self.inner.semaphore.add_permit();
+                    coop.made_progress();
+                    return Ready(Some(value));
+                }
+                Some(Read::Closed) => {
+                    // TODO: This check may not be required as it most
+                    // likely can only return `true` at this point. A
+                    // channel is closed when all tx handles are
+                    // dropped. Dropping a tx handle releases memory,
+                    // which ensures that if dropping the tx handle is
+                    // visible, then all messages sent are also visible.
+                    assert!(self.inner.semaphore.is_idle());
+                    coop.made_progress();
+                    return Ready(None);
+                }
+                None => {} // fall through
+            }
 
             if rx_fields.rx_closed && self.inner.semaphore.is_idle() {
                 coop.made_progress();
@@ -502,6 +544,7 @@ impl<T, S> Chan<T, S> {
         // Push the value
         self.tx.push(value);
 
+        // もしreceiverが眠っていたら, wakeする
         // Notify the rx task
         self.rx_waker.wake();
     }

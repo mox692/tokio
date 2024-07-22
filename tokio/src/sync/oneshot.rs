@@ -401,6 +401,7 @@ struct Inner<T> {
     rx_task: Task,
 }
 
+// taskがなんでこの型?
 struct Task(UnsafeCell<MaybeUninit<Waker>>);
 
 impl Task {
@@ -425,6 +426,7 @@ impl Task {
         });
     }
 
+    // wakerのfieldにcxで渡ってきたwakerを渡す
     unsafe fn set_task(&self, cx: &mut Context<'_>) {
         self.0.with_mut(|ptr| {
             let ptr: *mut Waker = (*ptr).as_mut_ptr();
@@ -606,6 +608,7 @@ impl<T> Sender<T> {
             *ptr = Some(t);
         });
 
+        // stateをcompleteにしようと小コリみる
         if !inner.complete() {
             unsafe {
                 // SAFETY: The receiver will not access the `UnsafeCell` unless
@@ -1122,6 +1125,8 @@ impl<T> Future for Receiver<T> {
 }
 
 impl<T> Inner<T> {
+    // innerのstateを complete にしようとする
+    // すでにcloseになっていて失敗したらfalse
     fn complete(&self) -> bool {
         let prev = State::set_complete(&self.state);
 
@@ -1132,6 +1137,7 @@ impl<T> Inner<T> {
         if prev.is_rx_task_set() {
             // TODO: Consume waker?
             unsafe {
+                // receiverのtaskをwakeする
                 self.rx_task.with_task(Waker::wake_by_ref);
             }
         }
