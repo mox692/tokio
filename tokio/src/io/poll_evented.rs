@@ -161,7 +161,7 @@ feature! {
     #![any(feature = "net", all(unix, feature = "process"))]
 
     use crate::io::ReadBuf;
-    use std::task::{Context, Poll};
+    use std::task::{ready,Context, Poll};
 
     impl<E: Source> PollEvented<E> {
         // Safety: The caller must ensure that `E` can read into uninitialized memory
