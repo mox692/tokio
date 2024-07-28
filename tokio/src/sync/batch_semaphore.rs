@@ -398,10 +398,13 @@ impl Semaphore {
         cx: &mut Context<'_>,
         num_permits: usize,
         node: Pin<&mut Waiter>,
+        // デフォはfalse
         queued: bool,
     ) -> Poll<Result<(), AcquireError>> {
+        // TODO; これ何
         let mut acquired = 0;
 
+        // TODO; queued何？
         let needed = if queued {
             node.state.load(Acquire) << Self::PERMIT_SHIFT
         } else {
@@ -412,6 +415,8 @@ impl Semaphore {
         // First, try to take the requested number of permits from the
         // semaphore.
         let mut curr = self.permits.load(Acquire);
+
+        // cas loopでかすぎん？？
         let mut waiters = loop {
             // Has the semaphore closed?
             if curr & Self::CLOSED > 0 {
@@ -419,14 +424,18 @@ impl Semaphore {
             }
 
             let mut remaining = 0;
+            // 現在のtotlaのpermit. 最初のloopはcurrと一緒
             let total = curr
                 .checked_add(acquired)
                 .expect("number of permits must not overflow");
+            // (残りのpertmit, acqする数)
             let (next, acq) = if total >= needed {
+                // permitは残る
                 let next = curr - (needed - acquired);
                 (next, needed >> Self::PERMIT_SHIFT)
             } else {
                 remaining = (needed - acquired) - curr;
+                // permitは使い果たす
                 (0, curr >> Self::PERMIT_SHIFT)
             };
 
