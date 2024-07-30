@@ -69,9 +69,11 @@ pub enum TryAcquireError {
 pub struct AcquireError(());
 
 pub(crate) struct Acquire<'a> {
+    // 待たされた時に使うWaiterのデータ構造
     node: Waiter,
     semaphore: &'a Semaphore,
     num_permits: usize,
+    // pendingになるとtrue
     queued: bool,
 }
 
@@ -306,6 +308,7 @@ impl Semaphore {
         let mut wakers = WakeList::new();
         let mut lock = Some(waiters);
         let mut is_empty = false;
+        // TODO: このwhile loopいる？
         while rem > 0 {
             let mut waiters = lock.take().unwrap_or_else(|| self.waiters.lock());
             'inner: while wakers.can_push() {
@@ -313,6 +316,8 @@ impl Semaphore {
                 match waiters.queue.last() {
                     Some(waiter) => {
                         if !waiter.assign_permits(&mut rem) {
+                            // remのpermitが切れて, これ以上起こすことができない
+                            // while loopを抜ける
                             break 'inner;
                         }
                     }
@@ -323,6 +328,10 @@ impl Semaphore {
                         break 'inner;
                     }
                 };
+
+                // このloopにおいて参照したwaiterをremoveできる.
+                // queueから実際にpopする
+
                 let mut waiter = waiters.queue.pop_back().unwrap();
                 if let Some(waker) =
                     unsafe { waiter.as_mut().waker.with_mut(|waker| (*waker).take()) }
@@ -401,7 +410,7 @@ impl Semaphore {
         // デフォはfalse
         queued: bool,
     ) -> Poll<Result<(), AcquireError>> {
-        // TODO; これ何
+        // この poll_acquire で獲得できた permitの数(必ずしも num_permitsと一致しない)
         let mut acquired = 0;
 
         // TODO; queued何？
@@ -423,6 +432,7 @@ impl Semaphore {
                 return Poll::Ready(Err(AcquireError::closed()));
             }
 
+            // 必要なpermit - 取得できたpermit = 残りまだ必要なpermit
             let mut remaining = 0;
             // 現在のtotlaのpermit. 最初のloopはcurrと一緒
             let total = curr
@@ -454,6 +464,7 @@ impl Semaphore {
                 Ok(_) => {
                     acquired += acq;
                     if remaining == 0 {
+                        // 必要なpermitは取得できた. loopを抜ける
                         if !queued {
                             #[cfg(all(tokio_unstable, feature = "tracing"))]
                             self.resource_span.in_scope(|| {
@@ -474,8 +485,10 @@ impl Semaphore {
                             break self.waiters.lock();
                         }
                     }
+                    // 必要なpermitが取得できなかった. loopを抜けて,waitする準備
                     break lock.expect("lock must be acquired before waiting");
                 }
+                // CASに失敗. もう一回
                 Err(actual) => curr = actual,
             }
         };
@@ -493,7 +506,9 @@ impl Semaphore {
             )
         });
 
+        // この Acquire のstateを更新(残り必要なpermit数に更新)
         if node.assign_permits(&mut acquired) {
+            // このnodeは不要.
             self.add_permits_locked(acquired, waiters);
             return Poll::Ready(Ok(()));
         }
@@ -559,8 +574,11 @@ impl Waiter {
     fn assign_permits(&self, n: &mut usize) -> bool {
         let mut curr = self.state.load(Acquire);
         loop {
+            // stateの中にある値とnを比較
             let assign = cmp::min(curr, *n);
+            // 残り必要な分
             let next = curr - assign;
+            // stateを更新
             match self.state.compare_exchange(curr, next, AcqRel, Acquire) {
                 Ok(_) => {
                     *n -= assign;
