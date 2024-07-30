@@ -158,13 +158,63 @@ impl TcpListener {
     /// }
     /// ```
     pub async fn accept(&self) -> io::Result<(TcpStream, SocketAddr)> {
+        self.accept_with_interest(Interest::READABLE | Interest::WRITABLE)
+            .await
+    }
+
+    /// Accepts a new incoming connection from this listener with custom
+    /// [`Interest`] registration.
+    ///
+    /// This function will yield once a new TCP connection is established. When
+    /// established, the corresponding [`TcpStream`] and the remote peer's
+    /// address will be returned.
+    ///
+    /// # Cancel safety
+    ///
+    /// This method is cancel safe. If the method is used as the event in a
+    /// [`tokio::select!`](crate::select) statement and some other branch
+    /// completes first, then it is guaranteed that no new connections were
+    /// accepted by this method.
+    ///
+    /// [`TcpStream`]: struct@crate::net::TcpStream
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use tokio::{io::Interest, net::TcpListener};
+    ///
+    /// use std::io;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> io::Result<()> {
+    ///     let listener = TcpListener::bind("127.0.0.1:8080").await?;
+    ///
+    ///     match listener
+    ///         .accept_with_interest(Interest::READABLE | Interest::WRITABLE)
+    ///         .await
+    ///     {
+    ///         Ok((_socket, addr)) => {
+    ///             // Wait for `Interest::WRITABLE` data
+    ///             let ready = _socket.ready(Interest::WRITABLE).await.unwrap();
+    ///             assert!(ready.is_writable());
+    ///         }
+    ///         Err(e) => println!("couldn't get client: {:?}", e),
+    ///     }
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    pub async fn accept_with_interest(
+        &self,
+        interest: Interest,
+    ) -> io::Result<(TcpStream, SocketAddr)> {
         let (mio, addr) = self
             .io
             .registration()
             .async_io(Interest::READABLE, || self.io.accept())
             .await?;
 
-        let stream = TcpStream::new(mio)?;
+        let stream = TcpStream::new_with_interest(mio, interest)?;
         Ok((stream, addr))
     }
 

@@ -13,6 +13,11 @@ use std::time::Duration;
 
 use futures::future::poll_fn;
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+mod support {
+    pub(crate) mod oob_data;
+}
+
 #[tokio::test]
 async fn set_linger() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -397,4 +402,49 @@ async fn write_closed() {
     let ready_event = assert_ok!(ready_fut.await);
 
     assert!(!ready_event.is_write_closed());
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[tokio::test]
+async fn accept_with_interest() {
+    use support::oob_data::send_oob_data;
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let stream = TcpStream::connect(listener.local_addr().unwrap())
+        .await
+        .unwrap();
+
+    let task = task::spawn(async move {
+        let (socket, _) = listener
+            .accept_with_interest(Interest::PRIORITY)
+            .await
+            .unwrap();
+        let ready = socket.ready(Interest::PRIORITY).await.unwrap();
+        assert!(ready.is_priority());
+    });
+
+    // Sending out of band data should trigger priority event.
+    send_oob_data(&stream, b"hello").unwrap();
+    task.await;
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[tokio::test]
+async fn connect_with_interest() {
+    use support::oob_data::send_oob_data;
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let stream = TcpStream::connect_with_interest(
+        listener.local_addr().unwrap(),
+        Interest::READABLE | Interest::WRITABLE | Interest::PRIORITY,
+    )
+    .await
+    .unwrap();
+
+    let (socket, _) = listener.accept().await.unwrap();
+    // Sending out of band data should trigger priority event.
+    send_oob_data(&socket, b"hello").unwrap();
+
+    let ready = stream.ready(Interest::PRIORITY).await.unwrap();
+    assert!(ready.is_priority());
 }
