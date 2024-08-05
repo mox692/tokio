@@ -250,6 +250,7 @@ use std::io;
 use std::path::Path;
 use std::pin::Pin;
 use std::process::{Command as StdCommand, ExitStatus, Output, Stdio};
+use std::task::ready;
 use std::task::Context;
 use std::task::Poll;
 
