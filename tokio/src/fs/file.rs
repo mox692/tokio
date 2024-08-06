@@ -14,6 +14,7 @@ use std::io::{self, Seek, SeekFrom};
 use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::task::ready;
 use std::task::Context;
 use std::task::Poll;
 
