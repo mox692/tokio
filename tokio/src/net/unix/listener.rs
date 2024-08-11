@@ -6,7 +6,7 @@ use std::io;
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, RawFd};
 use std::os::unix::net;
 use std::path::Path;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 
 cfg_net_unix! {
     /// A Unix socket which can accept connections from other Unix sockets.
