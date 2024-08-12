@@ -279,6 +279,7 @@ impl Sleep {
             //
             //                |  runtime.resource.async_op.poll  |
             let resource_span = tracing::trace_span!(
+                parent: None,
                 "runtime.resource",
                 concrete_type = "Sleep",
                 kind = "timer",

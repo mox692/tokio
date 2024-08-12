@@ -2,6 +2,8 @@ use crate::runtime::metrics::Histogram;
 use crate::runtime::Config;
 use crate::util::metric_atomics::{MetricAtomicU64, MetricAtomicUsize};
 use std::sync::atomic::Ordering::Relaxed;
+use std::sync::Mutex;
+use std::thread::ThreadId;
 
 /// Retrieve runtime worker metrics.
 ///
@@ -15,6 +17,9 @@ use std::sync::atomic::Ordering::Relaxed;
 pub(crate) struct WorkerMetrics {
     ///  Number of times the worker parked.
     pub(crate) park_count: MetricAtomicU64,
+
+    ///  Number of times the worker parked and unparked.
+    pub(crate) park_unpark_count: MetricAtomicU64,
 
     /// Number of times the worker woke then parked again without doing work.
     pub(crate) noop_count: MetricAtomicU64,
@@ -46,6 +51,9 @@ pub(crate) struct WorkerMetrics {
 
     /// If `Some`, tracks the number of polls by duration range.
     pub(super) poll_count_histogram: Option<Histogram>,
+
+    /// Thread id of worker thread.
+    thread_id: Mutex<Option<ThreadId>>,
 }
 
 impl WorkerMetrics {
@@ -68,5 +76,13 @@ impl WorkerMetrics {
 
     pub(crate) fn set_queue_depth(&self, len: usize) {
         self.queue_depth.store(len, Relaxed);
+    }
+
+    pub(crate) fn thread_id(&self) -> Option<ThreadId> {
+        *self.thread_id.lock().unwrap()
+    }
+
+    pub(crate) fn set_thread_id(&self, thread_id: ThreadId) {
+        *self.thread_id.lock().unwrap() = Some(thread_id);
     }
 }

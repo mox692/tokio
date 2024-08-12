@@ -33,7 +33,7 @@ framehop = "0.12"
 wholesym = "0.7"
 
 [target.'cfg(windows)'.dev-dependencies.windows-sys]
-version = "0.48"
+version = "0.52"
 
 [[example]]
 name = "chat"

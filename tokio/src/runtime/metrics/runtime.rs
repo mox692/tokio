@@ -2,6 +2,7 @@ use crate::runtime::Handle;
 
 cfg_unstable_metrics! {
     use std::ops::Range;
+    use std::thread::ThreadId;
     cfg_64bit_metrics! {
         use std::sync::atomic::Ordering::Relaxed;
     }
@@ -127,6 +128,49 @@ impl RuntimeMetrics {
             self.handle.inner.num_idle_blocking_threads()
         }
 
+        /// Returns the thread id of the given worker thread.
+        ///
+        /// The returned value is `None` if the worker thread has not yet finished
+        /// starting up.
+        ///
+        /// If additional information about the thread, such as its native id, are
+        /// required, those can be collected in [`on_thread_start`] and correlated
+        /// using the thread id.
+        ///
+        /// [`on_thread_start`]: crate::runtime::Builder::on_thread_start
+        ///
+        /// # Arguments
+        ///
+        /// `worker` is the index of the worker being queried. The given value must
+        /// be between 0 and `num_workers()`. The index uniquely identifies a single
+        /// worker and will continue to identify the worker throughout the lifetime
+        /// of the runtime instance.
+        ///
+        /// # Panics
+        ///
+        /// The method panics when `worker` represents an invalid worker, i.e. is
+        /// greater than or equal to `num_workers()`.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// use tokio::runtime::Handle;
+        ///
+        /// #[tokio::main]
+        /// async fn main() {
+        ///     let metrics = Handle::current().metrics();
+        ///
+        ///     let id = metrics.worker_thread_id(0);
+        ///     println!("worker 0 has id {:?}", id);
+        /// }
+        /// ```
+        pub fn worker_thread_id(&self, worker: usize) -> Option<ThreadId> {
+            self.handle
+                .inner
+                .worker_metrics(worker)
+                .thread_id()
+        }
+
         cfg_64bit_metrics! {
             /// Returns the number of tasks spawned in this runtime since it was created.
             ///
@@ -241,6 +285,61 @@ impl RuntimeMetrics {
                     .park_count
                     .load(Relaxed)
             }
+
+            /// Returns the total number of times the given worker thread has parked
+            /// and unparked.
+            ///
+            /// The worker park/unpark count starts at zero when the runtime is created
+            /// and increases by one each time the worker parks the thread waiting for
+            /// new inbound events to process. This usually means the worker has processed
+            /// all pending work and is currently idle. When new work becomes available,
+            /// the worker is unparked and the park/unpark count is again increased by one.
+            ///
+            /// An odd count means that the worker is currently parked.
+            /// An even count means that the worker is currently active.
+            ///
+            /// The counter is monotonically increasing. It is never decremented or
+            /// reset to zero.
+            ///
+            /// # Arguments
+            ///
+            /// `worker` is the index of the worker being queried. The given value must
+            /// be between 0 and `num_workers()`. The index uniquely identifies a single
+            /// worker and will continue to identify the worker throughout the lifetime
+            /// of the runtime instance.
+            ///
+            /// # Panics
+            ///
+            /// The method panics when `worker` represents an invalid worker, i.e. is
+            /// greater than or equal to `num_workers()`.
+            ///
+            /// # Examples
+            ///
+            /// ```
+            /// use tokio::runtime::Handle;
+            ///
+            /// #[tokio::main]
+            /// async fn main() {
+            ///     let metrics = Handle::current().metrics();
+            ///     let n = metrics.worker_park_unpark_count(0);
+            ///
+            ///     println!("worker 0 parked and unparked {} times", n);
+            ///
+            ///     if n % 2 == 0 {
+            ///         println!("worker 0 is active");
+            ///     } else {
+            ///         println!("worker 0 is parked");
+            ///     }
+            /// }
+            /// ```
+            pub fn worker_park_unpark_count(&self, worker: usize) -> u64 {
+                self.handle
+                    .inner
+                    .worker_metrics(worker)
+                    .park_unpark_count
+                    .load(Relaxed)
+            }
+
 
             /// Returns the number of times the given worker thread unparked but
             /// performed no work before parking again.
