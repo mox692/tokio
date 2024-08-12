@@ -180,3 +180,6 @@ path = "issue_6651.rs"
 [[example]]
 name = "issue_6760"
 path = "issue_6760.rs"
+[[example]]
+name = "issue_6767"
+path = "issue_6767.rs"
