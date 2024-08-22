@@ -183,3 +183,6 @@ path = "issue_6760.rs"
 [[example]]
 name = "issue_6767"
 path = "issue_6767.rs"
+[[example]]
+name = "unwindsafe_matter"
+path = "unwindsafe_matter.rs"
