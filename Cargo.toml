@@ -11,6 +11,7 @@ members = [
   "benches",
   "examples",
   "stress-test",
+  "tracing-perfetto",
   "tests-build",
   "tests-integration",
 ]

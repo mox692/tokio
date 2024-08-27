@@ -56,6 +56,9 @@
 //! the inject queue indefinitely. This would be a ref-count cycle and a memory
 //! leak.
 
+#[cfg(all(tokio_unstable, feature = "tracing"))]
+use tracing::Level;
+
 use crate::loom::sync::{Arc, Mutex};
 use crate::runtime;
 use crate::runtime::context;
@@ -501,6 +504,9 @@ fn run(worker: Arc<Worker>) {
             defer: Defer::new(),
         });
 
+        #[cfg(all(tokio_unstable, feature = "tracing"))]
+        tracing::trace!(name: "worker start", data = "start", target = "flihgt_recorder");
+
         context::set_scheduler(&cx, || {
             let cx = cx.expect_multi_thread();
 
@@ -589,9 +595,30 @@ impl Context {
         // Make the core available to the runtime context
         *self.core.borrow_mut() = Some(core);
 
+        #[cfg(all(tokio_unstable, feature = "tracing"))]
+        let task_id = task.id().0;
+
         // Run the task
         coop::budget(|| {
+            #[cfg(all(tokio_unstable, feature = "tracing"))]
+            let task_name = format!("task {task_id}");
+
+            #[cfg(all(tokio_unstable, feature = "tracing"))]
+            let span = tracing::span!(
+                Level::TRACE,
+                "run_task",
+                name = %task_name,
+                data = "run_task",
+                stacktrace = "stacktrace"
+            );
+            #[cfg(all(tokio_unstable, feature = "tracing"))]
+            let _enter = span.enter();
+
             task.run();
+
+            #[cfg(all(tokio_unstable, feature = "tracing"))]
+            drop(_enter);
+
             let mut lifo_polls = 0;
 
             // As long as there is budget remaining and a task exists in the
@@ -654,7 +681,25 @@ impl Context {
                 // Run the LIFO task, then loop
                 *self.core.borrow_mut() = Some(core);
                 let task = self.worker.handle.shared.owned.assert_owner(task);
+
+                #[cfg(all(tokio_unstable, feature = "tracing"))]
+                let task_name = format!("task {task_id}");
+
+                #[cfg(all(tokio_unstable, feature = "tracing"))]
+                let span = tracing::span!(
+                    Level::TRACE,
+                    "run_task",
+                    name = %task_name,
+                    data = "run_task",
+                    stacktrace = "stacktrace"
+                );
+                #[cfg(all(tokio_unstable, feature = "tracing"))]
+                let _enter = span.enter();
+
                 task.run();
+
+                #[cfg(all(tokio_unstable, feature = "tracing"))]
+                drop(_enter);
             }
         })
     }
@@ -739,12 +784,21 @@ impl Context {
         // Store `core` in context
         *self.core.borrow_mut() = Some(core);
 
+        #[cfg(all(tokio_unstable, feature = "tracing"))]
+        let span = tracing::span!(Level::TRACE, "park", data = "park");
+        #[cfg(all(tokio_unstable, feature = "tracing"))]
+        let _enter = span.enter();
         // Park thread
         if let Some(timeout) = duration {
             park.park_timeout(&self.worker.handle.driver, timeout);
         } else {
             park.park(&self.worker.handle.driver);
         }
+
+        #[cfg(all(tokio_unstable, feature = "tracing"))]
+        drop(_enter);
+        #[cfg(all(tokio_unstable, feature = "tracing"))]
+        drop(span);
 
         self.defer.wake();
 
