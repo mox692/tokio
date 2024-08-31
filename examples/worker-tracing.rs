@@ -6,7 +6,6 @@ use std::{
 
 use tokio::task::JoinSet;
 use tracing::{event, span, Level};
-use tracing_subscriber::EnvFilter;
 
 fn main() {
     use tracing_perfetto::PerfettoLayer;

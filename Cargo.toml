@@ -8,6 +8,7 @@ members = [
   "tokio-util",
 
   # Internal
+  "hopframe",
   "benches",
   "examples",
   "stress-test",
