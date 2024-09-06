@@ -264,7 +264,7 @@ mod test {
 
     #[test]
     fn budgeting() {
-        use futures::future::poll_fn;
+        use std::future::poll_fn;
         use tokio_test::*;
 
         assert!(get().0.is_none());
@@ -321,7 +321,7 @@ mod test {
             }
 
             let mut task = task::spawn(poll_fn(|cx| {
-                let coop = ready!(poll_proceed(cx));
+                let coop = std::task::ready!(poll_proceed(cx));
                 coop.made_progress();
                 Poll::Ready(())
             }));

@@ -3,7 +3,7 @@ use crate::io::{AsyncRead, AsyncWrite, ReadBuf};
 use std::future::Future;
 use std::io;
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 
 // cap: init -> 0, incre -> poll_fill_bufで書いた量でMaxでbuf.lenまでありうる ,decre -> pos = capの時
 // pos: init -> 0, incre -> poll_write_bufが成功した時に書いた量でMaxでcapまで ,decre -> pos = capの時
