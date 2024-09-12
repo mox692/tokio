@@ -186,3 +186,6 @@ path = "issue_6767.rs"
 [[example]]
 name = "unwindsafe_matter"
 path = "unwindsafe_matter.rs"
+[[example]]
+name = "localset"
+path = "localset.rs"
