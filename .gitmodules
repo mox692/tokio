@@ -1,0 +1,3 @@
+[submodule "hopframe"]
+	path = hopframe
+	url = https://github.com/mox692/hopframe
