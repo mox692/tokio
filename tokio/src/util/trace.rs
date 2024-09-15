@@ -103,3 +103,14 @@ cfg_not_trace! {
         }
     }
 }
+
+#[cfg(all(tokio_unstable, feature = "tracing"))]
+pub(crate) fn gen_backtrace() -> String {
+    use hopframe::UnwindBuilderX86_64;
+
+    let mut unwinder = UnwindBuilderX86_64::new().build();
+    let iter = unwinder.unwind();
+
+    let s: String = iter.map(|f| format!("{:?}\n", f)).collect();
+    s
+}

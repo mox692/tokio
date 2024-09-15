@@ -398,6 +398,7 @@ impl Sleep {
         }
     }
 
+    #[crate::trace_on_pending_backtrace]
     fn poll_elapsed(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Result<(), Error>> {
         let me = self.project();
 

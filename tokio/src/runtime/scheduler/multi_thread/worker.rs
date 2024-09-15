@@ -57,6 +57,8 @@
 //! leak.
 
 #[cfg(all(tokio_unstable, feature = "tracing"))]
+use tracing::field;
+#[cfg(all(tokio_unstable, feature = "tracing"))]
 use tracing::Level;
 
 use crate::loom::sync::{Arc, Mutex};
@@ -72,6 +74,8 @@ use crate::runtime::{
 };
 use crate::util::atomic_cell::AtomicCell;
 use crate::util::rand::{FastRand, RngSeedGenerator};
+#[cfg(all(tokio_unstable, feature = "tracing"))]
+use crate::util::trace::gen_backtrace;
 
 use std::cell::RefCell;
 use std::task::Waker;
@@ -603,24 +607,24 @@ impl Context {
             #[cfg(all(tokio_unstable, feature = "tracing"))]
             let task_name = format!("task {task_id}");
 
-            #[cfg(all(tokio_unstable, feature = "tracing"))]
-            let bt = {
-                let span = tracing::span!(
-                    Level::TRACE,
-                    "backtrace",
-                    name = "backtrace",
-                    data = "backtrace"
-                );
-                let _enter = span.enter();
-                let bt = format!("{:?}", backtrace::Backtrace::new());
-                // let bt = Self::gen_backtrace();
-                // let bt = "";
-                if task_id.get() % 900 == 0 {
-                    println!("bt: {bt}");
-                }
-                drop(_enter);
-                bt
-            };
+            // #[cfg(all(tokio_unstable, feature = "tracing"))]
+            // let bt = {
+            //     let span = tracing::span!(
+            //         Level::TRACE,
+            //         "backtrace",
+            //         name = "backtrace",
+            //         data = "backtrace"
+            //     );
+            //     let _enter = span.enter();
+            //     // let bt = format!("{:?}", backtrace::Backtrace::new());
+            //     let bt = gen_backtrace();
+            //     // let bt = "";
+            //     if task_id.get() % 900 == 0 {
+            //         println!("bt: {bt}");
+            //     }
+            //     drop(_enter);
+            //     bt
+            // };
 
             #[cfg(all(tokio_unstable, feature = "tracing"))]
             let span = tracing::span!(
@@ -628,7 +632,8 @@ impl Context {
                 "run_task",
                 name = %task_name,
                 data = "run_task",
-                stacktrace = %bt
+                // stacktrace = %bt,
+                stacktrace = field::Empty
             );
             #[cfg(all(tokio_unstable, feature = "tracing"))]
             let _enter = span.enter();
@@ -637,6 +642,14 @@ impl Context {
 
             #[cfg(all(tokio_unstable, feature = "tracing"))]
             drop(_enter);
+
+            #[cfg(all(tokio_unstable, feature = "tracing"))]
+            let bt = crate::runtime::context::with_backtrace(|bt| bt.take())
+                .flatten()
+                .unwrap_or_default();
+
+            #[cfg(all(tokio_unstable, feature = "tracing"))]
+            span.record("stacktrace", bt);
 
             let mut lifo_polls = 0;
 
@@ -704,21 +717,21 @@ impl Context {
                 #[cfg(all(tokio_unstable, feature = "tracing"))]
                 let task_name = format!("task {task_id}");
 
-                #[cfg(all(tokio_unstable, feature = "tracing"))]
-                let bt = {
-                    let span = tracing::span!(
-                        Level::TRACE,
-                        "backtrace",
-                        name = "backtrace",
-                        data = "backtrace"
-                    );
-                    let _enter = span.enter();
-                    let bt = format!("{:?}", backtrace::Backtrace::new());
-                    // let bt = Self::gen_backtrace();
-                    // let bt = "";
-                    drop(_enter);
-                    bt
-                };
+                // #[cfg(all(tokio_unstable, feature = "tracing"))]
+                // let bt = {
+                //     let span = tracing::span!(
+                //         Level::TRACE,
+                //         "backtrace",
+                //         name = "backtrace",
+                //         data = "backtrace"
+                //     );
+                //     let _enter = span.enter();
+                //     // let bt = format!("{:?}", backtrace::Backtrace::new());
+                //     let bt = gen_backtrace();
+                //     // let bt = "";
+                //     drop(_enter);
+                //     bt
+                // };
 
                 #[cfg(all(tokio_unstable, feature = "tracing"))]
                 let span = tracing::span!(
@@ -726,7 +739,8 @@ impl Context {
                     "run_task",
                     name = %task_name,
                     data = "run_task",
-                    stacktrace = %bt
+                    // stacktrace = %bt,
+                    stacktrace = field::Empty
                 );
                 #[cfg(all(tokio_unstable, feature = "tracing"))]
                 let _enter = span.enter();
@@ -735,20 +749,18 @@ impl Context {
 
                 #[cfg(all(tokio_unstable, feature = "tracing"))]
                 drop(_enter);
+
+                #[cfg(all(tokio_unstable, feature = "tracing"))]
+                let bt = crate::runtime::context::with_backtrace(|bt| bt.take())
+                    .flatten()
+                    .unwrap_or_default();
+
+                #[cfg(all(tokio_unstable, feature = "tracing"))]
+                span.record("stacktrace", bt);
             }
         })
     }
 
-    #[cfg(all(tokio_unstable, feature = "tracing"))]
-    fn gen_backtrace() -> String {
-        use hopframe::UnwindBuilderX86_64;
-
-        let mut unwinder = UnwindBuilderX86_64::new().build();
-        let iter = unwinder.unwind();
-
-        let s: String = iter.map(|f| format!("{:?}\n", f)).collect();
-        s
-    }
     fn reset_lifo_enabled(&self, core: &mut Core) {
         core.lifo_enabled = !self.worker.handle.shared.config.disable_lifo_slot;
     }

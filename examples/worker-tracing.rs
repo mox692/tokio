@@ -34,10 +34,11 @@ fn main() {
         .unwrap();
 
     rt.block_on(async {
-        cpu_task().await;
+        // println!("hello");
+        // cpu_task().await;
         // yield_task().await
         // handmade_future().await
-        // sleep_program().await;
+        sleep_program().await;
     });
 }
 
@@ -45,7 +46,7 @@ async fn cpu_task() {
     let mut handles = vec![];
     for i in 0..10000 {
         handles.push(tokio::task::spawn(async move {
-            println!("Worker {} is starting work.", i);
+            // println!("Worker {} is starting work.", i);
             let mut counter = 0u64;
 
             // CPU負荷をかけるために無限ループで計算
@@ -101,12 +102,26 @@ async fn handmade_future() {
     fut.await;
 }
 
+#[inline(never)]
+async fn foo(i: i32) {
+    bar(i).await
+}
+#[inline(never)]
+async fn bar(i: i32) {
+    baz(i).await
+}
+#[inline(never)]
+async fn baz(i: i32) {
+    tokio::time::sleep(std::time::Duration::from_micros(10 * (i as u64))).await;
+}
+
 async fn sleep_program() {
     let mut set = JoinSet::new();
 
     for i in 0..10 {
         set.spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_secs(i)).await;
+            // tokio::time::sleep(std::time::Duration::from_micros(i * 10)).await;
+            foo(i).await
         });
     }
 

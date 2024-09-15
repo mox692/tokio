@@ -327,6 +327,29 @@ where
         self.write_log(trace);
     }
 
+    fn on_record(&self, id: &span::Id, values: &span::Record<'_>, ctx: Context<'_, S>) {
+        let Some(span) = ctx.span(id) else {
+            return;
+        };
+
+        let mut ext = span.extensions_mut();
+        let Some(trace) = ext.get_mut::<idl::Trace>() else {
+            return;
+        };
+
+        for packet in trace.packet.iter_mut() {
+            if let Some(idl::trace_packet::Data::TrackEvent(ref mut e)) = &mut packet.data {
+                // track_event::Type::SliceBegin
+                if e.r#type == Some(1) {
+                    let mut debug_annotations = DebugAnnotations::default();
+                    values.record(&mut debug_annotations);
+                    e.debug_annotations
+                        .append(&mut debug_annotations.annotations)
+                }
+            }
+        }
+    }
+
     fn on_close(&self, id: Id, ctx: Context<'_, S>) {
         let Some(span) = ctx.span(&id) else {
             return;
