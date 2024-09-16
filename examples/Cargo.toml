@@ -13,6 +13,7 @@ tokio-util = { version = "0.7.0", path = "../tokio-util", features = ["full"] }
 tokio-stream = { version = "0.1", path = "../tokio-stream" }
 
 tracing = "0.1"
+hopframe = { path = "../hopframe" }
 tracing-subscriber = { version = "0.3.1", default-features = false, features = ["fmt", "ansi", "env-filter", "tracing-log"] }
 bytes = "1.0.0"
 futures = { version = "0.3.0", features = ["thread-pool"]}

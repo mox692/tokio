@@ -4,6 +4,7 @@ use std::{
     task::Poll,
 };
 
+use hopframe::read_aslr_offset;
 use tokio::task::JoinSet;
 use tracing::{event, span, Level};
 
@@ -40,31 +41,35 @@ fn main() {
         // handmade_future().await
         sleep_program().await;
     });
+    let aslr_offset = read_aslr_offset().unwrap();
+    println!("aslr_offset: {aslr_offset}");
 }
 
 async fn cpu_task() {
     let mut handles = vec![];
     for i in 0..10000 {
-        handles.push(tokio::task::spawn(async move {
-            // println!("Worker {} is starting work.", i);
-            let mut counter = 0u64;
-
-            // CPU負荷をかけるために無限ループで計算
-            loop {
-                counter = counter.wrapping_add(1);
-                if counter > 1_000 {
-                    break;
-                }
-            }
-
-            ()
-        }));
+        handles.push(tokio::task::spawn(async move { cpu_task_inner() }));
     }
 
     // スレッドが終了しないようにするために待機
     for handle in handles {
         let _ = handle.await;
     }
+}
+
+#[tokio::trace_on_pending_backtrace]
+fn cpu_task_inner() -> Poll<()> {
+    // println!("Worker {} is starting work.", i);
+    let mut counter = 0u64;
+
+    // CPU負荷をかけるために無限ループで計算
+    loop {
+        counter = counter.wrapping_add(1);
+        if counter > 1_000 {
+            break;
+        }
+    }
+    Poll::Ready(())
 }
 
 async fn yield_task() {

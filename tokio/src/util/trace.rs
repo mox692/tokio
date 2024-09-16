@@ -111,6 +111,6 @@ pub(crate) fn gen_backtrace() -> String {
     let mut unwinder = UnwindBuilderX86_64::new().build();
     let iter = unwinder.unwind();
 
-    let s: String = iter.map(|f| format!("{:?}\n", f)).collect();
+    let s: String = iter.map(|f| format!("{:?},", f.address())).collect();
     s
 }
