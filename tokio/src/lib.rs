@@ -587,7 +587,13 @@ mod trace {
     }
 }
 
+#[cfg(not(all(tokio_unstable, feature = "tracing")))]
 mod util;
+/// TODO: remove
+#[cfg(all(tokio_unstable, feature = "tracing"))]
+pub mod util;
+#[cfg(all(tokio_unstable, feature = "tracing"))]
+pub use util::gen_backtrace;
 
 /// Due to the `Stream` trait's inclusion in `std` landing later than Tokio's 1.0
 /// release, most of the Tokio stream utilities have been moved into the [`tokio-stream`]
@@ -655,6 +661,9 @@ cfg_macros! {
 
     #[doc(hidden)]
     pub use tokio_macros::trace_on_pending_backtrace;
+
+    #[doc(hidden)]
+    pub use tokio_macros::trace_on_pending_backtrace_pub;
 
     /// Implementation detail of the `select!` macro. This macro is **not**
     /// intended to be used as part of the public API and is permitted to

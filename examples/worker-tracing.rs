@@ -1,16 +1,16 @@
 use std::{
-    future::Future,
+    future::{poll_fn, Future},
     sync::atomic::{AtomicUsize, Ordering},
     task::Poll,
 };
 
 use hopframe::read_aslr_offset;
 use tokio::task::JoinSet;
-use tracing::{event, span, Level};
+use tracing::Level;
 
 fn main() {
     use tracing_perfetto::PerfettoLayer;
-    use tracing_subscriber::{prelude::*, registry::Registry};
+    use tracing_subscriber::prelude::*;
 
     let layer = PerfettoLayer::new(std::sync::Mutex::new(
         std::fs::File::create("./test.pftrace").unwrap(),
@@ -36,10 +36,14 @@ fn main() {
 
     rt.block_on(async {
         // println!("hello");
-        // cpu_task().await;
+        tokio::spawn(async {
+            cpu_task().await;
+        })
+        .await
+        .unwrap();
         // yield_task().await
         // handmade_future().await
-        sleep_program().await;
+        // sleep_program().await;
     });
     let aslr_offset = read_aslr_offset().unwrap();
     println!("aslr_offset: {aslr_offset}");
@@ -47,8 +51,8 @@ fn main() {
 
 async fn cpu_task() {
     let mut handles = vec![];
-    for i in 0..10000 {
-        handles.push(tokio::task::spawn(async move { cpu_task_inner() }));
+    for _ in 0..10000 {
+        handles.push(tokio::task::spawn(poll_fn(|_| cpu_task_inner())));
     }
 
     // スレッドが終了しないようにするために待機
@@ -57,7 +61,7 @@ async fn cpu_task() {
     }
 }
 
-#[tokio::trace_on_pending_backtrace]
+#[tokio::trace_on_pending_backtrace_pub]
 fn cpu_task_inner() -> Poll<()> {
     // println!("Worker {} is starting work.", i);
     let mut counter = 0u64;

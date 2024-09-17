@@ -638,6 +638,45 @@ pub fn trace_on_pending_backtrace(_attr: TokenStream, item: TokenStream) -> Toke
     };
     gen.into()
 }
+
+/// foo
+#[proc_macro_attribute]
+pub fn trace_on_pending_backtrace_pub(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let function = parse_macro_input!(item as ItemFn);
+    let fn_name = &function.sig.ident;
+    let inputs = &function.sig.inputs;
+    let output = &function.sig.output;
+    let body = &function.block;
+
+    let gen = quote! {
+        fn #fn_name(#inputs) #output {
+            let output = (|| #body)();
+
+            let bt = {
+                let span = tracing::span!(
+                    Level::TRACE,
+                    "backtrace",
+                    name = "backtrace",
+                    data = "backtrace"
+                );
+                let _enter = span.enter();
+                // let bt = format!("{:?}", backtrace::Backtrace::new());
+                let bt = tokio::util::trace::gen_backtrace();
+                // let bt = "";
+                drop(_enter);
+                bt
+            };
+
+            let bt = format!("{:?}", bt);
+            tokio::runtime::context::with_backtrace(|cx| {
+                cx.set(Some(bt))
+            });
+
+            output
+        }
+    };
+    gen.into()
+}
 // #[proc_macro_attribute]
 // pub fn trace_on_pending(_attr: TokenStream, item: TokenStream) -> TokenStream {
 //     let function = parse_macro_input!(item as ItemFn);

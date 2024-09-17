@@ -104,8 +104,9 @@ cfg_not_trace! {
     }
 }
 
+/// foo
 #[cfg(all(tokio_unstable, feature = "tracing"))]
-pub(crate) fn gen_backtrace() -> String {
+pub fn gen_backtrace() -> String {
     use hopframe::UnwindBuilderX86_64;
 
     let mut unwinder = UnwindBuilderX86_64::new().build();
