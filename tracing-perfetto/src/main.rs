@@ -1,6 +1,7 @@
 use bytes::Bytes;
 use bytes::BytesMut;
 use prost::Message;
+use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
@@ -11,7 +12,17 @@ mod idl {
     include!("perfetto.proto.rs");
 }
 
+// bin <offset> <debug / release>
 fn main() {
+    let args: Vec<String> = env::args().collect();
+    if args.len() < 3 {
+        panic!("invalid args!")
+    }
+
+    let offset: u64 = args[1].parse::<u64>().unwrap();
+    let mode: &str = &args[2];
+
+    println!("args: {:?}", &args);
     let mut file = File::open("/home/ec2-user/tokio/test.pftrace").unwrap();
     let mut buf = Vec::new();
     file.read_to_end(&mut buf).unwrap();
@@ -48,7 +59,6 @@ fn main() {
             panic!("eeeeeee")
         };
 
-        // 94653671911424
         let addresses: Vec<String> = s
             .split(",")
             .filter_map(|s| {
@@ -56,16 +66,17 @@ fn main() {
                     return None;
                 };
 
-                let addr = addr - 94576022376448;
+                let addr = addr - offset;
                 Some(format!("{:#x}", addr))
             })
             .collect();
 
+        let target_bin = format!("./target/{mode}/examples/worker-tracing");
         let output = Command::new("addr2line")
             .arg("-C")
             .arg("-f")
             .arg("-e")
-            .arg("./target/debug/examples/worker-tracing")
+            .arg(target_bin)
             .args(&addresses)
             .output()
             .unwrap();
