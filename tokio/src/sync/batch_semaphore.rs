@@ -575,6 +575,7 @@ impl Waiter {
 impl Future for Acquire<'_> {
     type Output = Result<(), AcquireError>;
 
+    #[crate::trace_on_pending_backtrace]
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         ready!(crate::trace::trace_leaf(cx));
 

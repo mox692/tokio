@@ -72,6 +72,7 @@ impl CopyBuffer {
         }
     }
 
+    #[crate::trace_on_pending_backtrace]
     pub(super) fn poll_copy<R, W>(
         &mut self,
         cx: &mut Context<'_>,

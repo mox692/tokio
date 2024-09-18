@@ -1395,6 +1395,7 @@ where
 {
     type Output = Result<T, RecvError>;
 
+    #[crate::trace_on_pending_backtrace]
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<T, RecvError>> {
         ready!(crate::trace::trace_leaf(cx));
 

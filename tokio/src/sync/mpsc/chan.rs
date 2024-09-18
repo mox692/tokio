@@ -286,6 +286,7 @@ impl<T, S: Semaphore> Rx<T, S> {
     }
 
     /// Receive the next value
+    #[crate::trace_on_pending_backtrace]
     pub(crate) fn recv(&mut self, cx: &mut Context<'_>) -> Poll<Option<T>> {
         use super::block::Read;
 
@@ -343,6 +344,7 @@ impl<T, S: Semaphore> Rx<T, S> {
     ///
     /// For `limit > 0`, receives up to limit values into `buffer`.
     /// For `limit == 0`, immediately returns Ready(0).
+    #[crate::trace_on_pending_backtrace]
     pub(crate) fn recv_many(
         &mut self,
         cx: &mut Context<'_>,

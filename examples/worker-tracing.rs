@@ -37,13 +37,14 @@ fn main() {
     rt.block_on(async {
         // println!("hello");
         tokio::spawn(async {
-            cpu_task().await;
+            // cpu_task().await;
+            // yield_task().await
+            // handmade_future().await
+            // sleep_program().await;
+            channel().await
         })
         .await
         .unwrap();
-        // yield_task().await
-        // handmade_future().await
-        // sleep_program().await;
     });
     let aslr_offset = read_aslr_offset().unwrap();
     println!("aslr_offset: {aslr_offset}");
@@ -80,6 +81,29 @@ async fn yield_task() {
     for i in 0..10000 {
         tokio::task::yield_now().await;
     }
+}
+
+async fn channel() {
+    use tokio::sync::mpsc;
+    use tokio::time::{sleep, Duration};
+
+    let (tx, mut rx) = mpsc::channel(32);
+
+    let sender_task = tokio::spawn(async move {
+        for i in 1..=100000 {
+            if let Err(_) = tx.send(format!("message {}", i)).await {
+                return;
+            }
+
+            if i % 1000 == 0 {
+                sleep(Duration::from_micros(10)).await;
+            }
+        }
+    });
+
+    let receiver_task = tokio::spawn(async move { while let Some(message) = rx.recv().await {} });
+
+    let _ = tokio::join!(sender_task, receiver_task);
 }
 
 struct MyFuture {

@@ -66,6 +66,7 @@ cfg_io_util! {
 
 impl AsyncRead for Empty {
     #[inline]
+    #[crate::trace_on_pending_backtrace]
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -79,6 +80,7 @@ impl AsyncRead for Empty {
 
 impl AsyncBufRead for Empty {
     #[inline]
+    // #[crate::trace_on_pending_backtrace]
     fn poll_fill_buf(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<&[u8]>> {
         ready!(crate::trace::trace_leaf(cx));
         ready!(poll_proceed_and_make_progress(cx));
@@ -91,6 +93,7 @@ impl AsyncBufRead for Empty {
 
 impl AsyncWrite for Empty {
     #[inline]
+    #[crate::trace_on_pending_backtrace]
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -102,6 +105,7 @@ impl AsyncWrite for Empty {
     }
 
     #[inline]
+    #[crate::trace_on_pending_backtrace]
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         ready!(crate::trace::trace_leaf(cx));
         ready!(poll_proceed_and_make_progress(cx));
@@ -109,6 +113,7 @@ impl AsyncWrite for Empty {
     }
 
     #[inline]
+    #[crate::trace_on_pending_backtrace]
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         ready!(crate::trace::trace_leaf(cx));
         ready!(poll_proceed_and_make_progress(cx));
@@ -121,6 +126,7 @@ impl AsyncWrite for Empty {
     }
 
     #[inline]
+    #[crate::trace_on_pending_backtrace]
     fn poll_write_vectored(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -140,6 +146,7 @@ impl AsyncSeek for Empty {
     }
 
     #[inline]
+    #[crate::trace_on_pending_backtrace]
     fn poll_complete(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<u64>> {
         ready!(crate::trace::trace_leaf(cx));
         ready!(poll_proceed_and_make_progress(cx));
