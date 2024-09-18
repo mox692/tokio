@@ -612,12 +612,15 @@ pub fn trace_on_pending(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn trace_on_pending_backtrace(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let function = parse_macro_input!(item as ItemFn);
     let fn_name = &function.sig.ident;
+    let vis = &function.vis;
+    let generics = &function.sig.generics;
     let inputs = &function.sig.inputs;
     let output = &function.sig.output;
     let body = &function.block;
+    let where_clause = &function.sig.generics.where_clause; // where句を取得
 
     let gen = quote! {
-        fn #fn_name(#inputs) #output {
+        #vis fn #fn_name #generics (#inputs) #output #where_clause {
             let output = (|| #body)();
             if let Poll::Pending = output {
                 #[cfg(all(tokio_unstable, feature = "tracing"))]
@@ -644,12 +647,15 @@ pub fn trace_on_pending_backtrace(_attr: TokenStream, item: TokenStream) -> Toke
 pub fn trace_on_pending_backtrace_pub(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let function = parse_macro_input!(item as ItemFn);
     let fn_name = &function.sig.ident;
+    let vis = &function.vis;
+    let generics = &function.sig.generics;
     let inputs = &function.sig.inputs;
     let output = &function.sig.output;
     let body = &function.block;
+    let where_clause = &function.sig.generics.where_clause; // where句を取得
 
     let gen = quote! {
-        fn #fn_name(#inputs) #output {
+        #vis fn #fn_name #generics (#inputs) #output #where_clause {
             let output = (|| #body)();
 
             let bt = {
