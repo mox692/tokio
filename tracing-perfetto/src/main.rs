@@ -12,22 +12,35 @@ mod idl {
     include!("perfetto.proto.rs");
 }
 
-// bin <offset> <debug / release>
+// bin <debug / release>
 fn main() {
     let args: Vec<String> = env::args().collect();
-    if args.len() < 3 {
+    if args.len() < 2 {
         panic!("invalid args!")
     }
 
-    let offset: u64 = args[1].parse::<u64>().unwrap();
-    let mode: &str = &args[2];
-
+    let mode: &str = &args[1];
     println!("args: {:?}", &args);
     let mut file = File::open("/home/ec2-user/tokio/test.pftrace").unwrap();
     let mut buf = Vec::new();
     file.read_to_end(&mut buf).unwrap();
     let bytes = Bytes::from(buf);
     let mut trace = idl::Trace::decode(bytes).unwrap();
+
+    // todo: change the way to get an offset
+    let mut offset = None;
+    for packet in trace.packet.iter_mut() {
+        let Some(data) = &packet.interned_data else {
+            continue;
+        };
+        let Some(interned_string) = data.debug_annotation_string_values.get(0) else {
+            continue;
+        };
+        offset = interned_string
+            .str
+            .as_ref()
+            .map(|v| v.into_iter().fold(0_u64, |acc, x| acc * 10 + (*x as u64)));
+    }
 
     for packet in trace.packet.iter_mut() {
         let Some(idl::trace_packet::Data::TrackEvent(ref mut e)) = &mut packet.data else {
@@ -66,7 +79,7 @@ fn main() {
                     return None;
                 };
 
-                let addr = addr - offset;
+                let addr = addr - offset.unwrap();
                 Some(format!("{:#x}", addr))
             })
             .collect();

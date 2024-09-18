@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 use bytes::BytesMut;
+use idl::InternedData;
 use prost::Message;
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -38,6 +39,7 @@ pub struct PerfettoLayer<W = fn() -> std::io::Stdout> {
     track_uuid: TrackUuid,
     writer: W,
     config: Config,
+    aslr_offset: Option<u64>,
 }
 
 /// Writes encoded records into provided instance.
@@ -66,6 +68,8 @@ impl<W: PerfettoWriter> PerfettoLayer<W> {
             track_uuid: TrackUuid::new(rand::random()),
             writer,
             config: Config::default(),
+            // todo: change the way to get an offset
+            aslr_offset: read_aslr_offset().ok(),
         }
     }
 
@@ -262,6 +266,23 @@ where
                 self.sequence_id.get() as _,
             ),
         );
+        packet.interned_data = Some(InternedData {
+            debug_annotation_names: vec![idl::DebugAnnotationName {
+                iid: Some(1),
+                name: Some("aslr_offset".to_string()),
+            }],
+            debug_annotation_string_values: vec![idl::InternedString {
+                iid: Some(1),
+                str: self.aslr_offset.map(|v| {
+                    v.to_string()
+                        .chars()
+                        .map(|c| c.to_digit(10).unwrap() as u8)
+                        .collect()
+                }),
+            }],
+            ..Default::default()
+        });
+
         span.extensions_mut().insert(idl::Trace {
             packet: vec![packet],
         });
@@ -314,6 +335,22 @@ where
                 self.sequence_id.get() as _,
             ),
         );
+        packet.interned_data = Some(InternedData {
+            debug_annotation_names: vec![idl::DebugAnnotationName {
+                iid: Some(1),
+                name: Some("aslr_offset".to_string()),
+            }],
+            debug_annotation_string_values: vec![idl::InternedString {
+                iid: Some(1),
+                str: self.aslr_offset.map(|v| {
+                    v.to_string()
+                        .chars()
+                        .map(|c| c.to_digit(10).unwrap() as u8)
+                        .collect()
+                }),
+            }],
+            ..Default::default()
+        });
 
         if let Some(span) = ctx.event_span(event) {
             if let Some(trace) = span.extensions_mut().get_mut::<idl::Trace>() {
@@ -389,6 +426,23 @@ where
                 self.sequence_id.get() as _,
             ),
         );
+        packet.interned_data = Some(InternedData {
+            debug_annotation_names: vec![idl::DebugAnnotationName {
+                iid: Some(1),
+                name: Some("aslr_offset".to_string()),
+            }],
+            debug_annotation_string_values: vec![idl::InternedString {
+                iid: Some(1),
+                str: self.aslr_offset.map(|v| {
+                    v.to_string()
+                        .chars()
+                        .map(|c| c.to_digit(10).unwrap() as u8)
+                        .collect()
+                }),
+            }],
+            ..Default::default()
+        });
+
         trace.packet.push(packet);
 
         self.write_log(trace);
@@ -546,5 +600,34 @@ impl Visit for DebugAnnotations {
             "{value}"
         )));
         self.annotations.push(annotation);
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn read_aslr_offset() -> procfs::ProcResult<u64> {
+    use procfs::process::{MMapPath, Process};
+
+    let process = Process::myself()?;
+    let exe = process.exe()?;
+    let maps = &process.maps()?;
+    let mut addresses: Vec<u64> = maps
+        .iter()
+        .filter_map(|map| {
+            let MMapPath::Path(bin_path) = &map.pathname else {
+                return None;
+            };
+            if bin_path != &exe {
+                return None;
+            }
+
+            return Some(map.address.0);
+        })
+        .collect();
+
+    addresses.sort();
+    if let Some(addr) = addresses.get(0) {
+        Ok(*addr)
+    } else {
+        panic!("no memory map error.")
     }
 }
