@@ -39,6 +39,7 @@ pub struct PerfettoLayer<W = fn() -> std::io::Stdout> {
     track_uuid: TrackUuid,
     writer: W,
     config: Config,
+    pid: i32,
     aslr_offset: Option<u64>,
 }
 
@@ -69,6 +70,7 @@ impl<W: PerfettoWriter> PerfettoLayer<W> {
             writer,
             config: Config::default(),
             // todo: change the way to get an offset
+            pid: std::process::id() as i32,
             aslr_offset: read_aslr_offset().ok(),
         }
     }
@@ -117,7 +119,7 @@ impl<W: PerfettoWriter> PerfettoLayer<W> {
             packet.optional_trusted_uid = Some(idl::trace_packet::OptionalTrustedUid::TrustedUid(
                 self.sequence_id.get() as _,
             ));
-            let thread = create_thread_descriptor().into();
+            let thread = create_thread_descriptor(self.pid).into();
             let track_desc = create_track_descriptor(
                 thread_track_uuid.into(),
                 self.track_uuid.get().into(),
@@ -138,7 +140,7 @@ impl<W: PerfettoWriter> PerfettoLayer<W> {
             packet.optional_trusted_uid = Some(idl::trace_packet::OptionalTrustedUid::TrustedUid(
                 self.sequence_id.get() as _,
             ));
-            let process = create_process_descriptor().into();
+            let process = create_process_descriptor(self.pid).into();
             let track_desc = create_track_descriptor(
                 self.track_uuid.get().into(),
                 None,
@@ -260,7 +262,7 @@ where
         );
         packet.data = Some(idl::trace_packet::Data::TrackEvent(event));
         packet.timestamp = chrono::Local::now().timestamp_nanos_opt().map(|t| t as _);
-        packet.trusted_pid = Some(std::process::id() as _);
+        packet.trusted_pid = Some(self.pid);
         packet.optional_trusted_packet_sequence_id = Some(
             idl::trace_packet::OptionalTrustedPacketSequenceId::TrustedPacketSequenceId(
                 self.sequence_id.get() as _,
@@ -328,7 +330,7 @@ where
         });
         let mut packet = idl::TracePacket::default();
         packet.data = Some(idl::trace_packet::Data::TrackEvent(track_event));
-        packet.trusted_pid = Some(std::process::id() as _);
+        packet.trusted_pid = Some(self.pid);
         packet.timestamp = chrono::Local::now().timestamp_nanos_opt().map(|t| t as _);
         packet.optional_trusted_packet_sequence_id = Some(
             idl::trace_packet::OptionalTrustedPacketSequenceId::TrustedPacketSequenceId(
@@ -420,7 +422,7 @@ where
         });
         packet.data = Some(idl::trace_packet::Data::TrackEvent(event));
         packet.timestamp = chrono::Local::now().timestamp_nanos_opt().map(|t| t as _);
-        packet.trusted_pid = Some(std::process::id() as _);
+        packet.trusted_pid = Some(self.pid);
         packet.optional_trusted_packet_sequence_id = Some(
             idl::trace_packet::OptionalTrustedPacketSequenceId::TrustedPacketSequenceId(
                 self.sequence_id.get() as _,
@@ -449,17 +451,17 @@ where
     }
 }
 
-fn create_thread_descriptor() -> idl::ThreadDescriptor {
+fn create_thread_descriptor(pid: i32) -> idl::ThreadDescriptor {
     let mut thread = idl::ThreadDescriptor::default();
-    thread.pid = Some(std::process::id() as _);
+    thread.pid = Some(pid);
     thread.tid = Some(thread_id::get() as _);
     thread.thread_name = std::thread::current().name().map(|n| n.to_string());
     thread
 }
 
-fn create_process_descriptor() -> idl::ProcessDescriptor {
+fn create_process_descriptor(pid: i32) -> idl::ProcessDescriptor {
     let mut process = idl::ProcessDescriptor::default();
-    process.pid = Some(std::process::id() as _);
+    process.pid = Some(pid);
     process
 }
 
