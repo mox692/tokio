@@ -15,6 +15,10 @@ description = """
 Tracing layer for recording spans and events as perfetto event format.
 """
 
+[features]
+symbolize = ["clap"]
+default = []
+
 [dependencies]
 anyhow = "1.0.86"
 bytes = "1.6.0"
@@ -24,6 +28,12 @@ rand = "0.8.5"
 thread-id = "4.2.1"
 tracing = "0.1"
 tracing-subscriber = "0.3"
+hopframe = { path = "../hopframe" }
+tokio = { version = "1", features = [ "full" ] }
+
+# optional deps
+clap = { version = "4.5", optional = true, features = ["derive"] }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = "0.16"
 
@@ -33,7 +43,11 @@ protobuf = "3"
 # protobuf-src = "2.0.1"
 
 [dev-dependencies]
-tokio = { version = "1", features = [ "full" ] }
 tracing-subscriber = "0.3"
 tracing = "0.1"
 anyhow = "1"
+
+[[bin]]
+name = "perfetto_symbolize"
+path = "src/perfetto_symbolize.rs"
+required-features = ["symbolize"]
