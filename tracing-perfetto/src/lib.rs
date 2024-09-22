@@ -1,4 +1,3 @@
-// #![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/README.md"))]
 #![forbid(unsafe_code)]
 
 use bytes::BytesMut;
@@ -18,8 +17,7 @@ use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::Layer;
 
 mod idl {
-    // include!(concat!(env!("OUT_DIR"), "/perfetto.protos.rs"));
-    include!("perfetto.proto.rs");
+    include!(concat!(env!("OUT_DIR"), "/perfetto.protos.rs"));
 }
 
 thread_local! {
@@ -229,7 +227,7 @@ where
             return;
         };
 
-        let mut name = &mut None;
+        let name = &mut None;
         let enabled = self
             .config
             .filter
@@ -291,7 +289,7 @@ where
     }
 
     fn on_event(&self, event: &Event<'_>, ctx: Context<'_, S>) {
-        let mut name = &mut None;
+        let name = &mut None;
         let enabled = self
             .config
             .filter
@@ -399,16 +397,17 @@ where
         };
 
         let debug_annotations = DebugAnnotations::default();
-
         let mut packet = idl::TracePacket::default();
         let meta = span.metadata();
 
-        let idl::trace_packet::Data::TrackEvent(te) = trace.packet[0].data.as_ref().unwrap() else {
-            panic!("what??");
+        let Some(Some(idl::trace_packet::Data::TrackEvent(te))) =
+            trace.packet.get(0).map(|p| &p.data)
+        else {
+            return;
         };
 
-        let idl::track_event::NameField::Name(name_str) = te.name_field.as_ref().unwrap() else {
-            panic!("aaaaaaa??");
+        let Some(idl::track_event::NameField::Name(name_str)) = te.name_field.as_ref() else {
+            return;
         };
 
         let event = THREAD_TRACK_UUID.with(|id| {

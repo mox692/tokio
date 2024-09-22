@@ -35,7 +35,6 @@ struct Cli {
 #[tokio::main]
 async fn main() {
     let args = Cli::parse();
-    println!("{:?}", args);
     let bin_path = args.bin_path;
     let perfetto_trace_log = args.perfetto_trace_log;
     let output_path = args.output_path.unwrap_or(
