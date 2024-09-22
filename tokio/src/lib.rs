@@ -660,7 +660,7 @@ cfg_macros! {
     pub use tokio_macros::trace_on_pending;
 
     #[doc(hidden)]
-    pub use tokio_macros::trace_on_pending_backtrace;
+    pub(crate) use tokio_macros::trace_on_pending_backtrace;
 
     #[doc(hidden)]
     pub use tokio_macros::trace_on_pending_backtrace_pub;
