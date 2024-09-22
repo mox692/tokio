@@ -1,3 +1,7 @@
 [submodule "hopframe"]
 	path = hopframe
 	url = https://github.com/mox692/hopframe
+[submodule "tracing-perfetto"]
+	path = tracing-perfetto
+	url = https://github.com/mox692/tracing-perfetto.git
+	branch = worker-trace
