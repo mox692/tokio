@@ -14,8 +14,7 @@ use std::io::{self, Seek, SeekFrom};
 use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::Context;
-use std::task::Poll;
+use std::task::{ready, Context, Poll};
 
 #[cfg(test)]
 use super::mocks::JoinHandle;
@@ -191,6 +190,46 @@ impl File {
         let path = path.as_ref().to_owned();
         let std_file = asyncify(move || StdFile::create(path)).await?;
         Ok(File::from_std(std_file))
+    }
+
+    /// Opens a file in read-write mode.
+    ///
+    /// This function will create a file if it does not exist, or return an error
+    /// if it does. This way, if the call succeeds, the file returned is guaranteed
+    /// to be new.
+    ///
+    /// This option is useful because it is atomic. Otherwise between checking
+    /// whether a file exists and creating a new one, the file may have been
+    /// created by another process (a TOCTOU race condition / attack).
+    ///
+    /// This can also be written using `File::options().read(true).write(true).create_new(true).open(...)`.
+    ///
+    /// See [`OpenOptions`] for more details.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use tokio::fs::File;
+    /// use tokio::io::AsyncWriteExt;
+    ///
+    /// # async fn dox() -> std::io::Result<()> {
+    /// let mut file = File::create_new("foo.txt").await?;
+    /// file.write_all(b"hello, world!").await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// The [`write_all`] method is defined on the [`AsyncWriteExt`] trait.
+    ///
+    /// [`write_all`]: fn@crate::io::AsyncWriteExt::write_all
+    /// [`AsyncWriteExt`]: trait@crate::io::AsyncWriteExt
+    pub async fn create_new<P: AsRef<Path>>(path: P) -> std::io::Result<File> {
+        Self::options()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(path)
+            .await
     }
 
     /// Returns a new [`OpenOptions`] object.
@@ -897,7 +936,7 @@ cfg_windows! {
 
 impl Inner {
     async fn complete_inflight(&mut self) {
-        use crate::future::poll_fn;
+        use std::future::poll_fn;
 
         poll_fn(|cx| self.poll_complete_inflight(cx)).await;
     }

@@ -1,5 +1,9 @@
+#![cfg_attr(loom, allow(unused_imports))]
+
 use crate::runtime::handle::Handle;
-use crate::runtime::{blocking, driver, Callback, HistogramBuilder, Runtime};
+#[cfg(tokio_unstable)]
+use crate::runtime::TaskMeta;
+use crate::runtime::{blocking, driver, Callback, HistogramBuilder, Runtime, TaskCallback};
 use crate::util::rand::{RngSeed, RngSeedGenerator};
 
 use std::fmt;
@@ -77,6 +81,12 @@ pub struct Builder {
 
     /// To run after each thread is unparked.
     pub(super) after_unpark: Option<Callback>,
+
+    /// To run before each task is spawned.
+    pub(super) before_spawn: Option<TaskCallback>,
+
+    /// To run after each task is terminated.
+    pub(super) after_termination: Option<TaskCallback>,
 
     /// Customizable keep alive timeout for `BlockingPool`
     pub(super) keep_alive: Option<Duration>,
@@ -289,6 +299,9 @@ impl Builder {
             before_stop: None,
             before_park: None,
             after_unpark: None,
+
+            before_spawn: None,
+            after_termination: None,
 
             keep_alive: None,
 
@@ -677,6 +690,91 @@ impl Builder {
         self
     }
 
+    /// Executes function `f` just before a task is spawned.
+    ///
+    /// `f` is called within the Tokio context, so functions like
+    /// [`tokio::spawn`](crate::spawn) can be called, and may result in this callback being
+    /// invoked immediately.
+    ///
+    /// This can be used for bookkeeping or monitoring purposes.
+    ///
+    /// Note: There can only be one spawn callback for a runtime; calling this function more
+    /// than once replaces the last callback defined, rather than adding to it.
+    ///
+    /// This *does not* support [`LocalSet`](crate::task::LocalSet) at this time.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use tokio::runtime;
+    /// # pub fn main() {
+    /// let runtime = runtime::Builder::new_current_thread()
+    ///     .on_task_spawn(|_| {
+    ///         println!("spawning task");
+    ///     })
+    ///     .build()
+    ///     .unwrap();
+    ///
+    /// runtime.block_on(async {
+    ///     tokio::task::spawn(std::future::ready(()));
+    ///
+    ///     for _ in 0..64 {
+    ///         tokio::task::yield_now().await;
+    ///     }
+    /// })
+    /// # }
+    /// ```
+    #[cfg(all(not(loom), tokio_unstable))]
+    pub fn on_task_spawn<F>(&mut self, f: F) -> &mut Self
+    where
+        F: Fn(&TaskMeta<'_>) + Send + Sync + 'static,
+    {
+        self.before_spawn = Some(std::sync::Arc::new(f));
+        self
+    }
+
+    /// Executes function `f` just after a task is terminated.
+    ///
+    /// `f` is called within the Tokio context, so functions like
+    /// [`tokio::spawn`](crate::spawn) can be called.
+    ///
+    /// This can be used for bookkeeping or monitoring purposes.
+    ///
+    /// Note: There can only be one task termination callback for a runtime; calling this
+    /// function more than once replaces the last callback defined, rather than adding to it.
+    ///
+    /// This *does not* support [`LocalSet`](crate::task::LocalSet) at this time.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use tokio::runtime;
+    /// # pub fn main() {
+    /// let runtime = runtime::Builder::new_current_thread()
+    ///     .on_task_terminate(|_| {
+    ///         println!("killing task");
+    ///     })
+    ///     .build()
+    ///     .unwrap();
+    ///
+    /// runtime.block_on(async {
+    ///     tokio::task::spawn(std::future::ready(()));
+    ///
+    ///     for _ in 0..64 {
+    ///         tokio::task::yield_now().await;
+    ///     }
+    /// })
+    /// # }
+    /// ```
+    #[cfg(all(not(loom), tokio_unstable))]
+    pub fn on_task_terminate<F>(&mut self, f: F) -> &mut Self
+    where
+        F: Fn(&TaskMeta<'_>) + Send + Sync + 'static,
+    {
+        self.after_termination = Some(std::sync::Arc::new(f));
+        self
+    }
+
     /// Creates the configured `Runtime`.
     ///
     /// The returned `Runtime` instance is ready to spawn tasks.
@@ -702,7 +800,7 @@ impl Builder {
         }
     }
 
-    fn get_cfg(&self) -> driver::Cfg {
+    fn get_cfg(&self, workers: usize) -> driver::Cfg {
         driver::Cfg {
             enable_pause_time: match self.kind {
                 Kind::CurrentThread => true,
@@ -715,6 +813,7 @@ impl Builder {
             enable_time: self.enable_time,
             start_paused: self.start_paused,
             nevents: self.nevents,
+            workers,
         }
     }
 
@@ -815,7 +914,7 @@ impl Builder {
         ///
         /// By default, an unhandled panic (i.e. a panic not caught by
         /// [`std::panic::catch_unwind`]) has no impact on the runtime's
-        /// execution. The panic is error value is forwarded to the task's
+        /// execution. The panic's error value is forwarded to the task's
         /// [`JoinHandle`] and all other spawned tasks continue running.
         ///
         /// The `unhandled_panic` option enables configuring this behavior.
@@ -956,7 +1055,7 @@ impl Builder {
         }
     }
 
-    cfg_metrics! {
+    cfg_unstable_metrics! {
         /// Enables tracking the distribution of task poll times.
         ///
         /// Task poll times are not instrumented by default as doing so requires
@@ -1095,7 +1194,7 @@ impl Builder {
         use crate::runtime::scheduler::{self, CurrentThread};
         use crate::runtime::{runtime::Scheduler, Config};
 
-        let (driver, driver_handle) = driver::Driver::new(self.get_cfg())?;
+        let (driver, driver_handle) = driver::Driver::new(self.get_cfg(1))?;
 
         // Blocking pool
         let blocking_pool = blocking::create_blocking_pool(self, self.max_blocking_threads);
@@ -1117,6 +1216,8 @@ impl Builder {
             Config {
                 before_park: self.before_park.clone(),
                 after_unpark: self.after_unpark.clone(),
+                before_spawn: self.before_spawn.clone(),
+                after_termination: self.after_termination.clone(),
                 global_queue_interval: self.global_queue_interval,
                 event_interval: self.event_interval,
                 local_queue_capacity: self.local_queue_capacity,
@@ -1248,7 +1349,7 @@ cfg_rt_multi_thread! {
 
             let core_threads = self.worker_threads.unwrap_or_else(num_cpus);
 
-            let (driver, driver_handle) = driver::Driver::new(self.get_cfg())?;
+            let (driver, driver_handle) = driver::Driver::new(self.get_cfg(core_threads))?;
 
             // Create the blocking pool
             let blocking_pool =
@@ -1268,6 +1369,8 @@ cfg_rt_multi_thread! {
                 Config {
                     before_park: self.before_park.clone(),
                     after_unpark: self.after_unpark.clone(),
+                    before_spawn: self.before_spawn.clone(),
+                    after_termination: self.after_termination.clone(),
                     global_queue_interval: self.global_queue_interval,
                     event_interval: self.event_interval,
                     local_queue_capacity: self.local_queue_capacity,
@@ -1295,7 +1398,7 @@ cfg_rt_multi_thread! {
                 use crate::runtime::scheduler::MultiThreadAlt;
 
                 let core_threads = self.worker_threads.unwrap_or_else(num_cpus);
-                let (driver, driver_handle) = driver::Driver::new(self.get_cfg())?;
+                let (driver, driver_handle) = driver::Driver::new(self.get_cfg(core_threads))?;
 
                 // Create the blocking pool
                 let blocking_pool =
@@ -1315,6 +1418,8 @@ cfg_rt_multi_thread! {
                     Config {
                         before_park: self.before_park.clone(),
                         after_unpark: self.after_unpark.clone(),
+                        before_spawn: self.before_spawn.clone(),
+                        after_termination: self.after_termination.clone(),
                         global_queue_interval: self.global_queue_interval,
                         event_interval: self.event_interval,
                         local_queue_capacity: self.local_queue_capacity,

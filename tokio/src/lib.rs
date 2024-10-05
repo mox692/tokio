@@ -367,6 +367,12 @@
 //! rustflags = ["--cfg", "tokio_unstable"]
 //! ```
 //!
+//! <div class="warning">
+//! The <code>[build]</code> section does <strong>not</strong> go in a
+//! <code>Cargo.toml</code> file. Instead it must be placed in the Cargo config
+//! file <code>.cargo/config.toml</code>.
+//! </div>
+//!
 //! Alternatively, you can specify it with an environment variable:
 //!
 //! ```sh
@@ -471,6 +477,7 @@ compile_error!("The `tokio_taskdump` feature requires `--cfg tokio_unstable`.");
 
 #[cfg(all(
     tokio_taskdump,
+    not(doc),
     not(all(
         target_os = "linux",
         any(target_arch = "aarch64", target_arch = "x86", target_arch = "x86_64")
@@ -627,7 +634,7 @@ pub mod stream {}
 #[cfg(docsrs)]
 pub mod doc;
 
-#[cfg(feature = "net")]
+#[cfg(any(feature = "net", feature = "fs"))]
 #[cfg(docsrs)]
 #[allow(unused)]
 pub(crate) use self::doc::os;

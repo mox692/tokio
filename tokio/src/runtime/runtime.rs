@@ -1,3 +1,4 @@
+use super::BOX_FUTURE_THRESHOLD;
 use crate::runtime::blocking::BlockingPool;
 use crate::runtime::scheduler::CurrentThread;
 use crate::runtime::{context, EnterGuard, Handle};
@@ -240,7 +241,11 @@ impl Runtime {
         F: Future + Send + 'static,
         F::Output: Send + 'static,
     {
-        self.handle.spawn(future)
+        if std::mem::size_of::<F>() > BOX_FUTURE_THRESHOLD {
+            self.handle.spawn_named(Box::pin(future), None)
+        } else {
+            self.handle.spawn_named(future, None)
+        }
     }
 
     /// Runs the provided function on an executor dedicated to blocking operations.
@@ -324,6 +329,15 @@ impl Runtime {
     /// [handle]: fn@Handle::block_on
     #[track_caller]
     pub fn block_on<F: Future>(&self, future: F) -> F::Output {
+        if std::mem::size_of::<F>() > BOX_FUTURE_THRESHOLD {
+            self.block_on_inner(Box::pin(future))
+        } else {
+            self.block_on_inner(future)
+        }
+    }
+
+    #[track_caller]
+    fn block_on_inner<F: Future>(&self, future: F) -> F::Output {
         #[cfg(all(
             tokio_unstable,
             tokio_taskdump,
@@ -455,6 +469,12 @@ impl Runtime {
     pub fn shutdown_background(self) {
         self.shutdown_timeout(Duration::from_nanos(0));
     }
+
+    /// Returns a view that lets you get information about how the runtime
+    /// is performing.
+    pub fn metrics(&self) -> crate::runtime::RuntimeMetrics {
+        self.handle.metrics()
+    }
 }
 
 #[allow(clippy::single_match)] // there are comments in the error branch, so we don't want if-let
@@ -486,13 +506,3 @@ impl Drop for Runtime {
 impl std::panic::UnwindSafe for Runtime {}
 
 impl std::panic::RefUnwindSafe for Runtime {}
-
-cfg_metrics! {
-    impl Runtime {
-        /// Returns a view that lets you get information about how the runtime
-        /// is performing.
-        pub fn metrics(&self) -> crate::runtime::RuntimeMetrics {
-            self.handle.metrics()
-        }
-    }
-}
