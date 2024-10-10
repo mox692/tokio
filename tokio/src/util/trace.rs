@@ -186,16 +186,6 @@ cfg_time! {
     }
 }
 
-cfg_not_trace! {
-    cfg_rt! {
-        #[inline]
-        pub(crate) fn task<F>(task: F, _: &'static str, _name: Option<&str>, _: u64) -> F {
-            // nop
-            task
-        }
-    }
-}
-
 /// foo
 #[cfg(all(tokio_unstable, feature = "tracing"))]
 pub fn gen_backtrace() -> String {

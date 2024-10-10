@@ -588,27 +588,6 @@ pub fn select_priv_clean_pattern(input: TokenStream) -> TokenStream {
 
 /// foo
 #[proc_macro_attribute]
-pub fn trace_on_pending(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let function_to_execute = parse_macro_input!(attr as LitStr);
-    let function_to_execute_ident = parse_str::<Ident>(&function_to_execute.value()).unwrap();
-    let function = parse_macro_input!(item as ItemFn);
-
-    let fn_name = &function.sig.ident;
-    let inputs = &function.sig.inputs;
-    let output = &function.sig.output;
-    let body = &function.block;
-
-    let gen = quote! {
-        fn #fn_name(#inputs) #output {
-            let output = (|| #body)();
-            #function_to_execute_ident(output)
-        }
-    };
-    gen.into()
-}
-
-/// foo
-#[proc_macro_attribute]
 pub fn trace_on_pending_backtrace(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let function = parse_macro_input!(item as ItemFn);
     let fn_name = &function.sig.ident;
@@ -623,17 +602,13 @@ pub fn trace_on_pending_backtrace(_attr: TokenStream, item: TokenStream) -> Toke
         #vis fn #fn_name #generics (#inputs) #output #where_clause {
             let output = (|| #body)();
             if let Poll::Pending = output {
-                #[cfg(all(tokio_unstable, feature = "tracing"))]
+                #[cfg(all(tokio_unstable, feature = "runtime-tracing"))]
                 {
                     let bt = crate::util::trace::gen_backtrace();
-                    // let bt = backtrace::Backtrace::new();
                     let bt = format!("{:?}", bt);
-
                     crate::runtime::context::with_backtrace(|cx| {
                         cx.set(Some(bt))
                     });
-
-                    // drop(_enter);
                 }
             }
             output
@@ -683,30 +658,3 @@ pub fn trace_on_pending_backtrace_pub(_attr: TokenStream, item: TokenStream) -> 
     };
     gen.into()
 }
-// #[proc_macro_attribute]
-// pub fn trace_on_pending(_attr: TokenStream, item: TokenStream) -> TokenStream {
-//     let function = parse_macro_input!(item as ItemFn);
-
-//     // 元の関数の名前、入力、出力、本体を取得します
-//     let fn_name = &function.sig.ident;
-//     let inputs = &function.sig.inputs;
-//     let output = &function.sig.output;
-//     let body = &function.block;
-//     // println!("output: {:?}", output);
-
-//     // 新しい関数を生成します
-//     let gen = quote! {
-//         fn #fn_name(#inputs) #output {
-//             let output = (|| #body)();
-//             if let std::task::Poll::Pending = &output {
-//                 // let backtrace = backtrace::Backtrace::new();
-//                 let backtrace = "";
-//                 // ここでbacktraceをロギング
-//                 println!("{:?}", backtrace);
-//             }
-//             output
-//         }
-//     };
-
-//     gen.into()
-// }
