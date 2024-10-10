@@ -82,9 +82,7 @@ use std::task::Waker;
 use std::thread;
 use std::time::Duration;
 
-cfg_unstable_metrics! {
-    mod metrics;
-}
+mod metrics;
 
 cfg_taskdump! {
     mod taskdump;
