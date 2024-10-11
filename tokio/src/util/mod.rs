@@ -76,13 +76,7 @@ cfg_rt_multi_thread! {
     pub(crate) use try_lock::TryLock;
 }
 
-#[cfg(not(all(tokio_unstable, feature = "tracing")))]
 pub(crate) mod trace;
-/// TODO: remove
-#[cfg(all(tokio_unstable, feature = "tracing"))]
-pub mod trace;
-#[cfg(all(tokio_unstable, feature = "tracing"))]
-pub use trace::gen_backtrace;
 
 pub(crate) mod error;
 

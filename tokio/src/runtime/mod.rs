@@ -319,13 +319,7 @@
 #[macro_use]
 mod tests;
 
-#[cfg(not(all(tokio_unstable, feature = "tracing")))]
 pub(crate) mod context;
-/// TODO: remove
-#[cfg(all(tokio_unstable, feature = "tracing"))]
-pub mod context;
-#[cfg(all(tokio_unstable, feature = "tracing"))]
-pub use context::with_backtrace;
 
 pub(crate) mod coop;
 

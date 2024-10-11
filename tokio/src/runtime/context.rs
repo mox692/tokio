@@ -203,7 +203,7 @@ cfg_rt! {
 
     /// foo
     #[cfg(all(tokio_unstable, feature = "runtime-tracing"))]
-    pub fn with_backtrace<R>(f: impl FnOnce(&Cell<Option<String>>) -> R) -> Option<R> {
+    pub(crate) fn with_backtrace<R>(f: impl FnOnce(&Cell<Option<String>>) -> R) -> Option<R> {
         CONTEXT.try_with(|c| f(&c.backtrace)).ok()
     }
 }

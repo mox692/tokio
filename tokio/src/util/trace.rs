@@ -187,8 +187,8 @@ cfg_time! {
 }
 
 /// foo
-#[cfg(all(tokio_unstable, feature = "tracing"))]
-pub fn gen_backtrace() -> String {
+#[cfg(all(tokio_unstable, feature = "runtime-tracing"))]
+pub(crate) fn gen_backtrace() -> String {
     use hopframe::UnwindBuilderX86_64;
 
     let mut unwinder = UnwindBuilderX86_64::new().build();
