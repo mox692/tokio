@@ -108,6 +108,7 @@ pub struct Runtime {
 
     /// Runtime span
     #[cfg(all(tokio_unstable, feature = "tracing"))]
+    #[allow(dead_code)]
     runtime_span: tracing::Span,
 }
 

@@ -400,9 +400,6 @@ impl<S: 'static> Task<S> {
 }
 
 impl<S: 'static> Notified<S> {
-    pub(crate) fn id(&self) -> Id {
-        unsafe { Header::get_id(self.0.header_ptr()) }
-    }
     fn header(&self) -> &Header {
         self.0.header()
     }

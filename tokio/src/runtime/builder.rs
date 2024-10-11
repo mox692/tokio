@@ -1233,7 +1233,7 @@ impl Builder {
             inner: scheduler::Handle::CurrentThread(handle),
         };
 
-        #[cfg(all(tokio_unstable, feature = "tracing"))]
+        #[cfg(all(tokio_unstable, feature = "runtime-tracing"))]
         {
             let span = tracing::span!(tracing::Level::TRACE, "runtime", data = "runtime");
             return Ok(Runtime::from_parts(
@@ -1244,7 +1244,7 @@ impl Builder {
             ));
         };
 
-        #[cfg(not(all(tokio_unstable, feature = "tracing")))]
+        #[cfg(not(all(tokio_unstable, feature = "runtime-tracing")))]
         Ok(Runtime::from_parts(
             Scheduler::CurrentThread(scheduler),
             handle,
@@ -1400,13 +1400,13 @@ cfg_rt_multi_thread! {
             let _enter = handle.enter();
             launch.launch();
 
-            #[cfg(all(tokio_unstable, feature = "tracing"))]
+            #[cfg(all(tokio_unstable, feature = "runtime-tracing"))]
             {
                 let span = tracing::span!(tracing::Level::TRACE, "runtime", data = "runtime");
                 return Ok(Runtime::from_parts(Scheduler::MultiThread(scheduler), handle, blocking_pool, span))
             };
 
-            #[cfg(not(all(tokio_unstable, feature = "tracing")))]
+            #[cfg(not(all(tokio_unstable, feature = "runtime-tracing")))]
             Ok(Runtime::from_parts(Scheduler::MultiThread(scheduler), handle, blocking_pool))
         }
 
@@ -1450,13 +1450,13 @@ cfg_rt_multi_thread! {
                     },
                 );
 
-                #[cfg(all(tokio_unstable, feature = "tracing"))]
+                #[cfg(all(tokio_unstable, feature = "runtime-tracing"))]
                 {
                     let span = tracing::span!(tracing::Level::TRACE, "runtime", data = "runtime");
                     return Ok(Runtime::from_parts(Scheduler::MultiThreadAlt(scheduler), handle, blocking_pool, span))
                 };
 
-                #[cfg(not(all(tokio_unstable, feature = "tracing")))]
+                #[cfg(not(all(tokio_unstable, feature = "runtime-tracing")))]
                 Ok(Runtime::from_parts(Scheduler::MultiThreadAlt(scheduler), handle, blocking_pool))
             }
         }

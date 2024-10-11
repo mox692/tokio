@@ -38,15 +38,9 @@ async fn bar() {
 #[inline(never)]
 async fn baz() {
     let mut handles = vec![];
-    for _ in 0..10000 {
-        handles.push(tokio::task::spawn(async {
-            let mut counter = 0u64;
-            loop {
-                counter = counter.wrapping_add(1);
-                if counter > 1_000 {
-                    break;
-                }
-            }
+    for i in 0..10000 {
+        handles.push(tokio::task::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_micros(i * 10)).await;
         }));
     }
 

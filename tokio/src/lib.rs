@@ -587,7 +587,6 @@ mod trace {
     }
 }
 
-// #[cfg(not(all(tokio_unstable, any(feature = "tracing", feature = "runtime-tracing"))))]
 mod util;
 
 /// Due to the `Stream` trait's inclusion in `std` landing later than Tokio's 1.0

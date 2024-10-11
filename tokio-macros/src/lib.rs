@@ -23,7 +23,7 @@ mod select;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, parse_str, Ident, ItemFn, LitStr};
+use syn::{parse_macro_input, ItemFn};
 
 /// Marks async function to be executed by the selected runtime. This macro
 /// helps set up a `Runtime` without requiring the user to use
@@ -638,7 +638,7 @@ pub fn trace_on_pending_backtrace_pub(_attr: TokenStream, item: TokenStream) -> 
                     Level::TRACE,
                     "backtrace",
                     name = "backtrace",
-                    data = "backtrace"
+                    tokio_runtime_event = "backtrace"
                 );
                 let _enter = span.enter();
                 // let bt = format!("{:?}", backtrace::Backtrace::new());
