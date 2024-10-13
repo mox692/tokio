@@ -560,6 +560,7 @@ impl Context {
 
             // There is no more **local** work to process, try to steal work
             // from other workers.
+            // MEMO: streal work + injection queueも確認する
             if let Some(task) = core.steal_work(&self.worker) {
                 // Found work, switch back to processing
                 core.stats.start_processing_scheduled_tasks();
@@ -871,7 +872,10 @@ impl Core {
     /// Note: Only if less than half the workers are searching for tasks to steal
     /// a new worker will actually try to steal. The idea is to make sure not all
     /// workers will be trying to steal at the same time.
+    ///
+    /// 優先度としては, strealの試み -> injection queue
     fn steal_work(&mut self, worker: &Worker) -> Option<Notified> {
+        // このworkerを searching にすることができなかったら, すぐreturn
         if !self.transition_to_searching(worker) {
             return None;
         }
@@ -901,6 +905,8 @@ impl Core {
         worker.handle.next_remote_task()
     }
 
+    // self.is_searching = false だったら, trueになるようにtryする.
+    // tryの詳細は `transition_worker_to_searching` の中身より.
     fn transition_to_searching(&mut self, worker: &Worker) -> bool {
         if !self.is_searching {
             self.is_searching = worker.handle.shared.idle.transition_worker_to_searching();

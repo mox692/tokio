@@ -102,6 +102,7 @@ impl Idle {
         ret
     }
 
+    // searchingのworkerが半数以上にならないのであれば true, otherwise false
     pub(super) fn transition_worker_to_searching(&self) -> bool {
         let state = State::load(&self.state, SeqCst);
         if 2 * state.num_searching() >= self.num_workers {
