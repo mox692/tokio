@@ -372,12 +372,22 @@ cfg_rt! {
 
         pub use self::builder::UnhandledPanic;
         pub use crate::util::rand::RngSeed;
+
+        mod local_runtime;
+        pub use local_runtime::{LocalRuntime, LocalOptions};
     }
 
     cfg_taskdump! {
         pub mod dump;
         pub use dump::Dump;
     }
+
+    mod task_hooks;
+    pub(crate) use task_hooks::{TaskHooks, TaskCallback};
+    #[cfg(tokio_unstable)]
+    pub use task_hooks::TaskMeta;
+    #[cfg(not(tokio_unstable))]
+    pub(crate) use task_hooks::TaskMeta;
 
     mod handle;
     pub use handle::{EnterGuard, Handle, TryCurrentError};
@@ -387,7 +397,11 @@ cfg_rt! {
 
     /// Boundary value to prevent stack overflow caused by a large-sized
     /// Future being placed in the stack.
-    pub(crate) const BOX_FUTURE_THRESHOLD: usize = 2048;
+    pub(crate) const BOX_FUTURE_THRESHOLD: usize = if cfg!(debug_assertions)  {
+        2048
+    } else {
+        16384
+    };
 
     mod thread_id;
     pub(crate) use thread_id::ThreadId;

@@ -10,7 +10,6 @@ use std::task::{Context, Poll};
 use std::{fmt, panic};
 
 use crate::runtime::Handle;
-#[cfg(tokio_unstable)]
 use crate::task::Id;
 use crate::task::{unconstrained, AbortHandle, JoinError, JoinHandle, LocalSet};
 use crate::util::IdleNotifiedSet;
@@ -281,7 +280,7 @@ impl<T: 'static> JoinSet<T> {
     /// statement and some other branch completes first, it is guaranteed that no tasks were
     /// removed from this `JoinSet`.
     pub async fn join_next(&mut self) -> Option<Result<T, JoinError>> {
-        crate::future::poll_fn(|cx| self.poll_join_next(cx)).await
+        std::future::poll_fn(|cx| self.poll_join_next(cx)).await
     }
 
     /// Waits until one of the tasks in the set completes and returns its
@@ -300,10 +299,8 @@ impl<T: 'static> JoinSet<T> {
     ///
     /// [task ID]: crate::task::Id
     /// [`JoinError::id`]: fn@crate::task::JoinError::id
-    #[cfg(tokio_unstable)]
-    #[cfg_attr(docsrs, doc(cfg(tokio_unstable)))]
     pub async fn join_next_with_id(&mut self) -> Option<Result<(Id, T), JoinError>> {
-        crate::future::poll_fn(|cx| self.poll_join_next_with_id(cx)).await
+        std::future::poll_fn(|cx| self.poll_join_next_with_id(cx)).await
     }
 
     /// Tries to join one of the tasks in the set that has completed and return its output.
@@ -338,8 +335,6 @@ impl<T: 'static> JoinSet<T> {
     ///
     /// [task ID]: crate::task::Id
     /// [`JoinError::id`]: fn@crate::task::JoinError::id
-    #[cfg(tokio_unstable)]
-    #[cfg_attr(docsrs, doc(cfg(tokio_unstable)))]
     pub fn try_join_next_with_id(&mut self) -> Option<Result<(Id, T), JoinError>> {
         // Loop over all notified `JoinHandle`s to find one that's ready, or until none are left.
         loop {
@@ -375,9 +370,9 @@ impl<T: 'static> JoinSet<T> {
     }
 
     /// Awaits the completion of all tasks in this `JoinSet`, returning a vector of their results.
-    /// The results will be stored in the order they completed not the order they were spawned.
     ///
-    /// This a convenience method that is equivalent to calling [`join_next`] in
+    /// The results will be stored in the order they completed not the order they were spawned.
+    /// This is a convenience method that is equivalent to calling [`join_next`] in
     /// a loop. If any tasks on the `JoinSet` fail with an [`JoinError`], then this call
     /// to `join_all` will panic and all remaining tasks on the `JoinSet` are
     /// cancelled. To handle errors in any other way, manually call [`join_next`]
@@ -544,8 +539,6 @@ impl<T: 'static> JoinSet<T> {
     ///
     /// [coop budget]: crate::task#cooperative-scheduling
     /// [task ID]: crate::task::Id
-    #[cfg(tokio_unstable)]
-    #[cfg_attr(docsrs, doc(cfg(tokio_unstable)))]
     pub fn poll_join_next_with_id(
         &mut self,
         cx: &mut Context<'_>,
