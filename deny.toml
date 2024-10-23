@@ -1,0 +1,20 @@
+[advisories]
+yanked = "deny"
+
+[licenses]
+allow = [
+    "Apache-2.0",
+    "MIT",
+    "Unicode-DFS-2016"
+]
+
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "deny"
+skip = [
+    # Currently, multiple versions could be fetched for the following crate
+    { name = "windows-sys", version = "0.52.0" },
+    { name = "hermit-abi", version = "0.3.9" },
+]

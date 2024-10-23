@@ -23,8 +23,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Audit Check
-        # https://github.com/rustsec/audit-check/issues/2
-        uses: rustsec/audit-check@master
+      - uses: EmbarkStudios/cargo-deny-action@v1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          command: check
