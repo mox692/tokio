@@ -18,5 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v1
+        env:
+          RUSTFLAGS: -Dwarnings
         with:
           command: check
