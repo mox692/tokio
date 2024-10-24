@@ -124,6 +124,7 @@ pub enum RuntimeFlavor {
     MultiThread,
     /// The flavor that executes tasks across multiple threads.
     #[cfg(tokio_unstable)]
+    #[cfg_attr(docsrs, doc(cfg(tokio_unstable)))]
     MultiThreadAlt,
 }
 
