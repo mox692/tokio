@@ -655,9 +655,6 @@ cfg_macros! {
     #[doc(hidden)]
     pub(crate) use tokio_macros::trace_on_pending_backtrace;
 
-    #[doc(hidden)]
-    pub use tokio_macros::trace_on_pending_backtrace_pub;
-
     /// Implementation detail of the `select!` macro. This macro is **not**
     /// intended to be used as part of the public API and is permitted to
     /// change.

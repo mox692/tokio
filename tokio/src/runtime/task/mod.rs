@@ -434,6 +434,8 @@ impl<S: Schedule> LocalNotified<S> {
         mem::forget(self);
         raw.poll();
     }
+
+    #[cfg(all(tokio_unstable, feature = "runtime-tracing"))]
     pub(crate) fn id(&self) -> Id {
         unsafe { Header::get_id(self.task.header_ptr()) }
     }

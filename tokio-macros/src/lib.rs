@@ -586,7 +586,7 @@ pub fn select_priv_clean_pattern(input: TokenStream) -> TokenStream {
     select::clean_pattern_macro(input)
 }
 
-/// foo
+/// docs
 #[proc_macro_attribute]
 pub fn trace_on_pending_backtrace(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let function = parse_macro_input!(item as ItemFn);
@@ -611,48 +611,6 @@ pub fn trace_on_pending_backtrace(_attr: TokenStream, item: TokenStream) -> Toke
                     });
                 }
             }
-            output
-        }
-    };
-    gen.into()
-}
-
-/// foo
-#[proc_macro_attribute]
-pub fn trace_on_pending_backtrace_pub(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let function = parse_macro_input!(item as ItemFn);
-    let fn_name = &function.sig.ident;
-    let vis = &function.vis;
-    let generics = &function.sig.generics;
-    let inputs = &function.sig.inputs;
-    let output = &function.sig.output;
-    let body = &function.block;
-    let where_clause = &function.sig.generics.where_clause; // where句を取得
-
-    let gen = quote! {
-        #vis fn #fn_name #generics (#inputs) #output #where_clause {
-            let output = (|| #body)();
-
-            let bt = {
-                let span = tracing::span!(
-                    Level::TRACE,
-                    "backtrace",
-                    name = "backtrace",
-                    tokio_runtime_event = "backtrace"
-                );
-                let _enter = span.enter();
-                // let bt = format!("{:?}", backtrace::Backtrace::new());
-                let bt = tokio::util::trace::gen_backtrace();
-                // let bt = "";
-                drop(_enter);
-                bt
-            };
-
-            let bt = format!("{:?}", bt);
-            tokio::runtime::context::with_backtrace(|cx| {
-                cx.set(Some(bt))
-            });
-
             output
         }
     };
