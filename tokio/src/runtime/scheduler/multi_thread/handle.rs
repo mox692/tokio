@@ -48,12 +48,32 @@ impl Handle {
         self.close();
     }
 
-    pub(super) fn bind_new_task<T>(me: &Arc<Self>, future: T, id: task::Id) -> JoinHandle<T::Output>
+    pub(crate) fn bind_new_task<T>(me: &Arc<Self>, future: T, id: task::Id) -> JoinHandle<T::Output>
     where
         T: Future + Send + 'static,
         T::Output: Send + 'static,
     {
         let (handle, notified) = me.shared.owned.bind(future, me.clone(), id);
+
+        me.task_hooks.spawn(&TaskMeta {
+            id,
+            _phantom: Default::default(),
+        });
+
+        me.schedule_option_task_without_yield(notified);
+
+        handle
+    }
+
+    pub(crate) fn bind_local_new_task<T>(
+        me: &Arc<Self>,
+        future: T,
+        id: task::Id,
+    ) -> JoinHandle<T::Output>
+    where
+        T: Future,
+    {
+        let (handle, notified) = unsafe { me.shared.owned.bind_local(future, me.clone(), id) };
 
         me.task_hooks.spawn(&TaskMeta {
             id,

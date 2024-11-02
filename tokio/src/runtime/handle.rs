@@ -13,6 +13,7 @@ use crate::runtime::{context, scheduler, RuntimeFlavor, RuntimeMetrics};
 // included in the public API.
 pub struct Handle {
     pub(crate) inner: scheduler::Handle,
+    // pub(crate) worker: Option<Arc<Worker>>,
 }
 
 use crate::runtime::task::JoinHandle;

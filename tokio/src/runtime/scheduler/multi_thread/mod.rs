@@ -20,7 +20,7 @@ pub(crate) use park::{Parker, Unparker};
 
 pub(crate) mod queue;
 
-mod worker;
+pub(crate) mod worker;
 pub(crate) use worker::{Context, Launch, Shared};
 
 cfg_taskdump! {
@@ -64,7 +64,8 @@ impl MultiThread {
     ) -> (MultiThread, Arc<Handle>, Launch) {
         let parker = Parker::new(driver);
         let (handle, launch) = worker::create(
-            size,
+            // for main thread
+            size + 1,
             parker,
             driver_handle,
             blocking_spawner,
@@ -84,7 +85,17 @@ impl MultiThread {
         F: Future,
     {
         crate::runtime::context::enter_runtime(handle, true, |blocking| {
-            blocking.block_on(future).expect("failed to park thread")
+            /**
+             * start worker
+             * convert future to Notified and do something similer bind_new_task in handle.rs
+             */
+            // start worker
+
+            // schedule
+            let future = Box::pin(future);
+            handle.schedule_local_task(future);
+            // blocking.block_on(future).expect("failed to park thread")
+            todo!()
         })
     }
 

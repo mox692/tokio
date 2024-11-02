@@ -21,6 +21,8 @@ cfg_rt_multi_thread! {
     pub(crate) mod multi_thread;
     pub(crate) use multi_thread::MultiThread;
 
+    pub(crate) use multi_thread::worker::Worker;
+
     cfg_unstable! {
         pub(crate) mod multi_thread_alt;
         pub(crate) use multi_thread_alt::MultiThread as MultiThreadAlt;
@@ -152,6 +154,21 @@ cfg_rt! {
                 #[cfg(all(tokio_unstable, feature = "rt-multi-thread"))]
                 Handle::MultiThreadAlt(h) => multi_thread_alt::Handle::spawn(h, future, id),
             }
+        }
+
+        pub(crate) fn schedule_local_task<F>(&self, future: F)
+        where
+            F: Future
+        {
+            match self {
+                Handle::CurrentThread(_) => panic!("not supported"),
+
+                #[cfg(feature = "rt-multi-thread")]
+                Handle::MultiThread(h) => multi_thread::Handle::bind_local_new_task(h, future, todo!()),
+
+                #[cfg(all(tokio_unstable, feature = "rt-multi-thread"))]
+                Handle::MultiThreadAlt(_) => panic!("not supported")
+            };
         }
 
         /// Spawn a local task

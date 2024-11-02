@@ -2,6 +2,7 @@ use crate::loom::thread::AccessError;
 use crate::runtime::coop;
 
 use std::cell::Cell;
+use std::sync::Arc;
 
 #[cfg(any(feature = "rt", feature = "macros", feature = "time"))]
 use crate::util::rand::FastRand;
@@ -30,6 +31,8 @@ cfg_rt! {
 
 cfg_rt_multi_thread! {
     mod runtime_mt;
+
+    pub(crate) use scheduler::Worker;
     pub(crate) use runtime_mt::{current_enter_context, exit_runtime};
 }
 
@@ -63,6 +66,8 @@ struct Context {
     /// Tracks the amount of "work" a task may still do before yielding back to
     /// the scheduler
     budget: Cell<coop::Budget>,
+
+    block_on_worker: Cell<Option<Arc<Worker>>>,
 
     #[cfg(all(
         tokio_unstable,
@@ -117,6 +122,8 @@ tokio_thread_local! {
                 )
             ))]
             trace: trace::Context::new(),
+
+            block_on_worker: Cell::new(None),
         }
     }
 }
@@ -178,6 +185,14 @@ cfg_rt! {
 
     pub(super) fn set_scheduler<R>(v: &scheduler::Context, f: impl FnOnce() -> R) -> R {
         CONTEXT.with(|c| c.scheduler.set(v, f))
+    }
+
+    pub(super) fn set_block_on_worker<R>(v: &scheduler::Context, worker: Arc<Worker>) {
+        CONTEXT.with(|c| c.block_on_worker.set(Some(worker)))
+    }
+
+    pub(super) fn take_block_on_worker<R>(v: &scheduler::Context) -> Option<Arc<Worker>>{
+        CONTEXT.with(|c| c.block_on_worker.take())
     }
 
     #[track_caller]
