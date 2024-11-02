@@ -952,10 +952,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install Rust ${{ env.rust_stable }}
+      - name: Install Rust 1.81
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ env.rust_stable }}
+          toolchain: 1.81
       - name: Install wasm-pack
         uses: taiki-e/install-action@wasm-pack
 
@@ -1035,7 +1035,7 @@ jobs:
         rust:
           # `check-external-types` requires a specific Rust nightly version. See
           # the README for details: https://github.com/awslabs/cargo-check-external-types
-          - nightly-2023-10-21
+          - nightly-2024-06-30
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust ${{ matrix.rust }}
@@ -1046,7 +1046,7 @@ jobs:
       - name: Install cargo-check-external-types
         uses: taiki-e/cache-cargo-install-action@v1
         with:
-          tool: cargo-check-external-types@0.1.10
+          tool: cargo-check-external-types@0.1.13
       - name: check-external-types
         run: cargo check-external-types --all-features
         working-directory: tokio
@@ -1115,7 +1115,13 @@ jobs:
           # using LC_ALL to en_US.UTF8 to be consistent in different
           # environments.
 
-          sed '1d; $d' spellcheck.dic | LC_ALL=en_US.UTF8 sort -uc
+          (
+            sed '1d; $d' spellcheck.dic | LC_ALL=en_US.UTF8 sort -uc
+          ) || {
+            echo "Dictionary is not in sorted order. Correct order is:"
+            LC_ALL=en_US.UTF8 sort -u <(sed '1d; $d' spellcheck.dic)
+            false
+          }
       - name: Run cargo-spellcheck
         run: cargo spellcheck --code 1
 
