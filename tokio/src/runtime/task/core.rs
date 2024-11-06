@@ -158,6 +158,7 @@ pub(crate) struct Header {
     /// Table of function pointers for executing actions on the task.
     pub(super) vtable: &'static Vtable,
 
+    // TODOS: ownerって何に使うの? listが関連してる?
     /// This integer contains the id of the `OwnedTasks` or `LocalOwnedTasks`
     /// that this task is stored in. If the task is not in any list, should be
     /// the id of the list that it was previously in, or `None` if it has never

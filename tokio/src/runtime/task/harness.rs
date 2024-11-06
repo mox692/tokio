@@ -12,7 +12,7 @@ use std::panic;
 use std::ptr::NonNull;
 use std::task::{Context, Poll, Waker};
 
-// Taskに対するハンドル的な
+// Taskに対するハンドル的な. Cellに対するMutable pointerを持っている
 /// Typed raw task handle.
 pub(super) struct Harness<T: Future, S: 'static> {
     cell: NonNull<Cell<T, S>>,
@@ -257,6 +257,7 @@ where
         self.complete();
     }
 
+    // MEMO: RawTaskとかをdeallocする
     pub(super) fn dealloc(self) {
         // Observe that we expect to have mutable access to these objects
         // because we are going to drop them. This only matters when running
@@ -371,8 +372,11 @@ where
         // never destroyed, so that's ok.
         let me = ManuallyDrop::new(self.get_new_task());
 
+        // linked-listから削除する
         if let Some(task) = self.core().scheduler.release(&me) {
+            // まだデストラクタは呼ばない
             mem::forget(task);
+            // TODOS: ここの値は何？
             2
         } else {
             1

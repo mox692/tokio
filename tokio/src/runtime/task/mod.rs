@@ -292,6 +292,7 @@ cfg_rt! {
     /// created. The first task reference is usually put into an `OwnedTasks`
     /// immediately. The Notified is sent to the scheduler as an ordinary
     /// notification.
+    // taskのrefを3つ作ってる
     fn new_task<T, S>(
         task: T,
         scheduler: S,
@@ -431,8 +432,11 @@ impl<S: Schedule> LocalNotified<S> {
     /// Runs the task.
     pub(crate) fn run(self) {
         let raw = self.task.raw;
+        // TODOS: rawTaskとかのdropを呼ばないようにするため？
         mem::forget(self);
         raw.poll();
+
+        // LocalNotified, RawTaskは残り続ける...
     }
 }
 

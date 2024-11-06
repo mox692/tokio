@@ -80,6 +80,7 @@ impl<S: 'static> OwnedTasks<S> {
         Self {
             list: List::new(shard_size),
             closed: AtomicBool::new(false),
+            // runtimeにつき1つ？？
             id: get_next_id(),
         }
     }
@@ -124,6 +125,7 @@ impl<S: 'static> OwnedTasks<S> {
     }
 
     /// The part of `bind` that's the same for every type of future.
+    /// MEMO: listにtaskをpushする
     unsafe fn bind_inner(&self, task: Task<S>, notified: Notified<S>) -> Option<Notified<S>>
     where
         S: Schedule,
