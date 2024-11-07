@@ -16,6 +16,8 @@ use std::io;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
+use self::task::Id;
+
 pub(crate) struct BlockingPool {
     spawner: Spawner,
     shutdown_rx: shutdown::Receiver,
@@ -73,11 +75,32 @@ impl SpawnerMetrics {
     }
 }
 
+/// fads
+/// shard1 (thread_id % 4 == 0): 4,8,12, ...
+/// shard2 (thread_id % 4 == 1): 1,5,9, ...
+struct ShardedShared(Box<[Mutex<Shared>]>);
+
+impl ShardedShared {
+    /// Locks the driver's sharded wheel structure.
+    pub(super) fn lock_sharded_shard(
+        &self,
+        shard_id: u32,
+    ) -> crate::loom::sync::MutexGuard<'_, Shared> {
+        let index = shard_id % (self.0.len() as u32);
+        // Safety: This modulo operation ensures that the index is not out of bounds.
+        unsafe { self.0.get_unchecked(index as usize) }.lock()
+    }
+}
+
 struct Inner {
     /// State shared between worker threads.
     shared: Mutex<Shared>,
 
-    /// Pool threads wait on this.
+    // added field
+    shared2: ShardedShared,
+    // worker_thread_counter: MetricAtomicUsize,
+    // shutdown: bool,
+    // shutdown_tx: Option<shutdown::Sender>,
     condvar: Condvar,
 
     /// Spawned threads use this name.
@@ -119,6 +142,20 @@ struct Shared {
     /// This is a counter used to iterate `worker_threads` in a consistent order (for loom's
     /// benefit).
     worker_thread_index: usize,
+}
+
+struct Shared2 {
+    queue: VecDeque<Task>,
+    num_notify: u32,
+    /// Prior to shutdown, we clean up `JoinHandles` by having each timed-out
+    /// thread join on the previous timed-out thread. This is not strictly
+    /// necessary but helps avoid Valgrind false positives, see
+    /// <https://github.com/tokio-rs/tokio/commit/646fbae76535e397ef79dbcaacb945d4c829f666>
+    /// for more information.
+    last_exiting_thread: Option<thread::JoinHandle<()>>,
+    /// This holds the `JoinHandles` for all running threads; on shutdown, the thread
+    /// calling shutdown handles joining on these.
+    worker_threads: HashMap<usize, thread::JoinHandle<()>>,
 }
 
 pub(crate) struct Task {
@@ -223,6 +260,7 @@ impl BlockingPool {
                         worker_threads: HashMap::new(),
                         worker_thread_index: 0,
                     }),
+                    shared2: ShardedShared(Vec::new().into_boxed_slice()),
                     condvar: Condvar::new(),
                     thread_name: builder.thread_name.clone(),
                     stack_size: builder.thread_stack_size,
@@ -381,13 +419,19 @@ impl Spawner {
 
         let (task, handle) = task::unowned(fut, BlockingSchedule::new(rt), id);
 
-        let spawned = self.spawn_task(Task::new(task, is_mandatory), rt);
+        let spawned = self.spawn_task(Task::new(task, is_mandatory), rt, id);
         (handle, spawned)
     }
 
-    fn spawn_task(&self, task: Task, rt: &Handle) -> Result<(), SpawnError> {
+    fn spawn_task(&self, task: Task, rt: &Handle, id: Id) -> Result<(), SpawnError> {
+        let sharded_guard = self
+            .inner
+            .shared2
+            .lock_sharded_shard(task.id.as_u64() as u32);
+        // todo: remove
         let mut shared = self.inner.shared.lock();
 
+        // todo: not use shared one
         if shared.shutdown {
             // Shutdown the task: it's fine to shutdown this task (even if
             // mandatory) because it was scheduled after the shutdown of the
@@ -398,6 +442,7 @@ impl Spawner {
             return Err(SpawnError::ShuttingDown);
         }
 
+        // todo: ランダムに散らばるように, shardを選択
         shared.queue.push_back(task);
         self.inner.metrics.inc_queue_depth();
 
@@ -411,12 +456,15 @@ impl Spawner {
                 let shutdown_tx = shared.shutdown_tx.clone();
 
                 if let Some(shutdown_tx) = shutdown_tx {
+                    // todo: use global counter
                     let id = shared.worker_thread_index;
 
                     match self.spawn_thread(shutdown_tx, rt, id) {
                         Ok(handle) => {
                             self.inner.metrics.inc_num_threads();
+                            // todo: use global counter
                             shared.worker_thread_index += 1;
+                            // todo: use sharded one
                             shared.worker_threads.insert(id, handle);
                         }
                         Err(ref e)
@@ -443,6 +491,7 @@ impl Spawner {
             // consistent state.
             self.inner.metrics.dec_num_idle_threads();
             shared.num_notify += 1;
+            // todo: condvarもshardする必要あるかも (shardすると, taskをspawnしたときに,起こしたthreadでtaskが実行されない可能性ある)
             self.inner.condvar.notify_one();
         }
 
@@ -500,6 +549,7 @@ impl Inner {
             f();
         }
 
+        // todo: use sharded one
         let mut shared = self.shared.lock();
         let mut join_on_thread = None;
 
