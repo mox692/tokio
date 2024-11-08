@@ -52,6 +52,7 @@ pub(crate) struct Inner<T: 'static> {
     /// Only updated by producer thread but read by many threads.
     tail: AtomicUnsignedShort,
 
+    // MEMO: パフォーマンスを重視して, Option<task::Notified<T>> よりも MaybeUninit<task::Notified<T>>?
     /// Elements
     buffer: Box<[UnsafeCell<MaybeUninit<task::Notified<T>>>; LOCAL_QUEUE_CAPACITY]>,
 }
@@ -83,7 +84,8 @@ fn make_fixed_size<T>(buffer: Box<[T]>) -> Box<[T; LOCAL_QUEUE_CAPACITY]> {
 
 /// Create a new local run-queue
 pub(crate) fn local<T: 'static>() -> (Steal<T>, Local<T>) {
-    let mut buffer = Vec::with_capacity(LOCAL_QUEUE_CAPACITY);
+    let mut buffer: Vec<UnsafeCell<MaybeUninit<task::Notified<T>>>> =
+        Vec::with_capacity(LOCAL_QUEUE_CAPACITY);
 
     for _ in 0..LOCAL_QUEUE_CAPACITY {
         buffer.push(UnsafeCell::new(MaybeUninit::uninit()));
@@ -390,6 +392,7 @@ impl<T> Steal<T> {
         self.0.is_empty()
     }
 
+    // 他のthreadが, dest(localのqueue)にtaksを移動
     /// Steals half the tasks from self and place them into `dst`.
     pub(crate) fn steal_into(
         &self,
