@@ -253,7 +253,7 @@ impl BlockingPool {
         // The function can be called multiple times. First, by explicitly
         // calling `shutdown` then by the drop handler calling `shutdown`. This
         // prevents shutting down twice.
-        if self.spawner.inner.shared.shutdown.load(Ordering::SeqCst) {
+        if self.spawner.inner.shared.shutdown.load(Ordering::Acquire) {
             return;
         }
 
@@ -261,7 +261,7 @@ impl BlockingPool {
             .inner
             .shared
             .shutdown
-            .store(true, Ordering::SeqCst);
+            .store(true, Ordering::Release);
         let mut guard = self.spawner.inner.shared.shutdown_tx.write();
         *guard = None;
         drop(guard);
@@ -408,7 +408,7 @@ impl Spawner {
     fn spawn_task(&self, task: Task, rt: &Handle) -> Result<(), SpawnError> {
         let shared = &self.inner.shared;
 
-        if shared.shutdown.load(Ordering::SeqCst) {
+        if shared.shutdown.load(Ordering::Acquire) {
             // Shutdown the task: it's fine to shutdown this task (even if
             // mandatory) because it was scheduled after the shutdown of the
             // runtime began.
@@ -432,12 +432,12 @@ impl Spawner {
                 let shutdown_tx = shutdown_tx.clone();
 
                 if let Some(shutdown_tx) = shutdown_tx {
-                    let id = shared.worker_thread_index.load(Ordering::SeqCst);
+                    let id = shared.worker_thread_index.load(Ordering::Acquire);
 
                     match self.spawn_thread(shutdown_tx, rt, id) {
                         Ok(handle) => {
                             self.inner.metrics.inc_num_threads();
-                            shared.worker_thread_index.fetch_add(1, Ordering::SeqCst);
+                            shared.worker_thread_index.fetch_add(1, Ordering::Relaxed);
                             let mut guard = shared.worker_threads.lock();
                             guard.insert(id, handle);
                             drop(guard);
@@ -465,7 +465,7 @@ impl Spawner {
             // wakeups, this counter is used to keep us in a
             // consistent state.
             self.inner.metrics.dec_num_idle_threads();
-            shared.num_notify.fetch_add(1, Ordering::SeqCst);
+            shared.num_notify.fetch_add(1, Ordering::Relaxed);
             self.inner.condvar.notify_one();
         }
 
@@ -536,23 +536,23 @@ impl Inner {
             // IDLE
             self.metrics.inc_num_idle_threads();
 
-            while !shared.shutdown.load(Ordering::SeqCst) {
+            while !shared.shutdown.load(Ordering::Acquire) {
                 let mut guard = self.mutex.lock();
                 let lock_result = self.condvar.wait_timeout(guard, self.keep_alive).unwrap();
 
                 let timeout_result = lock_result.1;
 
-                if shared.num_notify.load(Ordering::SeqCst) != 0 {
+                if shared.num_notify.load(Ordering::Acquire) != 0 {
                     // We have received a legitimate wakeup,
                     // acknowledge it by decrementing the counter
                     // and transition to the BUSY state.
-                    shared.num_notify.fetch_sub(1, Ordering::SeqCst);
+                    shared.num_notify.fetch_sub(1, Ordering::Release);
                     break;
                 }
 
                 // Even if the condvar "timed out", if the pool is entering the
                 // shutdown phase, we want to perform the cleanup logic.
-                if !shared.shutdown.load(Ordering::SeqCst) && timeout_result.timed_out() {
+                if !shared.shutdown.load(Ordering::Acquire) && timeout_result.timed_out() {
                     // We'll join the prior timed-out thread's JoinHandle after dropping the lock.
                     // This isn't done when shutting down, because the thread calling shutdown will
                     // handle joining everything.
@@ -570,7 +570,7 @@ impl Inner {
                 // Spurious wakeup detected, go back to sleep.
             }
 
-            if shared.shutdown.load(Ordering::SeqCst) {
+            if shared.shutdown.load(Ordering::Acquire) {
                 // Drain the queue
                 while let Some(task) = self.queue.pop() {
                     self.metrics.dec_queue_depth();
