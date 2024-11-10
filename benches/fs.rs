@@ -100,49 +100,49 @@ fn spawn_blocking_many(c: &mut Criterion) {
     });
 }
 
-// fn many_spawn_blocking_thread(c: &mut Criterion) {
-//     const BLOCK_COUNT: usize = 1024;
-//     const DATA_SIZE_1G: usize = 1024 * 1024 * 1024;
-//     const DATA_SIZE_1M: usize = 1024 * 1024;
-//     const DATA_SIZE_1K: usize = 1024;
-//     const TASK_COUNT_1: usize = 1;
-//     const TASK_COUNT_4: usize = 4;
-//     const TASK_COUNT_1K: usize = 1000;
-//     const TASK_COUNT_8K: usize = 8000;
-//     const TASK_COUNT_10K: usize = 1000 * 10;
-//     const TASK_COUNT_100K: usize = 1000 * 100;
-//     const TASK_COUNT_1M: usize = 1000 * 1000;
-//     const DEV_ZERO: &str = "/dev/zero";
-//     const TMP_FILE: &str = "./examples/tmp/foo";
-//     const TMP_DIR: &str = "./examples/tmp/";
-//     const DEV_NULL: &str = "/dev/null";
+fn many_spawn_blocking_thread(c: &mut Criterion) {
+    const BLOCK_COUNT: usize = 1024;
+    const DATA_SIZE_1G: usize = 1024 * 1024 * 1024;
+    const DATA_SIZE_1M: usize = 1024 * 1024;
+    const DATA_SIZE_1K: usize = 1024;
+    const TASK_COUNT_1: usize = 1;
+    const TASK_COUNT_4: usize = 4;
+    const TASK_COUNT_1K: usize = 1000;
+    const TASK_COUNT_8K: usize = 8000;
+    const TASK_COUNT_10K: usize = 1000 * 10;
+    const TASK_COUNT_100K: usize = 1000 * 100;
+    const TASK_COUNT_1M: usize = 1000 * 1000;
+    const DEV_ZERO: &str = "/dev/zero";
+    const TMP_FILE: &str = "./examples/tmp/foo";
+    const TMP_DIR: &str = "./examples/tmp/";
+    const DEV_NULL: &str = "/dev/null";
 
-//     let rt = rt();
+    let rt = rt();
 
-//     c.bench_function("many_spawn_blocking_thread", |b| {
-//         b.iter(|| {
-//             rt.block_on(async {
-//                 let mut set = JoinSet::new();
-//                 let mut files = vec![];
+    c.bench_function("many_spawn_blocking_thread", |b| {
+        b.iter(|| {
+            rt.block_on(async {
+                let mut set = JoinSet::new();
+                let mut files = vec![];
 
-//                 for _ in 0..TASK_COUNT_1K {
-//                     let file = File::open(DEV_ZERO).await.unwrap();
-//                     files.push(file);
-//                 }
-//                 for mut file in files.into_iter() {
-//                     set.spawn(async move {
-//                         let mut buf = vec![77; DATA_SIZE_1M];
-//                         file.read_exact(&mut buf[..]).await.unwrap()
-//                     });
-//                 }
+                for _ in 0..TASK_COUNT_1K {
+                    let file = File::open(DEV_ZERO).await.unwrap();
+                    files.push(file);
+                }
+                for mut file in files.into_iter() {
+                    set.spawn(async move {
+                        let mut buf = vec![77; DATA_SIZE_1M];
+                        file.read_exact(&mut buf[..]).await.unwrap()
+                    });
+                }
 
-//                 while let Some(res) = set.join_next().await {
-//                     res.unwrap();
-//                 }
-//             })
-//         });
-//     });
-// }
+                while let Some(res) = set.join_next().await {
+                    res.unwrap();
+                }
+            })
+        });
+    });
+}
 
 fn async_read_std_file(c: &mut Criterion) {
     let rt = rt();
@@ -185,7 +185,7 @@ criterion_group!(
     file,
     async_read_std_file,
     async_read_buf,
-    // many_spawn_blocking_thread,
+    many_spawn_blocking_thread,
     async_read_codec,
     sync_read,
     spawn_blocking_many

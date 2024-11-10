@@ -104,7 +104,6 @@ struct Inner {
 }
 
 struct Shared {
-    // Blockign poolのtask queue
     queue: VecDeque<Task>,
     num_notify: u32,
     shutdown: bool,
@@ -231,7 +230,6 @@ cfg_fs! {
 impl BlockingPool {
     pub(crate) fn new(builder: &Builder, thread_cap: usize) -> BlockingPool {
         let (shutdown_tx, shutdown_rx) = shutdown::channel();
-        // let shutdown_tx2 = shutdown_tx.clone();
         let keep_alive = builder.keep_alive.unwrap_or(KEEP_ALIVE);
 
         BlockingPool {
@@ -287,7 +285,6 @@ impl BlockingPool {
 
         shared.shutdown.store(true, Ordering::SeqCst);
         *shared.shutdown_tx.lock() = None;
-        // MEMO: 全てのsleepしていたworker threadを起こす
         self.spawner.inner.condvar.notify_all();
 
         // TODO:
@@ -437,10 +434,7 @@ impl Spawner {
             return Err(SpawnError::ShuttingDown);
         }
 
-        // blocking poolのqueueにtaskを追加
-        println!("gonna push a task!");
         shared.queue.lock().push_back(task);
-        println!("push a task done!");
         self.inner.metrics.inc_queue_depth();
 
         // まだスレッドを起動する余地があれば起動(?)
@@ -562,7 +556,7 @@ impl Inner {
                 let mut g = shared.queue.lock();
                 if let Some(task) = g.pop_front() {
                     drop(g);
-                    println!("get a task to run!!");
+                    // println!("get a task to run!!");
                     // MEMO: taskが見つかったらrun
                     self.metrics.dec_queue_depth();
                     // drop(shared);
