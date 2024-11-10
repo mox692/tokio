@@ -2,6 +2,7 @@
 
 use crossbeam::queue::SegQueue;
 
+use crate::loom::sync::atomic::AtomicUsize;
 use crate::loom::sync::{Arc, Condvar, Mutex};
 use crate::loom::thread;
 use crate::runtime::blocking::schedule::BlockingSchedule;
@@ -15,7 +16,7 @@ use crate::util::trace::{blocking_task, SpawnMeta};
 use std::collections::HashMap;
 use std::fmt;
 use std::io;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::Duration;
 
 pub(crate) struct BlockingPool {
@@ -107,8 +108,8 @@ struct Inner {
 }
 
 struct Shared {
-    num_notify: u32,
-    shutdown: bool,
+    num_notify: AtomicU32,
+    shutdown: AtomicBool,
     shutdown_tx: Option<shutdown::Sender>,
     /// Prior to shutdown, we clean up `JoinHandles` by having each timed-out
     /// thread join on the previous timed-out thread. This is not strictly
@@ -121,7 +122,7 @@ struct Shared {
     worker_threads: HashMap<usize, thread::JoinHandle<()>>,
     /// This is a counter used to iterate `worker_threads` in a consistent order (for loom's
     /// benefit).
-    worker_thread_index: usize,
+    worker_thread_index: AtomicUsize,
 }
 
 pub(crate) struct Task {
@@ -218,12 +219,12 @@ impl BlockingPool {
             spawner: Spawner {
                 inner: Arc::new(Inner {
                     shared: Mutex::new(Shared {
-                        num_notify: 0,
-                        shutdown: false,
+                        num_notify: AtomicU32::new(0),
+                        shutdown: AtomicBool::new(false),
                         shutdown_tx: Some(shutdown_tx),
                         last_exiting_thread: None,
                         worker_threads: HashMap::new(),
-                        worker_thread_index: 0,
+                        worker_thread_index: AtomicUsize::new(0),
                     }),
                     queue: SegQueue::new(),
                     condvar: Condvar::new(),
@@ -250,11 +251,11 @@ impl BlockingPool {
         // The function can be called multiple times. First, by explicitly
         // calling `shutdown` then by the drop handler calling `shutdown`. This
         // prevents shutting down twice.
-        if shared.shutdown {
+        if shared.shutdown.load(Ordering::SeqCst) {
             return;
         }
 
-        shared.shutdown = true;
+        shared.shutdown.store(true, Ordering::SeqCst);
         shared.shutdown_tx = None;
         self.spawner.inner.condvar.notify_all();
 
@@ -391,7 +392,7 @@ impl Spawner {
     fn spawn_task(&self, task: Task, rt: &Handle) -> Result<(), SpawnError> {
         let mut shared = self.inner.shared.lock();
 
-        if shared.shutdown {
+        if shared.shutdown.load(Ordering::SeqCst) {
             // Shutdown the task: it's fine to shutdown this task (even if
             // mandatory) because it was scheduled after the shutdown of the
             // runtime began.
@@ -414,12 +415,12 @@ impl Spawner {
                 let shutdown_tx = shared.shutdown_tx.clone();
 
                 if let Some(shutdown_tx) = shutdown_tx {
-                    let id = shared.worker_thread_index;
+                    let id = shared.worker_thread_index.load(Ordering::SeqCst);
 
                     match self.spawn_thread(shutdown_tx, rt, id) {
                         Ok(handle) => {
                             self.inner.metrics.inc_num_threads();
-                            shared.worker_thread_index += 1;
+                            shared.worker_thread_index.fetch_add(1, Ordering::SeqCst);
                             shared.worker_threads.insert(id, handle);
                         }
                         Err(ref e)
@@ -445,7 +446,7 @@ impl Spawner {
             // wakeups, this counter is used to keep us in a
             // consistent state.
             self.inner.metrics.dec_num_idle_threads();
-            shared.num_notify += 1;
+            shared.num_notify.fetch_add(1, Ordering::SeqCst);
             self.inner.condvar.notify_one();
         }
 
@@ -519,23 +520,23 @@ impl Inner {
             // IDLE
             self.metrics.inc_num_idle_threads();
 
-            while !shared.shutdown {
+            while !shared.shutdown.load(Ordering::SeqCst) {
                 let lock_result = self.condvar.wait_timeout(shared, self.keep_alive).unwrap();
 
                 shared = lock_result.0;
                 let timeout_result = lock_result.1;
 
-                if shared.num_notify != 0 {
+                if shared.num_notify.load(Ordering::SeqCst) != 0 {
                     // We have received a legitimate wakeup,
                     // acknowledge it by decrementing the counter
                     // and transition to the BUSY state.
-                    shared.num_notify -= 1;
+                    shared.num_notify.fetch_sub(1, Ordering::SeqCst);
                     break;
                 }
 
                 // Even if the condvar "timed out", if the pool is entering the
                 // shutdown phase, we want to perform the cleanup logic.
-                if !shared.shutdown && timeout_result.timed_out() {
+                if !shared.shutdown.load(Ordering::SeqCst) && timeout_result.timed_out() {
                     // We'll join the prior timed-out thread's JoinHandle after dropping the lock.
                     // This isn't done when shutting down, because the thread calling shutdown will
                     // handle joining everything.
@@ -548,7 +549,7 @@ impl Inner {
                 // Spurious wakeup detected, go back to sleep.
             }
 
-            if shared.shutdown {
+            if shared.shutdown.load(Ordering::SeqCst) {
                 // Drain the queue
                 while let Some(task) = self.queue.pop() {
                     self.metrics.dec_queue_depth();
@@ -581,7 +582,7 @@ impl Inner {
             "num_idle_threads underflowed on thread exit"
         );
 
-        if shared.shutdown && self.metrics.num_threads() == 0 {
+        if shared.shutdown.load(Ordering::SeqCst) && self.metrics.num_threads() == 0 {
             self.condvar.notify_one();
         }
 
