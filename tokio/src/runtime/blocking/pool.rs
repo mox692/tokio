@@ -1,5 +1,7 @@
 //! Thread pool for blocking operations
 
+use crossbeam::queue::SegQueue;
+
 use crate::loom::sync::{Arc, Condvar, Mutex};
 use crate::loom::thread;
 use crate::runtime::blocking::schedule::BlockingSchedule;
@@ -10,7 +12,7 @@ use crate::runtime::{Builder, Callback, Handle, BOX_FUTURE_THRESHOLD};
 use crate::util::metric_atomics::MetricAtomicUsize;
 use crate::util::trace::{blocking_task, SpawnMeta};
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::fmt;
 use std::io;
 use std::sync::atomic::Ordering;
@@ -77,6 +79,8 @@ struct Inner {
     /// State shared between worker threads.
     shared: Mutex<Shared>,
 
+    queue: SegQueue<Task>,
+
     /// Pool threads wait on this.
     condvar: Condvar,
 
@@ -103,7 +107,6 @@ struct Inner {
 }
 
 struct Shared {
-    queue: VecDeque<Task>,
     num_notify: u32,
     shutdown: bool,
     shutdown_tx: Option<shutdown::Sender>,
@@ -215,7 +218,6 @@ impl BlockingPool {
             spawner: Spawner {
                 inner: Arc::new(Inner {
                     shared: Mutex::new(Shared {
-                        queue: VecDeque::new(),
                         num_notify: 0,
                         shutdown: false,
                         shutdown_tx: Some(shutdown_tx),
@@ -223,6 +225,7 @@ impl BlockingPool {
                         worker_threads: HashMap::new(),
                         worker_thread_index: 0,
                     }),
+                    queue: SegQueue::new(),
                     condvar: Condvar::new(),
                     thread_name: builder.thread_name.clone(),
                     stack_size: builder.thread_stack_size,
@@ -398,7 +401,7 @@ impl Spawner {
             return Err(SpawnError::ShuttingDown);
         }
 
-        shared.queue.push_back(task);
+        self.inner.queue.push(task);
         self.inner.metrics.inc_queue_depth();
 
         if self.inner.metrics.num_idle_threads() == 0 {
@@ -505,7 +508,7 @@ impl Inner {
 
         'main: loop {
             // BUSY
-            while let Some(task) = shared.queue.pop_front() {
+            while let Some(task) = self.queue.pop() {
                 self.metrics.dec_queue_depth();
                 drop(shared);
                 task.run();
@@ -547,7 +550,7 @@ impl Inner {
 
             if shared.shutdown {
                 // Drain the queue
-                while let Some(task) = shared.queue.pop_front() {
+                while let Some(task) = self.queue.pop() {
                     self.metrics.dec_queue_depth();
                     drop(shared);
 
