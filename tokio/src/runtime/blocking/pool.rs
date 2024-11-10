@@ -119,7 +119,7 @@ struct Shared {
     last_exiting_thread: Mutex<Option<thread::JoinHandle<()>>>,
     /// This holds the `JoinHandles` for all running threads; on shutdown, the thread
     /// calling shutdown handles joining on these.
-    worker_threads: HashMap<usize, thread::JoinHandle<()>>,
+    worker_threads: Mutex<HashMap<usize, thread::JoinHandle<()>>>,
     /// This is a counter used to iterate `worker_threads` in a consistent order (for loom's
     /// benefit).
     worker_thread_index: AtomicUsize,
@@ -223,7 +223,7 @@ impl BlockingPool {
                         shutdown: AtomicBool::new(false),
                         shutdown_tx: Some(shutdown_tx),
                         last_exiting_thread: Mutex::new(None),
-                        worker_threads: HashMap::new(),
+                        worker_threads: Mutex::new(HashMap::new()),
                         worker_thread_index: AtomicUsize::new(0),
                     }),
                     queue: SegQueue::new(),
@@ -263,7 +263,8 @@ impl BlockingPool {
         let mut last_exiting_thread = guard.take();
         let last_exited_thread = std::mem::take(&mut last_exiting_thread);
         drop(guard);
-        let workers = std::mem::take(&mut shared.worker_threads);
+        let workers: Vec<(usize, thread::JoinHandle<()>)> =
+            shared.worker_threads.lock().drain().collect();
 
         drop(shared);
 
@@ -424,7 +425,9 @@ impl Spawner {
                         Ok(handle) => {
                             self.inner.metrics.inc_num_threads();
                             shared.worker_thread_index.fetch_add(1, Ordering::SeqCst);
-                            shared.worker_threads.insert(id, handle);
+                            let mut guard = shared.worker_threads.lock();
+                            guard.insert(id, handle);
+                            drop(guard);
                         }
                         Err(ref e)
                             if is_temporary_os_thread_error(e)
@@ -543,7 +546,9 @@ impl Inner {
                     // We'll join the prior timed-out thread's JoinHandle after dropping the lock.
                     // This isn't done when shutting down, because the thread calling shutdown will
                     // handle joining everything.
-                    let my_handle = shared.worker_threads.remove(&worker_thread_id);
+                    let mut guard = shared.worker_threads.lock();
+                    let my_handle = guard.remove(&worker_thread_id);
+                    drop(guard);
                     let mut guard = shared.last_exiting_thread.lock();
                     let mut last_exiting_thread = guard.take();
                     join_on_thread = std::mem::replace(&mut last_exiting_thread, my_handle);
