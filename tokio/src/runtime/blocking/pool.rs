@@ -116,7 +116,7 @@ struct Shared {
     /// necessary but helps avoid Valgrind false positives, see
     /// <https://github.com/tokio-rs/tokio/commit/646fbae76535e397ef79dbcaacb945d4c829f666>
     /// for more information.
-    last_exiting_thread: Option<thread::JoinHandle<()>>,
+    last_exiting_thread: Mutex<Option<thread::JoinHandle<()>>>,
     /// This holds the `JoinHandles` for all running threads; on shutdown, the thread
     /// calling shutdown handles joining on these.
     worker_threads: HashMap<usize, thread::JoinHandle<()>>,
@@ -222,7 +222,7 @@ impl BlockingPool {
                         num_notify: AtomicU32::new(0),
                         shutdown: AtomicBool::new(false),
                         shutdown_tx: Some(shutdown_tx),
-                        last_exiting_thread: None,
+                        last_exiting_thread: Mutex::new(None),
                         worker_threads: HashMap::new(),
                         worker_thread_index: AtomicUsize::new(0),
                     }),
@@ -259,7 +259,10 @@ impl BlockingPool {
         shared.shutdown_tx = None;
         self.spawner.inner.condvar.notify_all();
 
-        let last_exited_thread = std::mem::take(&mut shared.last_exiting_thread);
+        let mut guard = shared.last_exiting_thread.lock();
+        let mut last_exiting_thread = guard.take();
+        let last_exited_thread = std::mem::take(&mut last_exiting_thread);
+        drop(guard);
         let workers = std::mem::take(&mut shared.worker_threads);
 
         drop(shared);
@@ -541,7 +544,10 @@ impl Inner {
                     // This isn't done when shutting down, because the thread calling shutdown will
                     // handle joining everything.
                     let my_handle = shared.worker_threads.remove(&worker_thread_id);
-                    join_on_thread = std::mem::replace(&mut shared.last_exiting_thread, my_handle);
+                    let mut guard = shared.last_exiting_thread.lock();
+                    let mut last_exiting_thread = guard.take();
+                    join_on_thread = std::mem::replace(&mut last_exiting_thread, my_handle);
+                    drop(guard);
 
                     break 'main;
                 }
