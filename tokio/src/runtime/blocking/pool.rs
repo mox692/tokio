@@ -6,7 +6,9 @@ use crate::runtime::blocking::schedule::BlockingSchedule;
 use crate::runtime::blocking::{shutdown, BlockingTask};
 use crate::runtime::builder::ThreadNameFn;
 use crate::runtime::task::{self, JoinHandle};
-use crate::runtime::{Builder, Callback, Handle};
+use crate::runtime::{Builder, Callback, Handle, BOX_FUTURE_THRESHOLD};
+use crate::util::metric_atomics::MetricAtomicUsize;
+use crate::util::trace::{blocking_task, SpawnMeta};
 
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
@@ -26,9 +28,9 @@ pub(crate) struct Spawner {
 
 #[derive(Default)]
 pub(crate) struct SpawnerMetrics {
-    num_threads: AtomicUsize,
-    num_idle_threads: AtomicUsize,
-    queue_depth: AtomicUsize,
+    num_threads: MetricAtomicUsize,
+    num_idle_threads: MetricAtomicUsize,
+    queue_depth: MetricAtomicUsize,
 }
 
 impl SpawnerMetrics {
@@ -40,34 +42,34 @@ impl SpawnerMetrics {
         self.num_idle_threads.load(Ordering::Relaxed)
     }
 
-    cfg_metrics! {
+    cfg_unstable_metrics! {
         fn queue_depth(&self) -> usize {
             self.queue_depth.load(Ordering::Relaxed)
         }
     }
 
     fn inc_num_threads(&self) {
-        self.num_threads.fetch_add(1, Ordering::Relaxed);
+        self.num_threads.increment();
     }
 
     fn dec_num_threads(&self) {
-        self.num_threads.fetch_sub(1, Ordering::Relaxed);
+        self.num_threads.decrement();
     }
 
     fn inc_num_idle_threads(&self) {
-        self.num_idle_threads.fetch_add(1, Ordering::Relaxed);
+        self.num_idle_threads.increment();
     }
 
     fn dec_num_idle_threads(&self) -> usize {
-        self.num_idle_threads.fetch_sub(1, Ordering::Relaxed)
+        self.num_idle_threads.decrement()
     }
 
     fn inc_queue_depth(&self) {
-        self.queue_depth.fetch_add(1, Ordering::Relaxed);
+        self.queue_depth.increment();
     }
 
     fn dec_queue_depth(&self) {
-        self.queue_depth.fetch_sub(1, Ordering::Relaxed);
+        self.queue_depth.decrement();
     }
 }
 
@@ -300,7 +302,6 @@ impl BlockingPool {
 
             // Loom requires that execution be deterministic, so sort by thread ID before joining.
             // (HashMaps use a randomly-seeded hash function, so the order is nondeterministic)
-
             let mut workers = shared.worker_threads.lock();
             let mut workers: Vec<(usize, thread::JoinHandle<()>)> =
                 workers.drain().into_iter().collect();
@@ -334,12 +335,22 @@ impl Spawner {
         F: FnOnce() -> R + Send + 'static,
         R: Send + 'static,
     {
-        let (join_handle, spawn_result) =
-            if cfg!(debug_assertions) && std::mem::size_of::<F>() > 2048 {
-                self.spawn_blocking_inner(Box::new(func), Mandatory::NonMandatory, None, rt)
-            } else {
-                self.spawn_blocking_inner(func, Mandatory::NonMandatory, None, rt)
-            };
+        let fn_size = std::mem::size_of::<F>();
+        let (join_handle, spawn_result) = if fn_size > BOX_FUTURE_THRESHOLD {
+            self.spawn_blocking_inner(
+                Box::new(func),
+                Mandatory::NonMandatory,
+                SpawnMeta::new_unnamed(fn_size),
+                rt,
+            )
+        } else {
+            self.spawn_blocking_inner(
+                func,
+                Mandatory::NonMandatory,
+                SpawnMeta::new_unnamed(fn_size),
+                rt,
+            )
+        };
 
         match spawn_result {
             Ok(()) => join_handle,
@@ -362,18 +373,19 @@ impl Spawner {
             F: FnOnce() -> R + Send + 'static,
             R: Send + 'static,
         {
-            let (join_handle, spawn_result) = if cfg!(debug_assertions) && std::mem::size_of::<F>() > 2048 {
+            let fn_size = std::mem::size_of::<F>();
+            let (join_handle, spawn_result) = if fn_size > BOX_FUTURE_THRESHOLD {
                 self.spawn_blocking_inner(
                     Box::new(func),
                     Mandatory::Mandatory,
-                    None,
+                    SpawnMeta::new_unnamed(fn_size),
                     rt,
                 )
             } else {
                 self.spawn_blocking_inner(
                     func,
                     Mandatory::Mandatory,
-                    None,
+                    SpawnMeta::new_unnamed(fn_size),
                     rt,
                 )
             };
@@ -391,36 +403,16 @@ impl Spawner {
         &self,
         func: F,
         is_mandatory: Mandatory,
-        name: Option<&str>,
+        spawn_meta: SpawnMeta<'_>,
         rt: &Handle,
     ) -> (JoinHandle<R>, Result<(), SpawnError>)
     where
         F: FnOnce() -> R + Send + 'static,
         R: Send + 'static,
     {
-        // TODO: blockingTaskとはなんぞ？
-        let fut = BlockingTask::new(func);
         let id = task::Id::next();
-        #[cfg(all(tokio_unstable, feature = "tracing"))]
-        let fut = {
-            use tracing::Instrument;
-            let location = std::panic::Location::caller();
-            let span = tracing::trace_span!(
-                target: "tokio::task::blocking",
-                "runtime.spawn",
-                kind = %"blocking",
-                task.name = %name.unwrap_or_default(),
-                task.id = id.as_u64(),
-                "fn" = %std::any::type_name::<F>(),
-                loc.file = location.file(),
-                loc.line = location.line(),
-                loc.col = location.column(),
-            );
-            fut.instrument(span)
-        };
-
-        #[cfg(not(all(tokio_unstable, feature = "tracing")))]
-        let _ = name;
+        let fut =
+            blocking_task::<F, BlockingTask<F>>(BlockingTask::new(func), spawn_meta, id.as_u64());
 
         let (task, handle) = task::unowned(fut, BlockingSchedule::new(rt), id);
 
@@ -510,7 +502,7 @@ impl Spawner {
         shutdown_tx: shutdown::Sender,
         rt: &Handle,
         id: usize,
-    ) -> std::io::Result<thread::JoinHandle<()>> {
+    ) -> io::Result<thread::JoinHandle<()>> {
         let mut builder = thread::Builder::new().name((self.inner.thread_name)());
 
         if let Some(stack_size) = self.inner.stack_size {
@@ -531,7 +523,7 @@ impl Spawner {
     }
 }
 
-cfg_metrics! {
+cfg_unstable_metrics! {
     impl Spawner {
         pub(crate) fn num_threads(&self) -> usize {
             self.inner.metrics.num_threads()
@@ -549,8 +541,8 @@ cfg_metrics! {
 
 // Tells whether the error when spawning a thread is temporary.
 #[inline]
-fn is_temporary_os_thread_error(error: &std::io::Error) -> bool {
-    matches!(error.kind(), std::io::ErrorKind::WouldBlock)
+fn is_temporary_os_thread_error(error: &io::Error) -> bool {
+    matches!(error.kind(), io::ErrorKind::WouldBlock)
 }
 
 impl Inner {

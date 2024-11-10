@@ -187,8 +187,7 @@ impl Default for ScheduledIo {
 
 impl ScheduledIo {
     pub(crate) fn token(&self) -> mio::Token {
-        // use `expose_addr` when stable
-        mio::Token(self as *const _ as usize)
+        mio::Token(super::EXPOSE_IO.expose_provenance(self))
     }
 
     /// Invoked when the IO driver is shut down; forces this `ScheduledIo` into a
@@ -346,7 +345,7 @@ impl ScheduledIo {
             match slot {
                 Some(existing) => {
                     if !existing.will_wake(cx.waker()) {
-                        *existing = cx.waker().clone();
+                        existing.clone_from(cx.waker());
                     }
                 }
                 None => {

@@ -238,7 +238,7 @@ impl<T> Receiver<T> {
     /// }
     /// ```
     pub async fn recv(&mut self) -> Option<T> {
-        use crate::future::poll_fn;
+        use std::future::poll_fn;
         poll_fn(|cx| self.chan.recv(cx)).await
     }
 
@@ -314,7 +314,7 @@ impl<T> Receiver<T> {
     /// }
     /// ```
     pub async fn recv_many(&mut self, buffer: &mut Vec<T>, limit: usize) -> usize {
-        use crate::future::poll_fn;
+        use std::future::poll_fn;
         poll_fn(|cx| self.chan.recv_many(cx, buffer, limit)).await
     }
 
@@ -419,6 +419,16 @@ impl<T> Receiver<T> {
         crate::future::block_on(self.recv())
     }
 
+    /// Variant of [`Self::recv_many`] for blocking contexts.
+    ///
+    /// The same conditions as in [`Self::blocking_recv`] apply.
+    #[track_caller]
+    #[cfg(feature = "sync")]
+    #[cfg_attr(docsrs, doc(alias = "recv_many_blocking"))]
+    pub fn blocking_recv_many(&mut self, buffer: &mut Vec<T>, limit: usize) -> usize {
+        crate::future::block_on(self.recv_many(buffer, limit))
+    }
+
     /// Closes the receiving half of a channel without dropping it.
     ///
     /// This prevents any further messages from being sent on the channel while
@@ -481,7 +491,7 @@ impl<T> Receiver<T> {
     ///     assert!(!rx.is_closed());
     ///
     ///     rx.close();
-    ///     
+    ///
     ///     assert!(rx.is_closed());
     /// }
     /// ```
@@ -528,6 +538,86 @@ impl<T> Receiver<T> {
     /// ```
     pub fn len(&self) -> usize {
         self.chan.len()
+    }
+
+    /// Returns the current capacity of the channel.
+    ///
+    /// The capacity goes down when the sender sends a value by calling [`Sender::send`] or by reserving
+    /// capacity with [`Sender::reserve`]. The capacity goes up when values are received.
+    /// This is distinct from [`max_capacity`], which always returns buffer capacity initially
+    /// specified when calling [`channel`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tokio::sync::mpsc;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let (tx, mut rx) = mpsc::channel::<()>(5);
+    ///
+    ///     assert_eq!(rx.capacity(), 5);
+    ///
+    ///     // Making a reservation drops the capacity by one.
+    ///     let permit = tx.reserve().await.unwrap();
+    ///     assert_eq!(rx.capacity(), 4);
+    ///     assert_eq!(rx.len(), 0);
+    ///
+    ///     // Sending and receiving a value increases the capacity by one.
+    ///     permit.send(());
+    ///     assert_eq!(rx.len(), 1);
+    ///     rx.recv().await.unwrap();
+    ///     assert_eq!(rx.capacity(), 5);
+    ///
+    ///     // Directly sending a message drops the capacity by one.
+    ///     tx.send(()).await.unwrap();
+    ///     assert_eq!(rx.capacity(), 4);
+    ///     assert_eq!(rx.len(), 1);
+    ///
+    ///     // Receiving the message increases the capacity by one.
+    ///     rx.recv().await.unwrap();
+    ///     assert_eq!(rx.capacity(), 5);
+    ///     assert_eq!(rx.len(), 0);
+    /// }
+    /// ```
+    /// [`capacity`]: Receiver::capacity
+    /// [`max_capacity`]: Receiver::max_capacity
+    pub fn capacity(&self) -> usize {
+        self.chan.semaphore().semaphore.available_permits()
+    }
+
+    /// Returns the maximum buffer capacity of the channel.
+    ///
+    /// The maximum capacity is the buffer capacity initially specified when calling
+    /// [`channel`]. This is distinct from [`capacity`], which returns the *current*
+    /// available buffer capacity: as messages are sent and received, the value
+    /// returned by [`capacity`] will go up or down, whereas the value
+    /// returned by [`max_capacity`] will remain constant.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tokio::sync::mpsc;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let (tx, rx) = mpsc::channel::<()>(5);
+    ///
+    ///     // both max capacity and capacity are the same at first
+    ///     assert_eq!(rx.max_capacity(), 5);
+    ///     assert_eq!(rx.capacity(), 5);
+    ///
+    ///     // Making a reservation doesn't change the max capacity.
+    ///     let permit = tx.reserve().await.unwrap();
+    ///     assert_eq!(rx.max_capacity(), 5);
+    ///     // but drops the capacity by one
+    ///     assert_eq!(rx.capacity(), 4);
+    /// }
+    /// ```
+    /// [`capacity`]: Receiver::capacity
+    /// [`max_capacity`]: Receiver::max_capacity
+    pub fn max_capacity(&self) -> usize {
+        self.chan.semaphore().bound
     }
 
     /// Polls to receive the next message on this channel.
@@ -630,6 +720,16 @@ impl<T> Receiver<T> {
         limit: usize,
     ) -> Poll<usize> {
         self.chan.recv_many(cx, buffer, limit)
+    }
+
+    /// Returns the number of [`Sender`] handles.
+    pub fn sender_strong_count(&self) -> usize {
+        self.chan.sender_strong_count()
+    }
+
+    /// Returns the number of [`WeakSender`] handles.
+    pub fn sender_weak_count(&self) -> usize {
+        self.chan.sender_weak_count()
     }
 }
 
@@ -1059,7 +1159,7 @@ impl<T> Sender<T> {
     ///
     ///     // The iterator should now be exhausted
     ///     assert!(permit.next().is_none());
-    ///     
+    ///
     ///     // The value sent on the permit is received
     ///     assert_eq!(rx.recv().await.unwrap(), 456);
     ///     assert_eq!(rx.recv().await.unwrap(), 457);
@@ -1274,7 +1374,7 @@ impl<T> Sender<T> {
     ///     // The value sent on the permit is received
     ///     assert_eq!(rx.recv().await.unwrap(), 456);
     ///     assert_eq!(rx.recv().await.unwrap(), 457);
-    ///     
+    ///
     ///     // Trying to call try_reserve_many with 0 will return an empty iterator
     ///     let mut permit = tx.try_reserve_many(0).unwrap();
     ///     assert!(permit.next().is_none());
@@ -1447,7 +1547,7 @@ impl<T> Sender<T> {
     /// [`channel`]. This is distinct from [`capacity`], which returns the *current*
     /// available buffer capacity: as messages are sent and received, the
     /// value returned by [`capacity`] will go up or down, whereas the value
-    /// returned by `max_capacity` will remain constant.
+    /// returned by [`max_capacity`] will remain constant.
     ///
     /// # Examples
     ///

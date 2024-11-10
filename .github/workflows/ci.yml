@@ -13,9 +13,12 @@ concurrency:
 env:
   RUSTFLAGS: -Dwarnings
   RUST_BACKTRACE: 1
+  RUSTUP_WINDOWS_PATH_ADD_BIN: 1
   # Change to specific Rust release to pin
   rust_stable: stable
-  rust_nightly: nightly-2023-10-21
+  rust_nightly: nightly-2024-05-05
+  # Pin a specific miri version
+  rust_miri_nightly: nightly-2024-09-19
   rust_clippy: '1.77'
   # When updating this, also update:
   # - README.md
@@ -25,7 +28,7 @@ env:
   # - tokio-util/Cargo.toml
   # - tokio-test/Cargo.toml
   # - tokio-stream/Cargo.toml
-  rust_min: '1.63'
+  rust_min: '1.70'
 
 defaults:
   run:
@@ -64,10 +67,11 @@ jobs:
       - loom-compile
       - check-readme
       - test-hyper
+      - test-quinn
       - x86_64-fortanix-unknown-sgx
       - check-redox
       - wasm32-unknown-unknown
-      - wasm32-wasi
+      - wasm32-wasip1
       - check-external-types
       - check-fuzzing
       - check-unstable-mt-counters
@@ -411,17 +415,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install Rust ${{ env.rust_nightly }}
+      - name: Install Rust ${{ env.rust_miri_nightly }}
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ env.rust_nightly }}
+          toolchain: ${{ env.rust_miri_nightly }}
           components: miri
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
       - uses: Swatinem/rust-cache@v2
       - name: miri
-        # Many of tests in tokio/tests and doctests use #[tokio::test] or
-        # #[tokio::main] that calls epoll_create1 that Miri does not support.
         run: |
-          cargo miri test --features full --lib --no-fail-fast
+          cargo miri nextest run --features full --lib --tests --no-fail-fast
         working-directory: tokio
         env:
           MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-strict-provenance -Zmiri-retag-fields
@@ -858,6 +864,56 @@ jobs:
         run: cargo test --features full
         working-directory: hyper
 
+  test-quinn:
+    name: Test Quinn
+    needs: basics
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - windows-latest
+          - ubuntu-latest
+          - macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust ${{ env.rust_stable }}
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.rust_stable }}
+
+      - name: Clone Quinn
+        run: git clone https://github.com/quinn-rs/quinn.git
+
+      - name: Checkout the latest release because HEAD maybe contains breakage.
+        run: |
+          set -x
+          tag=$(git describe --abbrev=0 --tags)
+          git checkout "${tag}"
+        working-directory: quinn
+
+      - name: Patch Quinn to use tokio from this repository
+        run: |
+          set -x
+          echo '[patch.crates-io]' >>Cargo.toml
+          echo 'tokio = { path = "../tokio" }' >>Cargo.toml
+          git diff
+        working-directory: quinn
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # The cargo workspaces and target directory configuration.
+          # These entries are separated by newlines and have the form
+          # `$workspace -> $target`. The `$target` part is treated as a directory
+          # relative to the `$workspace` and defaults to "target" if not explicitly given.
+          # default: ". -> target"
+          workspaces: "./quinn"
+
+      - name: Test Quinn
+        working-directory: quinn
+        env:
+          RUSTFLAGS: ""
+        run: cargo test
+
   x86_64-fortanix-unknown-sgx:
     name: build tokio for x86_64-fortanix-unknown-sgx
     needs: basics
@@ -896,10 +952,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install Rust ${{ env.rust_stable }}
+      - name: Install Rust 1.81
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ env.rust_stable }}
+          toolchain: 1.81
       - name: Install wasm-pack
         uses: taiki-e/install-action@wasm-pack
 
@@ -908,17 +964,22 @@ jobs:
         run: wasm-pack test --node -- --features "macros sync"
         working-directory: tokio
 
-  wasm32-wasi:
-    name: wasm32-wasi
+  wasm32-wasip1:
+    name: ${{ matrix.target }}
     needs: basics
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - wasm32-wasip1
+          - wasm32-wasip1-threads
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust ${{ env.rust_stable }}
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.rust_stable }}
-          targets: wasm32-wasi
+          targets: ${{ matrix.target }}
 
       # Install dependencies
       - name: Install cargo-hack, wasmtime, and cargo-wasi
@@ -928,27 +989,39 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
       - name: WASI test tokio full
-        run: cargo test -p tokio --target wasm32-wasi --features full
+        run: cargo test -p tokio --target ${{ matrix.target }} --features full
         env:
-          CARGO_TARGET_WASM32_WASI_RUNNER: "wasmtime run --"
-          RUSTFLAGS: --cfg tokio_unstable -Dwarnings
+          CARGO_TARGET_WASM32_WASIP1_RUNNER: "wasmtime run --"
+          CARGO_TARGET_WASM32_WASIP1_THREADS_RUNNER: "wasmtime run -W bulk-memory=y -W threads=y -S threads=y --"
+          RUSTFLAGS: --cfg tokio_unstable -Dwarnings -C target-feature=+atomics,+bulk-memory -C link-args=--max-memory=67108864
 
       - name: WASI test tokio-util full
-        run: cargo test -p tokio-util --target wasm32-wasi --features full
+        run: cargo test -p tokio-util --target ${{ matrix.target }} --features full
         env:
-          CARGO_TARGET_WASM32_WASI_RUNNER: "wasmtime run --"
-          RUSTFLAGS: --cfg tokio_unstable -Dwarnings
+          CARGO_TARGET_WASM32_WASIP1_RUNNER: "wasmtime run --"
+          CARGO_TARGET_WASM32_WASIP1_THREADS_RUNNER: "wasmtime run -W bulk-memory=y -W threads=y -S threads=y --"
+          RUSTFLAGS: --cfg tokio_unstable -Dwarnings -C target-feature=+atomics,+bulk-memory -C link-args=--max-memory=67108864
 
       - name: WASI test tokio-stream
-        run: cargo test -p tokio-stream --target wasm32-wasi --features time,net,io-util,sync
+        run: cargo test -p tokio-stream --target ${{ matrix.target }} --features time,net,io-util,sync
         env:
-          CARGO_TARGET_WASM32_WASI_RUNNER: "wasmtime run --"
-          RUSTFLAGS: --cfg tokio_unstable -Dwarnings
+          CARGO_TARGET_WASM32_WASIP1_RUNNER: "wasmtime run --"
+          CARGO_TARGET_WASM32_WASIP1_THREADS_RUNNER: "wasmtime run -W bulk-memory=y -W threads=y -S threads=y --"
+          RUSTFLAGS: --cfg tokio_unstable -Dwarnings -C target-feature=+atomics,+bulk-memory -C link-args=--max-memory=67108864
 
       - name: test tests-integration --features wasi-rt
         # TODO: this should become: `cargo hack wasi test --each-feature`
         run: cargo wasi test --test rt_yield --features wasi-rt
+        if: matrix.target == 'wasm32-wasip1'
         working-directory: tests-integration
+
+      - name: test tests-integration --features wasi-threads-rt
+        run: cargo test --target ${{ matrix.target }} --features wasi-threads-rt
+        if: matrix.target == 'wasm32-wasip1-threads'
+        working-directory: tests-integration
+        env:
+          CARGO_TARGET_WASM32_WASIP1_THREADS_RUNNER: "wasmtime run -W bulk-memory=y -W threads=y -S threads=y --"
+          RUSTFLAGS: --cfg tokio_unstable -Dwarnings -C target-feature=+atomics,+bulk-memory -C link-args=--max-memory=67108864
 
   check-external-types:
     name: check-external-types (${{ matrix.os }})
@@ -962,7 +1035,7 @@ jobs:
         rust:
           # `check-external-types` requires a specific Rust nightly version. See
           # the README for details: https://github.com/awslabs/cargo-check-external-types
-          - nightly-2023-10-21
+          - nightly-2024-06-30
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust ${{ matrix.rust }}
@@ -973,10 +1046,27 @@ jobs:
       - name: Install cargo-check-external-types
         uses: taiki-e/cache-cargo-install-action@v1
         with:
-          tool: cargo-check-external-types@0.1.10
+          tool: cargo-check-external-types@0.1.13
       - name: check-external-types
         run: cargo check-external-types --all-features
         working-directory: tokio
+
+  check-unexpected-lints-cfgs:
+    name: check unexpected lints and cfgs
+    needs: basics
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust ${{ env.rust_nightly }}
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.rust_nightly }}
+      - name: don't allow warnings
+        run: sed -i '/#!\[allow(unknown_lints, unexpected_cfgs)\]/d' */src/lib.rs */tests/*.rs
+      - name: check for unknown lints and cfgs
+        run: cargo check --all-features --tests
+        env:
+          RUSTFLAGS: -Dwarnings --check-cfg=cfg(loom,tokio_unstable,tokio_taskdump,fuzzing,mio_unsupported_force_poll_poll,tokio_internal_mt_counters,fs,tokio_no_parking_lot,tokio_no_tuning_tests) -Funexpected_cfgs -Funknown_lints
 
   check-fuzzing:
     name: check-fuzzing
@@ -1025,7 +1115,13 @@ jobs:
           # using LC_ALL to en_US.UTF8 to be consistent in different
           # environments.
 
-          sed '1d; $d' spellcheck.dic | LC_ALL=en_US.UTF8 sort -uc
+          (
+            sed '1d; $d' spellcheck.dic | LC_ALL=en_US.UTF8 sort -uc
+          ) || {
+            echo "Dictionary is not in sorted order. Correct order is:"
+            LC_ALL=en_US.UTF8 sort -u <(sed '1d; $d' spellcheck.dic)
+            false
+          }
       - name: Run cargo-spellcheck
         run: cargo spellcheck --code 1
 

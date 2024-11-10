@@ -92,6 +92,7 @@ async fn single_short_delay() {
 }
 
 #[tokio::test]
+#[cfg_attr(miri, ignore)] // Too slow on miri.
 async fn multi_delay_at_start() {
     time::pause();
 
@@ -878,6 +879,19 @@ async fn peek() {
     assert_eq!(entry.get_ref(), &"baz");
 
     assert!(queue.peek().is_none());
+}
+
+#[tokio::test(start_paused = true)]
+async fn wake_after_remove_last() {
+    let mut queue = task::spawn(DelayQueue::new());
+    let key = queue.insert("foo", ms(1000));
+
+    assert_pending!(poll!(queue));
+
+    queue.remove(&key);
+
+    assert!(queue.is_woken());
+    assert!(assert_ready!(poll!(queue)).is_none());
 }
 
 fn ms(n: u64) -> Duration {

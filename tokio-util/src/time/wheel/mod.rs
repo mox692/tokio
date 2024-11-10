@@ -7,7 +7,6 @@ pub(crate) use self::stack::Stack;
 
 use std::borrow::Borrow;
 use std::fmt::Debug;
-use std::usize;
 
 /// Timing wheel implementation.
 ///
@@ -35,7 +34,7 @@ pub(crate) struct Wheel<T> {
     /// * ~ 4 min slots / ~ 4 hr range
     /// * ~ 4 hr slots / ~ 12 day range
     /// * ~ 12 day slots / ~ 2 yr range
-    levels: Vec<Level<T>>,
+    levels: Box<[Level<T>]>,
 }
 
 /// Number of levels. Each level has 64 slots. By using 6 levels with 64 slots
