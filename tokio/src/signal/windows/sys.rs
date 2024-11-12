@@ -1,3 +1,6 @@
+#![cfg(any(windows, docsrs))]
+#![cfg_attr(docsrs, doc(cfg(all(windows, feature = "signal"))))]
+
 use std::io;
 use std::sync::Once;
 

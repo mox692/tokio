@@ -12,17 +12,10 @@ use crate::signal::RxFuture;
 use std::io;
 use std::task::{Context, Poll};
 
-#[cfg(windows)]
 #[path = "windows/sys.rs"]
 mod imp;
 
-#[cfg(windows)]
 pub(crate) use self::imp::{OsExtraData, OsStorage};
-
-// For building documentation on Unix machines when the `docsrs` flag is set.
-#[cfg(not(windows))]
-#[path = "windows/stub.rs"]
-mod imp;
 
 /// Creates a new listener which receives "ctrl-c" notifications sent to the
 /// process.

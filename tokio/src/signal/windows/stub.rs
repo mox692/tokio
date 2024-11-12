@@ -1,3 +1,6 @@
+#![cfg(any(windows, docsrs))]
+#![cfg_attr(docsrs, doc(cfg(all(windows, feature = "signal"))))]
+
 //! Stub implementations for the platform API so that rustdoc can build linkable
 //! documentation on non-windows platforms.
 

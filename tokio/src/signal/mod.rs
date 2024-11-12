@@ -61,6 +61,9 @@ mod os {
 }
 
 pub mod unix;
+
+#[cfg(any(windows, docsrs))]
+#[cfg_attr(docsrs, doc(cfg(windows)))]
 pub mod windows;
 
 mod reusable_box;
