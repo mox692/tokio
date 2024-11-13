@@ -107,9 +107,15 @@ use std::task::{Context, Poll, Waker};
 pub(crate) struct ScheduledIo {
     pub(super) linked_list_pointers: UnsafeCell<linked_list::Pointers<Self>>,
 
+    // redinessの情報はここに書き込まれてるっぽい。実態はatomicUsize.
+    // tickとready eventの情報が入っている
+    // TODOS: なんでtickがいる？？
     /// Packs the resource's readiness and I/O driver latest tick.
     readiness: AtomicUsize,
 
+    // Readiness.poll()で, Readyにならないとここのwaiterに登録される
+    // TODOS: 1つのscheduledIOに, 複数のtaskが絡むことってあるのか?
+    //        waiterに複数のtaskが並ぶシナリオが気になる
     waiters: Mutex<Waiters>,
 }
 
@@ -176,6 +182,7 @@ enum State {
 
 const READINESS: bit::Pack = bit::Pack::least_significant(16);
 
+// Driverが駆動された周回を記録する？...
 const TICK: bit::Pack = READINESS.then(15);
 
 const SHUTDOWN: bit::Pack = TICK.then(1);

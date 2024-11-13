@@ -12,6 +12,7 @@ use core::marker::{PhantomData, PhantomPinned};
 use core::mem::ManuallyDrop;
 use core::ptr::{self, NonNull};
 
+// T: Nodeの型
 /// An intrusive linked list.
 ///
 /// Currently, the list is not emptied on drop. It is the caller's

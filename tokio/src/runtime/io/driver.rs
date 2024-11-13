@@ -142,6 +142,8 @@ impl Driver {
     fn turn(&mut self, handle: &Handle, max_wait: Option<Duration>) {
         debug_assert!(!handle.registrations.is_shutdown(&handle.synced.lock()));
 
+        // linkedlistから消すべきScheduledIoがあるかどうか?
+        // これは例えば, `PollEvented` がdropされたときとかに対応
         handle.release_pending_registrations();
 
         let events = &mut self.events;

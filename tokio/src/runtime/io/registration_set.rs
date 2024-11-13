@@ -50,6 +50,7 @@ impl RegistrationSet {
         self.num_pending_release.load(Acquire) != 0
     }
 
+    // Syncedに格納されているLinkedListに, 新しい ScheduledIo を追加する
     pub(super) fn allocate(&self, synced: &mut Synced) -> io::Result<Arc<ScheduledIo>> {
         if synced.is_shutdown {
             return Err(io::Error::new(
@@ -101,6 +102,7 @@ impl RegistrationSet {
         ret
     }
 
+    // LinkedListから, ScheduledIoを削除
     pub(super) fn release(&self, synced: &mut Synced) {
         let pending = std::mem::take(&mut synced.pending_release);
 
