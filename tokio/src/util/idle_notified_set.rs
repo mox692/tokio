@@ -333,6 +333,8 @@ impl<T> IdleNotifiedSet<T> {
             }
         }
 
+        // tokio/src/util/wake_list.rs でも似たようなことをしてる気がする
+
         // Keep destroying entries in the list until it is empty.
         //
         // If the closure panics, then the destructor of the `AllEntries` bomb

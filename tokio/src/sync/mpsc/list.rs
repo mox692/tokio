@@ -68,6 +68,7 @@ impl<T> Tx<T> {
     pub(crate) fn push(&self, value: T) {
         // First, claim a slot for the value. `Acquire` is used here to
         // synchronize with the `fetch_add` in `reclaim_blocks`.
+        // slot_index = 要素全体のindex
         let slot_index = self.tail_position.fetch_add(1, Acquire);
 
         // Load the current block and write the value
@@ -95,7 +96,7 @@ impl<T> Tx<T> {
 
     fn find_block(&self, slot_index: usize) -> NonNull<Block<T>> {
         // MEMO: start_indexはBlock数で割ったものじゃなくて、slot_indexと同じ単位.
-        //       32の倍数.
+        //       32の倍数. e.g. 48 slot目 -> start_index: 32
         // The start index of the block that contains `index`.
         let start_index = block::start_index(slot_index);
 
@@ -124,12 +125,14 @@ impl<T> Tx<T> {
         // is unset.
         let mut try_updating_tail = distance > offset;
 
+        // start_index(32, 64, 96, ... )にマッチするblockを見つけて, そのptrを返す
         // Walk the linked list of blocks until the block with `start_index` is
         // found.
         loop {
             let block = unsafe { &(*block_ptr) };
 
             if block.is_at_index(start_index) {
+                // 見つけた! block_ptrを返す
                 return unsafe { NonNull::new_unchecked(block_ptr) };
             }
 
@@ -141,6 +144,8 @@ impl<T> Tx<T> {
 
             // If the block is **not** final, then the tail pointer cannot be
             // advanced any more.
+            // final     -> このblockのslotが全て値で埋まっている
+            // not final -> いくつかの空きslotがある
             try_updating_tail &= block.is_final();
 
             if try_updating_tail {
@@ -221,6 +226,7 @@ impl<T> Tx<T> {
         }
 
         if !reused {
+            // reuseに失敗したら, blockをdropする
             let _ = Box::from_raw(block.as_ptr());
         }
     }
