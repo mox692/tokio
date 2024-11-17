@@ -179,6 +179,7 @@ impl<T> Tx<T> {
     }
 
     pub(crate) unsafe fn reclaim_block(&self, mut block: NonNull<Block<T>>) {
+        RECLAIM_CALLED_COUNT.fetch_add(1, Relaxed);
         // The block has been removed from the linked list and ownership
         // is reclaimed.
         //
@@ -215,6 +216,7 @@ impl<T> Tx<T> {
         }
 
         if !reused {
+            REUSE_FAILED_COUNT.fetch_add(1, Relaxed);
             let _ = Box::from_raw(block.as_ptr());
         }
     }
@@ -237,6 +239,9 @@ impl<T> fmt::Debug for Tx<T> {
             .finish()
     }
 }
+
+pub(crate) static RECLAIM_CALLED_COUNT: AtomicUsize = AtomicUsize::new(0);
+pub(crate) static REUSE_FAILED_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 impl<T> Rx<T> {
     pub(crate) fn is_empty(&self, tx: &Tx<T>) -> bool {

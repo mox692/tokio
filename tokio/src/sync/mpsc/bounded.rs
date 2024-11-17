@@ -11,6 +11,8 @@ cfg_time! {
 use std::fmt;
 use std::task::{Context, Poll};
 
+use super::list::{RECLAIM_CALLED_COUNT, REUSE_FAILED_COUNT};
+
 /// Sends values to the associated `Receiver`.
 ///
 /// Instances are created by the [`channel`] function.
@@ -743,6 +745,12 @@ impl<T> fmt::Debug for Receiver<T> {
 
 impl<T> Unpin for Receiver<T> {}
 
+pub fn reclaim_called_count() -> usize {
+    RECLAIM_CALLED_COUNT.load(std::sync::atomic::Ordering::Acquire)
+}
+pub fn reuse_failed_count() -> usize {
+    REUSE_FAILED_COUNT.load(std::sync::atomic::Ordering::Acquire)
+}
 impl<T> Sender<T> {
     pub(crate) fn new(chan: chan::Tx<T, Semaphore>) -> Sender<T> {
         Sender { chan }

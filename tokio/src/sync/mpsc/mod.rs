@@ -116,7 +116,8 @@ pub(super) mod block;
 
 mod bounded;
 pub use self::bounded::{
-    channel, OwnedPermit, Permit, PermitIterator, Receiver, Sender, WeakSender,
+    channel, reclaim_called_count, reuse_failed_count, OwnedPermit, Permit, PermitIterator,
+    Receiver, Sender, WeakSender,
 };
 
 mod chan;
