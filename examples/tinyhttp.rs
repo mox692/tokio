@@ -24,23 +24,27 @@ use tokio_stream::StreamExt;
 use tokio_util::codec::{Decoder, Encoder, Framed};
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    // Parse the arguments, bind the TCP socket we'll be listening to, spin up
-    // our worker threads, and start shipping sockets to those worker threads.
-    let addr = env::args()
-        .nth(1)
-        .unwrap_or_else(|| "127.0.0.1:8080".to_string());
-    let server = TcpListener::bind(&addr).await?;
-    println!("Listening on: {}", addr);
+async fn main() {
+    tokio::spawn(async {
+        // Parse the arguments, bind the TCP socket we'll be listening to, spin up
+        // our worker threads, and start shipping sockets to those worker threads.
+        let addr = env::args()
+            .nth(1)
+            .unwrap_or_else(|| "127.0.0.1:8080".to_string());
+        let server = TcpListener::bind(&addr).await.unwrap();
+        println!("Listening on: {}", addr);
 
-    loop {
-        let (stream, _) = server.accept().await?;
-        tokio::spawn(async move {
-            if let Err(e) = process(stream).await {
-                println!("failed to process connection; error = {}", e);
-            }
-        });
-    }
+        loop {
+            let (stream, _) = server.accept().await.unwrap();
+            tokio::spawn(async move {
+                if let Err(e) = process(stream).await {
+                    println!("failed to process connection; error = {}", e);
+                }
+            });
+        }
+    })
+    .await
+    .unwrap();
 }
 
 async fn process(stream: TcpStream) -> Result<(), Box<dyn Error>> {
