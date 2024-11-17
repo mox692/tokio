@@ -83,7 +83,7 @@ impl Write for &'_ MockFile {
 }
 
 tokio_thread_local! {
-    static QUEUE: RefCell<VecDeque<Box<dyn FnOnce() + Send>>> = RefCell::new(VecDeque::new())
+    static QUEUE: RefCell<VecDeque<Box<dyn FnOnce() + Send>>> = const { RefCell::new(VecDeque::new()) }
 }
 
 #[derive(Debug)]

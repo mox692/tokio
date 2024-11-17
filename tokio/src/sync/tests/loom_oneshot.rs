@@ -145,7 +145,7 @@ fn checking_tx_send_ok_not_drop() {
     use std::cell::Cell;
 
     loom::thread_local! {
-        static IS_RX: Cell<bool> = Cell::new(true);
+        static IS_RX: Cell<bool> = const { Cell::new(true) };
     }
 
     struct Msg;
