@@ -1,8 +1,6 @@
 use std::hint::black_box;
-use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::task::JoinSet;
-use tokio::{sync::Semaphore, task};
 
 fn multi_rt() -> Runtime {
     tokio::runtime::Builder::new_multi_thread()
@@ -13,31 +11,23 @@ fn multi_rt() -> Runtime {
 }
 
 async fn runnnnnnnnnnnnnn() {
-    let (tx, mut rx) = tokio::sync::mpsc::channel::<usize>(1_000_000_000_000);
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<usize>(10000);
 
     let mut set = JoinSet::new();
     for _ in 0..10 {
-        println!("111111");
         let tx = tx.clone();
         set.spawn(async move {
-            println!("22222222222");
-            for i in 0..100000000 {
-                if i % 10000 == 0 {
-                    println!("i: {}", i);
-                }
+            for i in 0..100 {
                 tx.send(i).await.unwrap();
             }
         });
     }
 
-    println!("iiiiiiiii: {:?}", set.len());
     let mut sum = 0;
-    black_box(for _ in 0..100_000000 {
-        println!("444444444");
-        sum += rx.recv().await.unwrap() % 1000000;
+    black_box(for _ in 0..100 {
+        rx.recv().await.unwrap();
     });
     while let Some(res) = set.join_next().await {
-        println!("3333333");
         let _ = res;
     }
 }
@@ -46,7 +36,6 @@ fn main() {
     rt.block_on(async {
         tokio::spawn(runnnnnnnnnnnnnn()).await;
     });
-    println!("end");
 
     // g.bench_function("concurrent_multi", |b| {
     //     b.iter(|| {
