@@ -30,8 +30,8 @@ rand = "0.8.3"
 pin-project-lite = "0.2.11"
 test-log = "0.2.15"
 test-case = "3.3.1"
-framehop = "0.12"
-wholesym = "0.7"
+# framehop = "0.12"
+# wholesym = "0.7"
 
 [target.'cfg(windows)'.dev-dependencies.windows-sys]
 version = "0.52"
@@ -190,3 +190,6 @@ path = "unwindsafe_matter.rs"
 [[example]]
 name = "localset"
 path = "localset.rs"
+[[example]]
+name = "flamegraph_mpsc"
+path = "flamegraph_mpsc.rs"
