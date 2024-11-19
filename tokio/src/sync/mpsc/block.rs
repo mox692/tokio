@@ -273,6 +273,7 @@ impl<T> Block<T> {
 
     /// Returns the `observed_tail_position` value, if set
     pub(crate) fn observed_tail_position(&self) -> Option<usize> {
+        // RELEASED flagが立っているか確認
         if 0 == RELEASED & self.header.ready_slots.load(Acquire) {
             None
         } else {
