@@ -172,7 +172,7 @@ as docs.rs itself does.
 [`cargo docs-rs`]: https://github.com/dtolnay/cargo-docs-rs
 
 ```
-cargo install cargo-docs-rs
+cargo install --locked cargo-docs-rs
 cargo +nightly docs-rs [--open]
 ```
 
@@ -200,7 +200,7 @@ run loom tests that test unstable features.
 
 You can run miri tests with
 ```
-MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-tag-raw-pointers" \
+MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-strict-provenance -Zmiri-retag-fields" \
     cargo +nightly miri test --features full --lib
 ```
 
@@ -261,7 +261,7 @@ directory `fuzz`. It is a good idea to run fuzz tests after each change.
 To get started with fuzz testing you'll need to install
 [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz).
 
-`cargo install cargo-fuzz`
+`cargo install --locked cargo-fuzz`
 
 To list the available fuzzing harnesses you can run;
 
@@ -269,7 +269,7 @@ To list the available fuzzing harnesses you can run;
 $ cd tokio
 $ cargo fuzz list
 fuzz_linked_list
-````
+```
 
 Running a fuzz test is as simple as;
 

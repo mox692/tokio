@@ -1,3 +1,4 @@
+#![allow(unknown_lints, unexpected_cfgs)]
 #![allow(
     clippy::cognitive_complexity,
     clippy::large_enum_variant,
@@ -350,8 +351,10 @@
 //! - [`task::Builder`]
 //! - Some methods on [`task::JoinSet`]
 //! - [`runtime::RuntimeMetrics`]
+//! - [`runtime::Builder::on_task_spawn`]
+//! - [`runtime::Builder::on_task_terminate`]
 //! - [`runtime::Builder::unhandled_panic`]
-//! - [`task::Id`]
+//! - [`runtime::TaskMeta`]
 //!
 //! This flag enables **unstable** features. The public API of these features
 //! may break in 1.x releases. To enable these features, the `--cfg
@@ -365,6 +368,12 @@
 //! [build]
 //! rustflags = ["--cfg", "tokio_unstable"]
 //! ```
+//!
+//! <div class="warning">
+//! The <code>[build]</code> section does <strong>not</strong> go in a
+//! <code>Cargo.toml</code> file. Instead it must be placed in the Cargo config
+//! file <code>.cargo/config.toml</code>.
+//! </div>
 //!
 //! Alternatively, you can specify it with an environment variable:
 //!
@@ -446,13 +455,9 @@
 // least 32 bits, which a lot of components in Tokio currently assumes.
 //
 // TODO: improve once we have MSRV access to const eval to make more flexible.
-#[cfg(not(any(
-    target_pointer_width = "32",
-    target_pointer_width = "64",
-    target_pointer_width = "128"
-)))]
+#[cfg(not(any(target_pointer_width = "32", target_pointer_width = "64")))]
 compile_error! {
-    "Tokio requires the platform pointer width to be 32, 64, or 128 bits"
+    "Tokio requires the platform pointer width to be at least 32 bits"
 }
 
 #[cfg(all(
@@ -474,6 +479,7 @@ compile_error!("The `tokio_taskdump` feature requires `--cfg tokio_unstable`.");
 
 #[cfg(all(
     tokio_taskdump,
+    not(doc),
     not(all(
         target_os = "macos",
         any(target_arch = "aarch64", target_arch = "x86", target_arch = "x86_64")
@@ -630,7 +636,7 @@ pub mod stream {}
 #[cfg(docsrs)]
 pub mod doc;
 
-#[cfg(feature = "net")]
+#[cfg(any(feature = "net", feature = "fs"))]
 #[cfg(docsrs)]
 #[allow(unused)]
 pub(crate) use self::doc::os;
@@ -654,7 +660,6 @@ cfg_macros! {
 
     cfg_rt! {
         #[cfg(feature = "rt-multi-thread")]
-        #[cfg(not(test))] // Work around for rust-lang/rust#62127
         #[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
         #[doc(inline)]
         pub use tokio_macros::main;
@@ -665,7 +670,6 @@ cfg_macros! {
         pub use tokio_macros::test;
 
         cfg_not_rt_multi_thread! {
-            #[cfg(not(test))] // Work around for rust-lang/rust#62127
             #[doc(inline)]
             pub use tokio_macros::main_rt as main;
 
@@ -676,7 +680,6 @@ cfg_macros! {
 
     // Always fail if rt is not enabled.
     cfg_not_rt! {
-        #[cfg(not(test))]
         #[doc(inline)]
         pub use tokio_macros::main_fail as main;
 

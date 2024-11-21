@@ -1,3 +1,4 @@
+#![allow(unknown_lints, unexpected_cfgs)]
 #![warn(rust_2018_idioms)]
 #![cfg(all(feature = "full", not(target_os = "wasi")))]
 #![cfg(tokio_unstable)]
@@ -8,8 +9,7 @@ use tokio::runtime;
 use tokio::sync::oneshot;
 use tokio_test::{assert_err, assert_ok};
 
-use futures::future::poll_fn;
-use std::future::Future;
+use std::future::{poll_fn, Future};
 use std::pin::Pin;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::Relaxed;
@@ -18,7 +18,7 @@ use std::task::{Context, Poll, Waker};
 
 macro_rules! cfg_metrics {
     ($($t:tt)*) => {
-        #[cfg(tokio_unstable)]
+        #[cfg(all(tokio_unstable, target_has_atomic = "64"))]
         {
             $( $t )*
         }
@@ -36,6 +36,7 @@ fn single_thread() {
 }
 
 #[test]
+#[ignore] // https://github.com/tokio-rs/tokio/issues/5995
 fn many_oneshot_futures() {
     // used for notifying the main thread
     const NUM: usize = 1_000;
