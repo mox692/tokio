@@ -131,7 +131,7 @@ impl<T> Tx<T> {
             let next_block = block
                 .load_next(Acquire)
                 // There is no allocated next block, grow the linked list.
-                .unwrap_or_else(|| block.grow());
+                .unwrap_or_else(|| block.grow(slot_index));
 
             // If the block is **not** final, then the tail pointer cannot be
             // advanced any more.
@@ -179,7 +179,7 @@ impl<T> Tx<T> {
     }
 
     pub(crate) unsafe fn reclaim_block(&self, mut block: NonNull<Block<T>>) {
-        RECLAIM_CALLED_COUNT.fetch_add(1, Relaxed);
+        let s = RECLAIM_CALLED_COUNT.fetch_add(1, Relaxed);
         // The block has been removed from the linked list and ownership
         // is reclaimed.
         //
@@ -200,16 +200,21 @@ impl<T> Tx<T> {
         // The pointer can never be null
         debug_assert!(!curr_ptr.is_null());
 
-        let mut curr = NonNull::new_unchecked(curr_ptr);
-
+        let mut curr: NonNull<Block<T>> = NonNull::new_unchecked(curr_ptr);
         // TODO: Unify this logic with Block::grow
-        for _ in 0..3 {
-            match curr.as_ref().try_push(&mut block, AcqRel, Acquire) {
+        for i in 0..3 {
+            // cur -> block
+            match curr.as_ref().try_push(&mut block, Release, Relaxed) {
                 Ok(()) => {
                     reused = true;
                     break;
                 }
                 Err(next) => {
+                    println!(
+                        "{s} {i}, try push {:?} to tail node {:?}, but {:?}",
+                        &block, &curr, &next,
+                    );
+
                     curr = next;
                 }
             }
@@ -356,7 +361,7 @@ impl<T> Rx<T> {
                 // guaranteed that the `reclaim_blocks` routine trails the `recv`
                 // routine. Any memory accessed by `reclaim_blocks` has already
                 // been acquired by `recv`.
-                let next_block = block.as_ref().load_next(Relaxed);
+                let next_block = block.as_ref().load_next(Acquire);
 
                 // Update the free list head
                 self.free_head = next_block.unwrap();

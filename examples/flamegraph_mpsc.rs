@@ -1,4 +1,5 @@
 use std::hint::black_box;
+use std::time::Duration;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc::{reclaim_called_count, reuse_failed_count};
 use tokio::task::JoinSet;
@@ -17,18 +18,20 @@ async fn run() {
     for _ in 0..10 {
         let tx = tx.clone();
         set.spawn(async move {
-            for i in 0..100_ {
+            for i in 0..100 {
+                // black_box(for i in 0..10000 {});
+                // tokio::time::sleep(Duration::from_micros(1)).await;
                 tx.send(i).await.unwrap();
             }
         });
     }
 
-    black_box(for _ in 0..100_0 {
-        rx.recv().await.unwrap();
-    });
     while let Some(res) = set.join_next().await {
         let _ = res;
     }
+    black_box(for _ in 0..1000 {
+        rx.recv().await.unwrap();
+    });
 }
 fn main() {
     let rt = multi_rt();
