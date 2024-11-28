@@ -266,9 +266,7 @@ impl<T> Local<T> {
         assert_eq!(
             tail.wrapping_sub(head) as usize,
             LOCAL_QUEUE_CAPACITY,
-            "queue is not full; tail = {}; head = {}",
-            tail,
-            head
+            "queue is not full; tail = {tail}; head = {head}"
         );
 
         let prev = pack(head, head);
@@ -493,8 +491,7 @@ impl<T> Steal<T> {
 
         assert!(
             n <= LOCAL_QUEUE_CAPACITY as UnsignedShort / 2,
-            "actual = {}",
-            n
+            "actual = {n}"
         );
 
         let (first, _) = unpack(next_packed);
