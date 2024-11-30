@@ -101,9 +101,13 @@ pub struct SimplexStream {
 /// The `max_buf_size` argument is the maximum amount of bytes that can be
 /// written to a side before the write returns `Poll::Pending`.
 #[cfg_attr(docsrs, doc(cfg(feature = "io-util")))]
-pub fn duplex(max_buf_size: usize) -> (DuplexStream, DuplexStream) {
-    let one = Arc::new(Mutex::new(SimplexStream::new_unsplit(max_buf_size)));
-    let two = Arc::new(Mutex::new(SimplexStream::new_unsplit(max_buf_size)));
+pub fn duplex(max_buf_size: u32) -> (DuplexStream, DuplexStream) {
+    let one = Arc::new(Mutex::new(SimplexStream::new_unsplit(
+        max_buf_size as usize,
+    )));
+    let two = Arc::new(Mutex::new(SimplexStream::new_unsplit(
+        max_buf_size as usize,
+    )));
 
     (
         DuplexStream {
