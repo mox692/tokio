@@ -53,6 +53,8 @@ impl Handle {
         T: Future + Send + 'static,
         T::Output: Send + 'static,
     {
+        // Future -> Notified を作る
+        // 実際にTaskのRuntime内での内部表現を取得する
         let (handle, notified) = me.shared.owned.bind(future, me.clone(), id);
 
         me.task_hooks.spawn(&TaskMeta {
@@ -60,6 +62,7 @@ impl Handle {
             _phantom: Default::default(),
         });
 
+        // 実際にtaskをscheduleする(local_queue or injection_queue)
         me.schedule_option_task_without_yield(notified);
 
         handle

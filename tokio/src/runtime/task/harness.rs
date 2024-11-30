@@ -296,6 +296,10 @@ where
         // Try to unset `JOIN_INTEREST`. This must be done as a first step in
         // case the task concurrently completed.
         if self.state().unset_join_interested().is_err() {
+            // StateがComplete stateにすでになっていた. (どこがcompleteさせるかについては, harness::complete() を参照.)
+            // runtimeがtaskをpollしてcompleteにするのと, そのjoinHandleをdropするのは別のスレッドが行う可能性がある
+            //
+            // JoinHandleがstage fieldに対してexclusive ownershipを持ってる
             // It is our responsibility to drop the output. This is critical as
             // the task output may not be `Send` and as such must remain with
             // the scheduler or `JoinHandle`. i.e. if the output remains in the
@@ -310,6 +314,9 @@ where
             }));
         }
 
+        // taskはまだcomplete状態になっていない。
+        // joinHandleのreferenceを消す(もしそれが最後だったら, taskごと消す)
+
         // // Try to drop Waker
         // let ptr = unsafe { NonNull::new_unchecked(self.header() as *const Header as *mut Header) };
         // let waker = unsafe { ManuallyDrop::new(Waker::from_raw(raw_waker(ptr))) };
@@ -321,6 +328,7 @@ where
 
     // ====== internal ======
 
+    // * linked listから taskを消す
     /// Completes the task. This method assumes that the state is RUNNING.
     fn complete(self) {
         // The future has completed and its output has been written to the task
@@ -398,7 +406,9 @@ where
     }
 }
 
-// taskが完了したかどうかを確認
+// * taskが完了したかどうかを snapshot をみて確認
+//   * 完了していたら, true
+//   * 未完了だったら, wakerをtaskの構造にsetする
 fn can_read_output(header: &Header, trailer: &Trailer, waker: &Waker) -> bool {
     // Load a snapshot of the current task state
     let snapshot = header.state.load();
@@ -441,11 +451,7 @@ fn can_read_output(header: &Header, trailer: &Trailer, waker: &Waker) -> bool {
         }
     }
 
-    // // Try to drop Waker
-    // let ptr = unsafe { NonNull::new_unchecked(header as *const Header as *mut Header) };
-    // let waker = unsafe { ManuallyDrop::new(Waker::from_raw(raw_waker(ptr))) };
-    // drop(std::mem::ManuallyDrop::into_inner(waker));
-
+    // COMPLETE flagが立っているのでtrue
     true
 }
 

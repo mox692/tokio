@@ -55,6 +55,7 @@ cfg_not_has_atomic_u64! {
     }
 }
 
+// このRuntimeが保有しているactiveなtask
 pub(crate) struct OwnedTasks<S: 'static> {
     list: List<S>,
     pub(crate) id: NonZeroU64,
@@ -125,7 +126,7 @@ impl<S: 'static> OwnedTasks<S> {
     }
 
     /// The part of `bind` that's the same for every type of future.
-    /// MEMO: listにtaskをpushする
+    /// MEMO: listにtaskをpushする. もし OwnedTask がcloseされていたら, Noneを返す
     unsafe fn bind_inner(&self, task: Task<S>, notified: Notified<S>) -> Option<Notified<S>>
     where
         S: Schedule,
