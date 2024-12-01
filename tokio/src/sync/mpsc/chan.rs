@@ -9,29 +9,32 @@ use crate::sync::notify::Notify;
 use crate::util::cacheline::CachePadded;
 
 use std::fmt;
+use std::marker::PhantomData;
 use std::panic;
 use std::process;
 use std::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
 use std::task::Poll::{Pending, Ready};
 use std::task::{ready, Context, Poll};
 
+use super::array;
+
 /// Channel sender.
-pub(crate) struct Tx<T, S> {
-    inner: Arc<Chan<T, S>>,
+pub(crate) struct Tx<T, S, RX> {
+    inner: Arc<Chan<T, S, RX>>,
 }
 
-impl<T, S: fmt::Debug> fmt::Debug for Tx<T, S> {
+impl<T, S: fmt::Debug, RX> fmt::Debug for Tx<T, S, RX> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("Tx").field("inner", &self.inner).finish()
     }
 }
 
 /// Channel receiver.
-pub(crate) struct Rx<T, S: Semaphore> {
-    inner: Arc<Chan<T, S>>,
+pub(crate) struct Rx<T, S: Semaphore, RX> {
+    inner: Arc<Chan<T, S, RX>>,
 }
 
-impl<T, S: Semaphore + fmt::Debug> fmt::Debug for Rx<T, S> {
+impl<T, S: Semaphore + fmt::Debug, RX> fmt::Debug for Rx<T, S, RX> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("Rx").field("inner", &self.inner).finish()
     }
@@ -49,7 +52,7 @@ pub(crate) trait Semaphore {
     fn is_closed(&self) -> bool;
 }
 
-pub(super) struct Chan<T, S> {
+pub(super) struct Chan<T, S, RX> {
     /// Handle to the push half of the lock-free list.
     tx: CachePadded<list::Tx<T>>,
 
@@ -71,10 +74,10 @@ pub(super) struct Chan<T, S> {
     tx_weak_count: AtomicUsize,
 
     /// Only accessed by `Rx` handle.
-    rx_fields: UnsafeCell<RxFields<T>>,
+    rx_fields: UnsafeCell<RxFields<T, RX>>,
 }
 
-impl<T, S> fmt::Debug for Chan<T, S>
+impl<T, S, R> fmt::Debug for Chan<T, S, R>
 where
     S: fmt::Debug,
 {
@@ -89,30 +92,52 @@ where
     }
 }
 
+#[derive(Debug)]
+enum RxFlaver<T> {
+    List(list::Rx<T>),
+    Array(array::Rx<T>),
+}
+
+trait RxT<T> {
+    fn is_empty(&self) -> bool;
+    fn len(&self) -> usize;
+    fn pop(&self, tx: impl TxT<T>) -> bool;
+}
+trait TxT<T> {
+    fn foo();
+}
 /// Fields only accessed by `Rx` handle.
-struct RxFields<T> {
+struct RxFields<T, RX> {
     /// Channel receiver. This field is only accessed by the `Receiver` type.
-    list: list::Rx<T>,
+    list: RX,
 
     /// `true` if `Rx::close` is called.
     rx_closed: bool,
+
+    p: PhantomData<T>,
 }
 
-impl<T> fmt::Debug for RxFields<T> {
+impl<T, RX: RxT<T>> RxFields<T, RX> {
+    fn flaver(&self) -> &RX {
+        &self.list
+    }
+}
+
+impl<T, R> fmt::Debug for RxFields<T, R> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("RxFields")
-            .field("list", &self.list)
+            // .field("list", &self.list)
             .field("rx_closed", &self.rx_closed)
             .finish()
     }
 }
 
-unsafe impl<T: Send, S: Send> Send for Chan<T, S> {}
-unsafe impl<T: Send, S: Sync> Sync for Chan<T, S> {}
-impl<T, S> panic::RefUnwindSafe for Chan<T, S> {}
-impl<T, S> panic::UnwindSafe for Chan<T, S> {}
+unsafe impl<T: Send, S: Send, RX> Send for Chan<T, S, RX> {}
+unsafe impl<T: Send, S: Sync, RX> Sync for Chan<T, S, RX> {}
+impl<T, S, RX> panic::RefUnwindSafe for Chan<T, S, RX> {}
+impl<T, S, RX> panic::UnwindSafe for Chan<T, S, RX> {}
 
-pub(crate) fn channel<T, S: Semaphore>(semaphore: S) -> (Tx<T, S>, Rx<T, S>) {
+pub(crate) fn channel<T, S: Semaphore, RX>(semaphore: S) -> (Tx<T, S, RX>, Rx<T, S, RX>) {
     let (tx, rx) = list::channel();
 
     let chan = Arc::new(Chan {
@@ -125,6 +150,7 @@ pub(crate) fn channel<T, S: Semaphore>(semaphore: S) -> (Tx<T, S>, Rx<T, S>) {
         rx_fields: UnsafeCell::new(RxFields {
             list: rx,
             rx_closed: false,
+            p: PhantomData,
         }),
     });
 
@@ -133,8 +159,8 @@ pub(crate) fn channel<T, S: Semaphore>(semaphore: S) -> (Tx<T, S>, Rx<T, S>) {
 
 // ===== impl Tx =====
 
-impl<T, S> Tx<T, S> {
-    fn new(chan: Arc<Chan<T, S>>) -> Tx<T, S> {
+impl<T, S, RX> Tx<T, S, RX> {
+    fn new(chan: Arc<Chan<T, S, RX>>) -> Tx<T, S, RX> {
         Tx { inner: chan }
     }
 
@@ -146,14 +172,14 @@ impl<T, S> Tx<T, S> {
         self.inner.tx_weak_count.load(Relaxed)
     }
 
-    pub(super) fn downgrade(&self) -> Arc<Chan<T, S>> {
+    pub(super) fn downgrade(&self) -> Arc<Chan<T, S, RX>> {
         self.inner.increment_weak_count();
 
         self.inner.clone()
     }
 
     // Returns the upgraded channel or None if the upgrade failed.
-    pub(super) fn upgrade(chan: Arc<Chan<T, S>>) -> Option<Self> {
+    pub(super) fn upgrade(chan: Arc<Chan<T, S, RX>>) -> Option<Self> {
         let mut tx_count = chan.tx_count.load(Acquire);
 
         loop {
@@ -192,7 +218,7 @@ impl<T, S> Tx<T, S> {
     }
 }
 
-impl<T, S: Semaphore> Tx<T, S> {
+impl<T, S: Semaphore, RX> Tx<T, S, RX> {
     pub(crate) fn is_closed(&self) -> bool {
         self.inner.semaphore.is_closed()
     }
@@ -210,8 +236,8 @@ impl<T, S: Semaphore> Tx<T, S> {
     }
 }
 
-impl<T, S> Clone for Tx<T, S> {
-    fn clone(&self) -> Tx<T, S> {
+impl<T, S, RX> Clone for Tx<T, S, RX> {
+    fn clone(&self) -> Tx<T, S, RX> {
         // Using a Relaxed ordering here is sufficient as the caller holds a
         // strong ref to `self`, preventing a concurrent decrement to zero.
         self.inner.tx_count.fetch_add(1, Relaxed);
@@ -222,7 +248,7 @@ impl<T, S> Clone for Tx<T, S> {
     }
 }
 
-impl<T, S> Drop for Tx<T, S> {
+impl<T, S, RX> Drop for Tx<T, S, RX> {
     fn drop(&mut self) {
         if self.inner.tx_count.fetch_sub(1, AcqRel) != 1 {
             return;
@@ -238,8 +264,8 @@ impl<T, S> Drop for Tx<T, S> {
 
 // ===== impl Rx =====
 
-impl<T, S: Semaphore> Rx<T, S> {
-    fn new(chan: Arc<Chan<T, S>>) -> Rx<T, S> {
+impl<T, S: Semaphore, RX: RxT<T>> Rx<T, S, RX> {
+    fn new(chan: Arc<Chan<T, S, RX>>) -> Rx<T, S, RX> {
         Rx { inner: chan }
     }
 
@@ -274,14 +300,14 @@ impl<T, S: Semaphore> Rx<T, S> {
     pub(crate) fn is_empty(&self) -> bool {
         self.inner.rx_fields.with(|rx_fields_ptr| {
             let rx_fields = unsafe { &*rx_fields_ptr };
-            rx_fields.list.is_empty(&self.inner.tx)
+            rx_fields.flaver().is_empty()
         })
     }
 
     pub(crate) fn len(&self) -> usize {
         self.inner.rx_fields.with(|rx_fields_ptr| {
             let rx_fields = unsafe { &*rx_fields_ptr };
-            rx_fields.list.len(&self.inner.tx)
+            rx_fields.flaver().len()
         })
     }
 
@@ -482,7 +508,7 @@ impl<T, S: Semaphore> Rx<T, S> {
     }
 }
 
-impl<T, S: Semaphore> Drop for Rx<T, S> {
+impl<T, S: Semaphore, RX> Drop for Rx<T, S, RX> {
     fn drop(&mut self) {
         use super::block::Read::Value;
 
@@ -500,7 +526,7 @@ impl<T, S: Semaphore> Drop for Rx<T, S> {
 
 // ===== impl Chan =====
 
-impl<T, S> Chan<T, S> {
+impl<T, S, RX> Chan<T, S, RX> {
     fn send(&self, value: T) {
         // Push the value
         self.tx.push(value);
@@ -526,7 +552,7 @@ impl<T, S> Chan<T, S> {
     }
 }
 
-impl<T, S> Drop for Chan<T, S> {
+impl<T, S, RX> Drop for Chan<T, S, RX> {
     fn drop(&mut self) {
         use super::block::Read::Value;
 

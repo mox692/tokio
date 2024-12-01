@@ -121,6 +121,7 @@ pub use self::bounded::{
 
 mod chan;
 
+pub(super) mod array;
 pub(super) mod list;
 
 mod unbounded;
