@@ -1,6 +1,7 @@
 //! Inject queue used to send wakeups to a work-stealing scheduler
 
-use crate::loom::sync::Mutex;
+use std::cell::RefCell;
+
 use crate::runtime::task;
 
 mod pop;
@@ -22,8 +23,11 @@ mod metrics;
 /// overflow queue when the local, fixed-size, array queue overflows.
 pub(crate) struct Inject<T: 'static> {
     shared: Shared<T>,
-    synced: Mutex<Synced>,
+    synced: RefCell<Synced>,
 }
+
+// TODO
+unsafe impl<T: 'static> Sync for Inject<T> {}
 
 impl<T: 'static> Inject<T> {
     pub(crate) fn new() -> Inject<T> {
@@ -31,21 +35,21 @@ impl<T: 'static> Inject<T> {
 
         Inject {
             shared,
-            synced: Mutex::new(synced),
+            synced: RefCell::new(synced),
         }
     }
 
     // Kind of annoying to have to include the cfg here
     #[cfg(tokio_taskdump)]
     pub(crate) fn is_closed(&self) -> bool {
-        let synced = self.synced.lock();
+        let synced = self.synced.borrow_mut();
         self.shared.is_closed(&synced)
     }
 
     /// Closes the injection queue, returns `true` if the queue is open when the
     /// transition is made.
     pub(crate) fn close(&self) -> bool {
-        let mut synced = self.synced.lock();
+        let mut synced = self.synced.borrow_mut();
         self.shared.close(&mut synced)
     }
 
@@ -53,7 +57,7 @@ impl<T: 'static> Inject<T> {
     ///
     /// This does nothing if the queue is closed.
     pub(crate) fn push(&self, task: task::Notified<T>) {
-        let mut synced = self.synced.lock();
+        let mut synced = self.synced.borrow_mut();
         // safety: passing correct `Synced`
         unsafe { self.shared.push(&mut synced, task) }
     }
@@ -63,7 +67,7 @@ impl<T: 'static> Inject<T> {
             return None;
         }
 
-        let mut synced = self.synced.lock();
+        let mut synced = self.synced.borrow_mut();
         // safety: passing correct `Synced`
         unsafe { self.shared.pop(&mut synced) }
     }
