@@ -88,6 +88,7 @@ time = []
 [dependencies]
 tokio-macros = { version = "~2.4.0", path = "../tokio-macros", optional = true }
 
+crossbeam = "0.8.4"
 pin-project-lite = "0.2.11"
 
 # Everything else is optional...
