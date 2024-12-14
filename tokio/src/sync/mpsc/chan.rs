@@ -490,10 +490,34 @@ impl<T, S: Semaphore> Drop for Rx<T, S> {
 
         self.inner.rx_fields.with_mut(|rx_fields_ptr| {
             let rx_fields = unsafe { &mut *rx_fields_ptr };
-
-            while let Some(Value(_)) = rx_fields.list.pop(&self.inner.tx) {
-                self.inner.semaphore.add_permit();
+            struct Guard<'a, T, S: Semaphore> {
+                list: &'a mut list::Rx<T>,
+                tx: &'a CachePadded<crate::sync::mpsc::list::Tx<T>>,
+                sem: &'a S,
             }
+
+            impl<'a, T, S: Semaphore> Guard<'a, T, S> {
+                fn drain(&mut self) {
+                    // call T's destructor.
+                    while let Some(Value(_)) = self.list.pop(self.tx) {
+                        self.sem.add_permit();
+                    }
+                }
+            }
+
+            impl<'a, T, S: Semaphore> Drop for Guard<'a, T, S> {
+                fn drop(&mut self) {
+                    self.drain();
+                }
+            }
+
+            let mut guard = Guard {
+                list: &mut rx_fields.list,
+                tx: &self.inner.tx,
+                sem: &self.inner.semaphore,
+            };
+
+            guard.drain();
         });
     }
 }
@@ -535,32 +559,8 @@ impl<T, S> Drop for Chan<T, S> {
         self.rx_fields.with_mut(|rx_fields_ptr| {
             let rx_fields = unsafe { &mut *rx_fields_ptr };
 
-            struct Guard<'a, T> {
-                list: &'a mut list::Rx<T>,
-                tx: &'a CachePadded<crate::sync::mpsc::list::Tx<T>>,
-            }
-
-            impl<'a, T> Guard<'a, T> {
-                fn drain(&mut self) {
-                    // call T's destructor.
-                    while let Some(Value(_)) = self.list.pop(self.tx) {}
-                }
-            }
-
-            impl<'a, T> Drop for Guard<'a, T> {
-                fn drop(&mut self) {
-                    self.drain();
-                    // free memory blocks
-                    unsafe { self.list.free_blocks() };
-                }
-            }
-
-            let mut guard = Guard {
-                list: &mut rx_fields.list,
-                tx: &self.tx,
-            };
-
-            guard.drain();
+            while let Some(Value(_)) = rx_fields.list.pop(&self.tx) {}
+            unsafe { rx_fields.list.free_blocks() };
         });
     }
 }
