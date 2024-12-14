@@ -1454,4 +1454,50 @@ async fn test_is_empty_32_msgs() {
     }
 }
 
+#[test]
+#[cfg(not(panic = "abort"))]
+fn drop_called() {
+    use std::sync::atomic::AtomicUsize;
+    static COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+    fn func() {
+        let (tx, rx) = mpsc::unbounded_channel();
+
+        struct A(bool);
+        impl Drop for A {
+            fn drop(&mut self) {
+                COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                if self.0 {
+                    panic!("panic!")
+                }
+            }
+        }
+
+        // This instances would be dropped in the spawned thread.
+        tx.send(A(true)).unwrap();
+        // This instances would be dropped in the main thread.
+        tx.send(A(true)).unwrap();
+        // This instances would be dropped in the main thread.
+        tx.send(A(false)).unwrap();
+
+        let jh = std::thread::spawn(|| {
+            drop(rx);
+            // `mpsc::Rx`'s drop is called, but got panicked while
+            // dropping the first value.
+        });
+
+        let _ = jh.join();
+
+        drop(tx);
+        // `mpsc::Chan`'s drop is called, got panic while dropping
+        // the second value.
+    }
+
+    let _ = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+        func();
+    }));
+
+    assert_eq!(COUNTER.load(std::sync::atomic::Ordering::Relaxed), 3);
+}
+
 fn is_debug<T: fmt::Debug>(_: &T) {}
