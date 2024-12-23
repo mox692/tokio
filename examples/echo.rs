@@ -1,78 +1,46 @@
-//! A "hello world" echo server with Tokio
-//!
-//! This server will create a TCP listener, accept connections in a loop, and
-//! write back everything that's read off of each TCP connection.
-//!
-//! Because the Tokio runtime uses a thread pool, each TCP connection is
-//! processed concurrently with all other TCP connections across multiple
-//! threads.
-//!
-//! To see this server in action, you can run this in one terminal:
-//!
-//!     cargo run --example echo
-//!
-//! and in another terminal you can run:
-//!
-//!     cargo run --example connect 127.0.0.1:8080
-//!
-//! Each line you type in to the `connect` terminal should be echo'd back to
-//! you! If you open up multiple terminals running the `connect` example you
-//! should be able to see them all make progress simultaneously.
+use std::{sync::Arc, time::Instant};
+use tokio::{runtime::Runtime, sync::Semaphore};
 
-#![warn(rust_2018_idioms)]
+fn rt(num_threads: usize) -> Runtime {
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .worker_threads(num_threads)
+        .build()
+        .unwrap()
+}
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpListener;
+fn main() {
+    let num_threads = 10;
+    let num_tasks = 10;
+    let msgs_per_task = 1_000;
+    let sem_cap = 100000;
 
-use std::env;
-use std::error::Error;
+    let rt = rt(num_threads);
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
-    // Allow passing an address to listen on as the first argument of this
-    // program, but otherwise we'll just set up our TCP listener on
-    // 127.0.0.1:8080 for connections.
-    let addr = env::args()
-        .nth(1)
-        .unwrap_or_else(|| "127.0.0.1:8080".to_string());
-
-    // Next up we create a TCP listener which will listen for incoming
-    // connections. This TCP listener is bound to the address we determined
-    // above and must be associated with an event loop.
-    let listener = TcpListener::bind(&addr).await?;
-    println!("Listening on: {addr}");
-
-    loop {
-        // Asynchronously wait for an inbound socket.
-        let (mut socket, _) = listener.accept().await?;
-
-        // And this is where much of the magic of this server happens. We
-        // crucially want all clients to make progress concurrently, rather than
-        // blocking one on completion of another. To achieve this we use the
-        // `tokio::spawn` function to execute the work in the background.
-        //
-        // Essentially here we're executing a new task to run concurrently,
-        // which will allow all of our clients to be processed concurrently.
-
-        tokio::spawn(async move {
-            let mut buf = vec![0; 1024];
-
-            // In a loop, read data from the socket and write the data back.
-            loop {
-                let n = socket
-                    .read(&mut buf)
-                    .await
-                    .expect("failed to read data from socket");
-
-                if n == 0 {
-                    return;
-                }
-
-                socket
-                    .write_all(&buf[0..n])
-                    .await
-                    .expect("failed to write data to socket");
+    rt.block_on(async {
+        let start = Instant::now();
+        let mut jhs = Vec::new();
+        let semaphore = Arc::new(Semaphore::new(sem_cap));
+        for j in 0..num_tasks {
+            for k in 0..msgs_per_task {
+                let semaphore = semaphore.clone();
+                let jh = tokio::spawn(async move {
+                    // Acquire permit before sending request.
+                    let _permit = semaphore.try_acquire().unwrap();
+                    // let _permit = semaphore.acquire().await.unwrap();
+                    // Send the request.
+                    // Drop the permit after the request has been sent.
+                    drop(_permit);
+                    // Handle response.
+                });
+                jhs.push(jh);
             }
-        });
-    }
+        }
+
+        for jh in jhs {
+            let _ = jh.await.unwrap();
+        }
+        let time = start.elapsed();
+        println!("time: {:?}", &time);
+    });
 }

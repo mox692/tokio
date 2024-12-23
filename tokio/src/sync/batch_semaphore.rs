@@ -18,6 +18,7 @@
 use crate::loom::cell::UnsafeCell;
 use crate::loom::sync::atomic::AtomicUsize;
 use crate::loom::sync::{Mutex, MutexGuard};
+use crate::util::backoff::Backoff;
 use crate::util::linked_list::{self, LinkedList};
 #[cfg(all(tokio_unstable, feature = "tracing"))]
 use crate::util::trace;
@@ -271,7 +272,12 @@ impl Semaphore {
         );
         let num_permits = num_permits << Self::PERMIT_SHIFT;
         let mut curr = self.permits.load(Acquire);
+        let mut i = 0;
+        let backoff = Backoff::new();
         loop {
+            if i % 2 == 0 && i > 0 {
+                println!("try: i: {i}");
+            }
             // Has the semaphore closed?
             if curr & Self::CLOSED == Self::CLOSED {
                 return Err(TryAcquireError::Closed);
@@ -289,7 +295,11 @@ impl Semaphore {
                     // TODO: Instrument once issue has been solved
                     return Ok(());
                 }
-                Err(actual) => curr = actual,
+                Err(actual) => {
+                    // backoff.snooze();
+                    i += 1;
+                    curr = actual
+                }
             }
         }
     }
@@ -413,8 +423,13 @@ impl Semaphore {
         // First, try to take the requested number of permits from the
         // semaphore.
         let mut curr = self.permits.load(Acquire);
+        let backoff = Backoff::new();
+        let mut i = 0;
         let mut waiters = loop {
             // Has the semaphore closed?
+            if i % 2 == 0 && i > 0 {
+                println!("i: {i}");
+            }
             if curr & Self::CLOSED > 0 {
                 return Poll::Ready(Err(AcquireError::closed()));
             }
@@ -468,7 +483,11 @@ impl Semaphore {
                     }
                     break lock.expect("lock must be acquired before waiting");
                 }
-                Err(actual) => curr = actual,
+                Err(actual) => {
+                    // backoff.snooze();
+                    i += 1;
+                    curr = actual
+                }
             }
         };
 

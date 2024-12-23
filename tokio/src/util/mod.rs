@@ -7,6 +7,8 @@ pub(crate) mod atomic_cell;
 
 pub(crate) mod metric_atomics;
 
+pub(crate) mod backoff;
+
 #[cfg(any(feature = "rt", feature = "signal", feature = "process"))]
 pub(crate) mod once_cell;
 
