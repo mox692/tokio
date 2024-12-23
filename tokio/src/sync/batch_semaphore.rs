@@ -275,20 +275,14 @@ impl Semaphore {
         let mut i = 0;
         let backoff = Backoff::new();
         loop {
-            if i % 2 == 0 && i > 0 {
+            if i % 6 == 0 && i > 0 {
                 println!("try: i: {i}");
-            }
-            // Has the semaphore closed?
-            if curr & Self::CLOSED == Self::CLOSED {
-                return Err(TryAcquireError::Closed);
-            }
-
-            // Are there enough permits remaining?
-            if curr < num_permits {
-                return Err(TryAcquireError::NoPermits);
             }
 
             let next = curr - num_permits;
+
+            // This would increase the time between load and cas
+            for _ in 0..1000 {}
 
             match self.permits.compare_exchange(curr, next, AcqRel, Acquire) {
                 Ok(_) => {
@@ -296,6 +290,7 @@ impl Semaphore {
                     return Ok(());
                 }
                 Err(actual) => {
+                    // backoff.spin();
                     // backoff.snooze();
                     i += 1;
                     curr = actual
@@ -427,6 +422,7 @@ impl Semaphore {
         let mut i = 0;
         let mut waiters = loop {
             // Has the semaphore closed?
+            // This print reduces the contension...
             if i % 2 == 0 && i > 0 {
                 println!("i: {i}");
             }
