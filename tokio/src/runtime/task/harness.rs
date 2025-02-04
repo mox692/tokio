@@ -3,8 +3,8 @@ use crate::runtime::task::core::{Cell, Core, Header, Trailer};
 use crate::runtime::task::state::{Snapshot, State};
 use crate::runtime::task::waker::waker_ref;
 use crate::runtime::task::{Id, JoinError, Notified, RawTask, Schedule, Task};
-
-use crate::runtime::TaskMeta;
+#[cfg(tokio_unstable)]
+use crate::runtime::{AfterTaskPollContext, OnTaskTerminateContext};
 use std::any::Any;
 use std::mem;
 use std::mem::ManuallyDrop;
@@ -150,8 +150,23 @@ where
     /// All necessary state checks and transitions are performed.
     /// Panics raised while polling the future are handled.
     pub(super) fn poll(self) {
+        let res = self.poll_inner();
+
+        #[cfg(tokio_unstable)]
+        self.trailer().hooks.with_mut(|ptr| unsafe {
+            ptr.as_mut().and_then(|x| {
+                x.as_mut().map(|x| {
+                    let _ = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+                        x.after_poll(&mut AfterTaskPollContext {
+                            _phantom: Default::default(),
+                        })
+                    }));
+                })
+            });
+        });
+
         // We pass our ref-count to `poll_inner`.
-        match self.poll_inner() {
+        match res {
             PollFuture::Notified => {
                 // The `poll_inner` call has given us two ref-counts back.
                 // We give one of them to a new task and call `yield_now`.
@@ -367,14 +382,18 @@ where
         //
         // We call this in a separate block so that it runs after the task appears to have
         // completed and will still run if the destructor panics.
-        if let Some(f) = self.trailer().hooks.task_terminate_callback.as_ref() {
-            let _ = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-                f(&TaskMeta {
-                    id: self.core().task_id,
-                    _phantom: Default::default(),
+        #[cfg(tokio_unstable)]
+        self.trailer().hooks.with_mut(|ptr| unsafe {
+            ptr.as_mut().and_then(|x| {
+                x.as_mut().map(|x| {
+                    let _ = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+                        x.on_task_terminate(&mut OnTaskTerminateContext {
+                            _phantom: Default::default(),
+                        })
+                    }));
                 })
-            }));
-        }
+            })
+        });
 
         // The task has completed execution and will no longer be scheduled.
         let num_release = self.release();

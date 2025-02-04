@@ -20,7 +20,7 @@ mod noop_scheduler {
             unreachable!();
         }
 
-        fn hooks(&self) -> TaskHarnessScheduleHooks {
+        fn hooks_factory_ref(&self) -> TaskHarnessScheduleHooks {
             TaskHarnessScheduleHooks {
                 task_terminate_callback: None,
             }

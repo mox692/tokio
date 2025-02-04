@@ -447,7 +447,7 @@ impl Schedule for Runtime {
         self.0.core.try_lock().unwrap().queue.push_back(task);
     }
 
-    fn hooks(&self) -> TaskHarnessScheduleHooks {
+    fn hooks_factory_ref(&self) -> TaskHarnessScheduleHooks {
         TaskHarnessScheduleHooks {
             task_terminate_callback: None,
         }
