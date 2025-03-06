@@ -352,7 +352,6 @@
 //! - Some methods on [`task::JoinSet`]
 //! - [`runtime::RuntimeMetrics`]
 //! - [`runtime::Builder::unhandled_panic`]
-//! - [`runtime::TaskContext`]
 //!
 //! This flag enables **unstable** features. The public API of these features
 //! may break in 1.x releases. To enable these features, the `--cfg
