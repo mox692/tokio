@@ -6,7 +6,8 @@ use self::noop_scheduler::NoopSchedule;
 use self::unowned_wrapper::unowned;
 
 mod noop_scheduler {
-    use crate::runtime::task::{self, Task, TaskHarnessScheduleHooks};
+    use crate::runtime::task::{self, Task};
+    use crate::runtime::{OptionalTaskHooksFactory, OptionalTaskHooksFactoryRef};
 
     /// `task::Schedule` implementation that does nothing, for testing.
     pub(crate) struct NoopSchedule;
@@ -20,10 +21,14 @@ mod noop_scheduler {
             unreachable!();
         }
 
-        fn hooks_factory_ref(&self) -> TaskHarnessScheduleHooks {
-            TaskHarnessScheduleHooks {
-                task_terminate_callback: None,
-            }
+        #[cfg(tokio_unstable)]
+        fn hooks_factory(&self) -> OptionalTaskHooksFactory {
+            None
+        }
+
+        #[cfg(tokio_unstable)]
+        fn hooks_factory_ref(&self) -> OptionalTaskHooksFactoryRef<'_> {
+            None
         }
     }
 }
@@ -41,6 +46,9 @@ mod unowned_wrapper {
         use tracing::Instrument;
         let span = tracing::trace_span!("test_span");
         let task = task.instrument(span);
+        #[cfg(tokio_unstable)]
+        let (task, handle) = crate::runtime::task::unowned(task, NoopSchedule, Id::next(), None);
+        #[cfg(not(tokio_unstable))]
         let (task, handle) = crate::runtime::task::unowned(task, NoopSchedule, Id::next());
         (task.into_notified(), handle)
     }
