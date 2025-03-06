@@ -7,6 +7,7 @@ use self::unowned_wrapper::unowned;
 
 mod noop_scheduler {
     use crate::runtime::task::{self, Task};
+    #[cfg(tokio_unstable)]
     use crate::runtime::{OptionalTaskHooksFactory, OptionalTaskHooksFactoryRef};
 
     /// `task::Schedule` implementation that does nothing, for testing.
