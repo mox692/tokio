@@ -383,16 +383,14 @@ where
         // We call this in a separate block so that it runs after the task appears to have
         // completed and will still run if the destructor panics.
         #[cfg(tokio_unstable)]
-        self.trailer().hooks.with_mut(|ptr| unsafe {
-            ptr.as_mut().and_then(|x| {
-                x.as_mut().map(|x| {
-                    let _ = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-                        x.on_task_terminate(&mut OnTaskTerminateContext {
-                            _phantom: Default::default(),
-                        })
-                    }));
-                })
-            })
+        let _ = with_task_hooks(|t| {
+            if let Some(hooks) = t {
+                let _ = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+                    hooks.on_task_terminate(&mut OnTaskTerminateContext {
+                        _phantom: Default::default(),
+                    })
+                }));
+            }
         });
 
         // The task has completed execution and will no longer be scheduled.
