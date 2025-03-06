@@ -1,4 +1,9 @@
-#![cfg(all(feature = "full", tokio_unstable, target_has_atomic = "64"))]
+#![cfg(all(
+    feature = "full",
+    tokio_unstable,
+    target_has_atomic = "64",
+    not(target_arch = "wasm32")
+))]
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
