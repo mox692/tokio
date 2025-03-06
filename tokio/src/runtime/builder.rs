@@ -697,8 +697,8 @@ impl Builder {
     /// Factory method for producing "fallback" task hook harnesses.
     ///
     /// The order of operations for assigning the hook harness for a task are as follows:
-    /// 1. [crate::task::spawn_with_hooks], if used.
-    /// 2. [crate::runtime::task_hooks::TaskHookHarnessFactory], if it returns something other than [Option::None].
+    /// 1. [`crate::task::spawn_with_hooks`], if used.
+    /// 2. [`crate::runtime::task_hooks::TaskHookHarnessFactory`], if it returns something other than [Option::None].
     /// 3. This function.
     #[cfg(all(not(loom), tokio_unstable))]
     #[cfg_attr(docsrs, doc(cfg(tokio_unstable)))]
