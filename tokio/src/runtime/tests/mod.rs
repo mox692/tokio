@@ -60,6 +60,9 @@ mod unowned_wrapper {
         T: std::future::Future + Send + 'static,
         T::Output: Send + 'static,
     {
+        #[cfg(tokio_unstable)]
+        let (task, handle) = crate::runtime::task::unowned(task, NoopSchedule, Id::next(), None);
+        #[cfg(not(tokio_unstable))]
         let (task, handle) = crate::runtime::task::unowned(task, NoopSchedule, Id::next());
         (task.into_notified(), handle)
     }
