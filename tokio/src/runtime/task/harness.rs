@@ -1,4 +1,6 @@
 use crate::future::Future;
+#[cfg(tokio_unstable)]
+use crate::runtime::context::with_task_hooks;
 use crate::runtime::task::core::{Cell, Core, Header, Trailer};
 use crate::runtime::task::state::{Snapshot, State};
 use crate::runtime::task::waker::waker_ref;
@@ -153,16 +155,14 @@ where
         let res = self.poll_inner();
 
         #[cfg(tokio_unstable)]
-        self.trailer().hooks.with_mut(|ptr| unsafe {
-            ptr.as_mut().and_then(|x| {
-                x.as_mut().map(|x| {
-                    let _ = panic::catch_unwind(panic::AssertUnwindSafe(|| {
-                        x.after_poll(&mut AfterTaskPollContext {
-                            _phantom: Default::default(),
-                        })
-                    }));
-                })
-            });
+        let _ = with_task_hooks(|t| {
+            if let Some(hooks) = t {
+                let _ = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+                    hooks.after_poll(&mut AfterTaskPollContext {
+                        _phantom: Default::default(),
+                    })
+                }));
+            }
         });
 
         // We pass our ref-count to `poll_inner`.
