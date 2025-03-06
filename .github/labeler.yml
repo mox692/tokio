@@ -2,6 +2,8 @@
 R-loom-sync:
 - tokio/src/sync/*
 - tokio/src/sync/**/*
+- tokio-util/src/sync/*
+- tokio-util/src/sync/**/*
 
 R-loom-time-driver:
 - tokio/src/runtime/time/*
