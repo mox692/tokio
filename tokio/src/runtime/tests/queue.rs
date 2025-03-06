@@ -1,6 +1,6 @@
 use crate::runtime::scheduler::multi_thread::{queue, Stats};
 use crate::runtime::task::{self, Schedule, Task};
-
+#[cfg(tokio_unstable)]
 use crate::runtime::{OptionalTaskHooksFactory, OptionalTaskHooksFactoryRef};
 use std::cell::RefCell;
 use std::thread;
@@ -286,10 +286,12 @@ impl Schedule for Runtime {
         unreachable!();
     }
 
+    #[cfg(tokio_unstable)]
     fn hooks_factory(&self) -> OptionalTaskHooksFactory {
         None
     }
 
+    #[cfg(tokio_unstable)]
     fn hooks_factory_ref(&self) -> OptionalTaskHooksFactoryRef<'_> {
         None
     }
