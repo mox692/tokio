@@ -1,6 +1,7 @@
 use crate::runtime::scheduler::multi_thread::{queue, Stats};
-use crate::runtime::task::{self, Schedule, Task, TaskHarnessScheduleHooks};
+use crate::runtime::task::{self, Schedule, Task};
 
+use crate::runtime::{OptionalTaskHooksFactory, OptionalTaskHooksFactoryRef};
 use std::cell::RefCell;
 use std::thread;
 use std::time::Duration;
@@ -285,9 +286,11 @@ impl Schedule for Runtime {
         unreachable!();
     }
 
-    fn hooks_factory_ref(&self) -> TaskHarnessScheduleHooks {
-        TaskHarnessScheduleHooks {
-            task_terminate_callback: None,
-        }
+    fn hooks_factory(&self) -> OptionalTaskHooksFactory {
+        None
+    }
+
+    fn hooks_factory_ref(&self) -> OptionalTaskHooksFactoryRef<'_> {
+        None
     }
 }

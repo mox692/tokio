@@ -1,13 +1,9 @@
 #![allow(unreachable_pub)]
-use crate::runtime::{
-    OptionalTaskHooks, OptionalTaskHooksFactory, TaskHookHarness, TaskHookHarnessFactory,
-};
 use crate::{
     runtime::{Handle, BOX_FUTURE_THRESHOLD},
     task::{JoinHandle, LocalSet},
     util::trace::SpawnMeta,
 };
-use std::sync::Arc;
 use std::{future::Future, io, mem};
 
 /// Factory which is used to configure the properties of a new task.
@@ -66,11 +62,10 @@ use std::{future::Future, io, mem};
 /// [`spawn_local`]: Builder::spawn_local
 /// [`spawn`]: Builder::spawn
 /// [`spawn_blocking`]: Builder::spawn_blocking
-#[derive(Default)]
+#[derive(Default, Debug)]
 #[cfg_attr(docsrs, doc(cfg(all(tokio_unstable, feature = "tracing"))))]
 pub struct Builder<'a> {
     name: Option<&'a str>,
-    hook_harness: OptionalTaskHooks,
 }
 
 impl<'a> Builder<'a> {
@@ -82,18 +77,6 @@ impl<'a> Builder<'a> {
     /// Assigns a name to the task which will be spawned.
     pub fn name(&mut self, name: &'a str) -> &mut Self {
         self.name = Some(name);
-        self
-    }
-
-    // todo document
-    pub fn task_hook_harness<T>(&mut self, factory: T) -> &mut Self
-    where
-        T: TaskHookHarness + Send + Sync + 'static,
-    {
-        let f = Some(Box::new(factory) as Box<dyn TaskHookHarness + Send + Sync + 'static>);
-
-        self.hook_harness = f;
-
         self
     }
 
@@ -113,17 +96,9 @@ impl<'a> Builder<'a> {
     {
         let fut_size = mem::size_of::<Fut>();
         Ok(if fut_size > BOX_FUTURE_THRESHOLD {
-            super::spawn::spawn_inner(
-                Box::pin(future),
-                SpawnMeta::new(self.name, fut_size),
-                self.hook_harness,
-            )
+            super::spawn::spawn_inner(Box::pin(future), SpawnMeta::new(self.name, fut_size), None)
         } else {
-            super::spawn::spawn_inner(
-                future,
-                SpawnMeta::new(self.name, fut_size),
-                self.hook_harness,
-            )
+            super::spawn::spawn_inner(future, SpawnMeta::new(self.name, fut_size), None)
         })
     }
 
@@ -142,17 +117,9 @@ impl<'a> Builder<'a> {
     {
         let fut_size = mem::size_of::<Fut>();
         Ok(if fut_size > BOX_FUTURE_THRESHOLD {
-            handle.spawn_named(
-                Box::pin(future),
-                SpawnMeta::new(self.name, fut_size),
-                self.hook_harness,
-            )
+            handle.spawn_named(Box::pin(future), SpawnMeta::new(self.name, fut_size), None)
         } else {
-            handle.spawn_named(
-                future,
-                SpawnMeta::new(self.name, fut_size),
-                self.hook_harness,
-            )
+            handle.spawn_named(future, SpawnMeta::new(self.name, fut_size), None)
         })
     }
 
@@ -181,14 +148,10 @@ impl<'a> Builder<'a> {
             super::local::spawn_local_inner(
                 Box::pin(future),
                 SpawnMeta::new(self.name, fut_size),
-                self.hook_harness,
+                None,
             )
         } else {
-            super::local::spawn_local_inner(
-                future,
-                SpawnMeta::new(self.name, fut_size),
-                self.hook_harness,
-            )
+            super::local::spawn_local_inner(future, SpawnMeta::new(self.name, fut_size), None)
         })
     }
 
