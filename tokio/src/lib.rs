@@ -351,8 +351,6 @@
 //! - [`task::Builder`]
 //! - Some methods on [`task::JoinSet`]
 //! - [`runtime::RuntimeMetrics`]
-//! - [`runtime::Builder::hook_harness_factory`]
-//! - [`runtime::Builder::on_task_terminate`]
 //! - [`runtime::Builder::unhandled_panic`]
 //! - [`runtime::TaskContext`]
 //!
