@@ -378,9 +378,10 @@ fn run_override(mut builder: runtime::Builder) {
     }
 
     impl TaskHookHarness for TestHooks {
-        fn on_task_terminate(&mut self, _ctx: &mut OnTaskTerminateContext<'_>) {
+        fn before_poll(&mut self, _ctx: &mut BeforeTaskPollContext<'_>) {
             self.counter.fetch_add(1, Ordering::SeqCst);
         }
+
         fn on_child_spawn(
             &mut self,
             _ctx: &mut OnChildTaskSpawnContext<'_>,
