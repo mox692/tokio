@@ -43,7 +43,7 @@ use std::{future::Future, io, mem};
 ///
 ///     loop {
 ///         let (socket, _) = listener.accept().await?;
-///  
+///
 ///         let mut builder = tokio::task::Builder::new();
 ///
 ///         builder
