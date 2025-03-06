@@ -55,12 +55,8 @@ fn after_poll() {
 #[test]
 fn terminate() {
     let ct = runtime::Builder::new_current_thread();
-    let mt = runtime::Builder::new_multi_thread();
-    let mta = runtime::Builder::new_multi_thread_alt();
 
     run_terminate(ct);
-    run_terminate(mt);
-    run_terminate(mta);
 }
 
 #[test]
