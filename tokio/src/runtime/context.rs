@@ -1,13 +1,13 @@
-#[cfg(tokio_unstable)]
+#[cfg(all(feature = "rt", tokio_unstable))]
 use crate::loom::cell::UnsafeCell;
 use crate::loom::thread::AccessError;
-#[cfg(tokio_unstable)]
+#[cfg(all(feature = "rt", tokio_unstable))]
 use crate::runtime::{OptionalTaskHooksMut, OptionalTaskHooksWeak, TaskHookHarness};
 use crate::task::coop;
 #[cfg(any(feature = "rt", feature = "macros", feature = "time"))]
 use crate::util::rand::FastRand;
 use std::cell::Cell;
-#[cfg(tokio_unstable)]
+#[cfg(all(feature = "rt", tokio_unstable))]
 use std::ptr::NonNull;
 
 cfg_rt! {
@@ -153,7 +153,7 @@ pub(crate) fn budget<R>(f: impl FnOnce(&Cell<coop::Budget>) -> R) -> Result<R, A
 #[cfg(all(feature = "rt", tokio_unstable))]
 pub(crate) struct SetTaskHooksGuard;
 
-#[cfg(tokio_unstable)]
+#[cfg(all(feature = "rt", tokio_unstable))]
 impl Drop for SetTaskHooksGuard {
     fn drop(&mut self) {
         let _ = clear_task_hooks();

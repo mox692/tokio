@@ -26,9 +26,9 @@ cfg_rt_multi_thread! {
 }
 
 use crate::runtime::driver;
-#[cfg(tokio_unstable)]
+#[cfg(all(feature = "rt", tokio_unstable))]
 use crate::runtime::task::Schedule;
-#[cfg(tokio_unstable)]
+#[cfg(all(feature = "rt", tokio_unstable))]
 use crate::runtime::{OptionalTaskHooks, OptionalTaskHooksFactory};
 
 #[derive(Debug, Clone)]
