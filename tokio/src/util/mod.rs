@@ -5,10 +5,13 @@ cfg_io_driver! {
 #[cfg(feature = "rt")]
 pub(crate) mod atomic_cell;
 
-pub(crate) mod metric_atomics;
+#[cfg(feature = "net")]
+mod blocking_check;
+#[cfg(feature = "net")]
+#[allow(unused_imports)]
+pub(crate) use blocking_check::check_socket_for_blocking;
 
-#[cfg(any(feature = "rt", feature = "signal", feature = "process"))]
-pub(crate) mod once_cell;
+pub(crate) mod metric_atomics;
 
 #[cfg(any(
     // io driver uses `WakeList` directly
@@ -89,4 +92,12 @@ pub(crate) mod cacheline;
 
 cfg_io_driver_impl! {
     pub(crate) mod ptr_expose;
+}
+
+use std::{ops::DerefMut, pin::Pin};
+
+/// Copy of [`std::pin::Pin::as_deref_mut`].
+// TODO: Remove this once we bump the MSRV to 1.84.
+pub(crate) fn pin_as_deref_mut<P: DerefMut>(ptr: Pin<&mut Pin<P>>) -> Pin<&mut P::Target> {
+    unsafe { ptr.get_unchecked_mut() }.as_mut()
 }

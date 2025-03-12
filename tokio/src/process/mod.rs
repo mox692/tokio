@@ -1164,7 +1164,12 @@ impl Child {
 
     /// Forces the child to exit.
     ///
-    /// This is equivalent to sending a `SIGKILL` on unix platforms.
+    /// This is equivalent to sending a `SIGKILL` on unix platforms
+    /// followed by [`wait`](Child::wait).
+    ///
+    /// Note: std version of [`Child::kill`](std::process::Child::kill) does not `wait`.
+    /// For an equivalent of `Child::kill` in the standard library,
+    /// use [`start_kill`](Child::start_kill).
     ///
     /// # Examples
     ///
@@ -1382,7 +1387,7 @@ impl Child {
 
 /// The standard input stream for spawned children.
 ///
-/// This type implements the `AsyncWrite` trait to pass data to the stdin handle of
+/// This type implements the `AsyncWrite` trait to pass data to the stdin
 /// handle of a child process asynchronously.
 #[derive(Debug)]
 pub struct ChildStdin {
