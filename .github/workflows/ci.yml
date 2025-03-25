@@ -916,12 +916,13 @@ jobs:
       - name: Clone Quinn
         run: git clone https://github.com/quinn-rs/quinn.git
 
-      - name: Checkout the latest release because HEAD maybe contains breakage.
-        run: |
-          set -x
-          tag=$(git describe --abbrev=0 --tags)
-          git checkout "${tag}"
-        working-directory: quinn
+      # TODO: Re-enable this once https://github.com/quinn-rs/quinn/pull/2188 is released.
+      # - name: Checkout the latest release because HEAD maybe contains breakage.
+      #   run: |
+      #     set -x
+      #     tag=$(git describe --abbrev=0 --tags)
+      #     git checkout "${tag}"
+      #   working-directory: quinn
 
       - name: Patch Quinn to use tokio from this repository
         run: |
