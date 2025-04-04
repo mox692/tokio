@@ -1,6 +1,7 @@
-use crate::fs::asyncify;
+use crate::{fs::asyncify, runtime::context::with_ringcontext_mut};
 
-use std::{io, path::Path};
+use io_uring::{opcode, types};
+use std::{ffi::c_int, io, os::unix::ffi::OsStrExt, path::Path};
 
 /// Reads the entire contents of a file into a bytes vector.
 ///
@@ -46,4 +47,60 @@ use std::{io, path::Path};
 pub async fn read(path: impl AsRef<Path>) -> io::Result<Vec<u8>> {
     let path = path.as_ref().to_owned();
     asyncify(move || std::fs::read(path)).await
+}
+
+#[test]
+fn test_read2() {
+    let rt = crate::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    rt.block_on(async {
+        read2("test.txt").await.unwrap();
+    });
+}
+
+async fn read2(path: impl AsRef<Path>) -> io::Result<Vec<u8>> {
+    // doing io_uring stuff
+
+    use std::ffi::CString;
+
+    with_ringcontext_mut(|ctx| {
+        let ring = &mut ctx.ring;
+        // open file
+        let p_ref = path.as_ref().as_os_str().as_bytes();
+        let s = CString::new(p_ref).unwrap();
+        let s = s.as_ptr();
+        let flags = libc::O_CLOEXEC | libc::O_RDWR | libc::O_APPEND | libc::O_CREAT;
+
+        let open_op = opcode::OpenAt::new(types::Fd(libc::AT_FDCWD), s)
+            .flags(flags)
+            .mode(0o666)
+            .build();
+
+        unsafe { ring.submission().push(&open_op).unwrap() };
+
+        let n = ring.submit_and_wait(1).unwrap();
+
+        let mut fd = 0;
+        for cqe in ring.completion() {
+            fd = cqe.result();
+        }
+
+        // read a file
+        let mut buf = [0u8; 32];
+        let ptr = buf.as_mut_ptr();
+        let len = buf.len();
+        let entry = opcode::Read::new(types::Fd(fd as c_int), ptr, len as _)
+            .offset(0)
+            .build();
+
+        unsafe { ring.submission().push(&entry).unwrap() };
+
+        let n = ring.submit_and_wait(1).unwrap();
+
+        println!("buf content:::::::: {:?}", &buf);
+    });
+
+    Ok(vec![])
 }

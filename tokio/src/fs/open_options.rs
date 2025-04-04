@@ -1,4 +1,5 @@
 use crate::fs::{asyncify, File};
+use crate::runtime::context::Op;
 
 use std::io;
 use std::path::Path;
@@ -393,12 +394,72 @@ impl OpenOptions {
         Ok(File::from_std(std))
     }
 
+    /// docs
+    pub async fn open2(&self, path: impl AsRef<Path>) -> io::Result<File> {
+        use crate::runtime::context::with_ringcontext_mut;
+        use io_uring::{opcode, types};
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+
+        let op = with_ringcontext_mut(|ctx| {
+            let ring = &mut ctx.ring;
+            // open file
+            let p_ref = path.as_ref().as_os_str().as_bytes();
+            let s = CString::new(p_ref).unwrap();
+            let s = s.as_ptr();
+            let flags = libc::O_CLOEXEC | libc::O_RDWR | libc::O_APPEND | libc::O_CREAT;
+
+            let ops = &mut ctx.ops;
+            let index = ops.insert(crate::runtime::context::Lifecycle::Submitted);
+            let op = Op::new(index, Open {});
+
+            let open_op = opcode::OpenAt::new(types::Fd(libc::AT_FDCWD), s)
+                .flags(flags)
+                .mode(0o666)
+                .build();
+
+            unsafe { ring.submission().push(&open_op).unwrap() };
+
+            // io_uring_enter, without waiting.
+            let n = ring.submit().unwrap();
+
+            op
+
+            // let mut fd = 0;
+            // for cqe in ring.completion() {
+            //     fd = cqe.result();
+            // }
+
+            // // read a file
+            // let mut buf = [0u8; 32];
+            // let ptr = buf.as_mut_ptr();
+            // let len = buf.len();
+            // let entry = opcode::Read::new(types::Fd(fd as c_int), ptr, len as _)
+            //     .offset(0)
+            //     .build();
+
+            // unsafe { ring.submission().push(&entry).unwrap() };
+
+            // let n = ring.submit_and_wait(1).unwrap();
+
+            // println!("buf content:::::::: {:?}", &buf);
+        });
+
+        todo!()
+    }
+
     /// Returns a mutable reference to the underlying `std::fs::OpenOptions`
     #[cfg(any(windows, unix))]
     pub(super) fn as_inner_mut(&mut self) -> &mut StdOpenOptions {
         &mut self.0
     }
 }
+
+// TODO: should be placed elsewhere.
+struct Open {}
+
+// TODO: should be placed elsewhere.
+impl Op<Open> {}
 
 feature! {
     #![unix]

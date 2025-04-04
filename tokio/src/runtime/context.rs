@@ -2,6 +2,9 @@ use crate::loom::thread::AccessError;
 use crate::task::coop;
 
 use std::cell::Cell;
+use std::future::Future;
+use std::mem;
+use std::task::Poll;
 
 #[cfg(any(feature = "rt", feature = "macros", feature = "time"))]
 use crate::util::rand::FastRand;
@@ -72,6 +75,103 @@ struct Context {
         any(target_arch = "aarch64", target_arch = "x86", target_arch = "x86_64")
     ))]
     trace: trace::Context,
+
+    #[cfg(all(tokio_unstable, feature = "rt", target_os = "linux"))]
+    uring_context: Cell<Option<UringContext>>,
+}
+
+/// Move to other files.
+// TODO: should be placed elsewhere.
+pub(crate) struct UringContext {
+    pub(crate) ring: io_uring::IoUring,
+    pub(crate) ops: slab::Slab<Lifecycle>,
+}
+
+impl UringContext {
+    fn new() -> Self {
+        Self {
+            ring: io_uring::IoUring::new(8).unwrap(),
+            ops: slab::Slab::new(),
+        }
+    }
+}
+
+impl UringContext {
+    pub(crate) fn insert(&mut self, lifecycle: Lifecycle) -> usize {
+        self.ops.insert(lifecycle)
+    }
+}
+
+// TODO: should be placed elsewhere.
+#[allow(dead_code)]
+pub(crate) enum Lifecycle {
+    /// The operation has been submitted to uring and is currently in-flight
+    Submitted,
+
+    /// The submitter is waiting for the completion of the operation
+    Waiting(Waker),
+
+    /// The submitter no longer has interest in the operation result. The state
+    /// must be passed to the driver and held until the operation completes.
+    Ignored(Box<dyn std::any::Any>),
+
+    /// The operation has completed with a single cqe result
+    Completed(io_uring::cqueue::Entry),
+    // /// One or more completion results have been recieved
+    // /// This holds the indices uniquely identifying the list within the slab
+    // CompletionList(SlabListIndices),
+}
+
+// TODO: should be placed elsewhere.
+pub(crate) struct Op<T> {
+    // Operation index in the slab
+    index: usize,
+
+    // Per operation data.
+    data: T,
+}
+
+impl<T> Op<T> {
+    pub(crate) fn new(index: usize, data: T) -> Self {
+        Self { index, data }
+    }
+}
+
+impl<T> Future for Op<T> {
+    type Output = Option<T>;
+    fn poll(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        with_ringcontext_mut(|ctx| {
+            let ops = &mut ctx.ops;
+            let lifecycle = ops.get_mut(self.index).expect("invalid internal state");
+
+            match mem::replace(lifecycle, Lifecycle::Submitted) {
+                Lifecycle::Submitted => {
+                    *lifecycle = Lifecycle::Waiting(cx.waker().clone());
+                    Poll::Pending
+                }
+                Lifecycle::Waiting(waker) if !waker.will_wake(cx.waker()) => {
+                    *lifecycle = Lifecycle::Waiting(cx.waker().clone());
+                    Poll::Pending
+                }
+                Lifecycle::Waiting(waker) => {
+                    *lifecycle = Lifecycle::Waiting(waker);
+                    Poll::Pending
+                }
+                Lifecycle::Ignored(..) => unreachable!(),
+                Lifecycle::Completed(cqe) => {
+                    // self.ops.remove(op.index());
+                    // Poll::Ready(op.take_data().unwrap().complete(cqe.into()))
+                    Poll::Pending
+                } // Lifecycle::CompletionList(..) => {
+                  //     unreachable!("No `more` flag set for SingleCQE")
+                  // }
+            }
+        })
+        .unwrap()
+    }
 }
 
 tokio_thread_local! {
@@ -117,6 +217,9 @@ tokio_thread_local! {
                 )
             ))]
             trace: trace::Context::new(),
+
+            #[cfg(all(tokio_unstable, feature = "rt", target_os = "linux"))]
+            uring_context: Cell::new(None)
         }
     }
 }
@@ -200,5 +303,15 @@ cfg_rt! {
         pub(crate) unsafe fn with_trace<R>(f: impl FnOnce(&trace::Context) -> R) -> Option<R> {
             CONTEXT.try_with(|c| f(&c.trace)).ok()
         }
+    }
+
+    #[cfg(all(tokio_unstable, feature = "rt", target_os = "linux"))]
+    pub(crate) fn with_ringcontext_mut<R>(f: impl FnOnce(&mut UringContext) -> R) -> Option<R> {
+        CONTEXT.try_with(|c| {
+            let mut ctx = c.uring_context.take().unwrap_or(UringContext::new());
+            let res = f(&mut ctx);
+            c.uring_context.set(Some(ctx));
+            res
+        }).ok()
     }
 }
