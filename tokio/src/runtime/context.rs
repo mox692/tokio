@@ -1,10 +1,12 @@
+use io_uring::cqueue;
+
 use crate::loom::thread::AccessError;
 use crate::task::coop;
 
 use std::cell::Cell;
 use std::future::Future;
-use std::mem;
 use std::task::Poll;
+use std::{io, mem};
 
 #[cfg(any(feature = "rt", feature = "macros", feature = "time"))]
 use crate::util::rand::FastRand;
@@ -135,6 +137,31 @@ impl<T> Op<T> {
     pub(crate) fn new(index: usize, data: T) -> Self {
         Self { index, data }
     }
+}
+
+/// A single CQE entry
+pub(crate) struct CqeResult {
+    pub(crate) result: io::Result<u32>,
+    pub(crate) flags: u32,
+}
+
+impl From<cqueue::Entry> for CqeResult {
+    fn from(cqe: cqueue::Entry) -> Self {
+        let res = cqe.result();
+        let flags = cqe.flags();
+        let result = if res >= 0 {
+            Ok(res as u32)
+        } else {
+            Err(io::Error::from_raw_os_error(-res))
+        };
+        CqeResult { result, flags }
+    }
+}
+
+pub(crate) trait Completable {
+    type Output;
+    /// `complete` will be called for cqe's do not have the `more` flag set
+    fn complete(self, cqe: CqeResult) -> Self::Output;
 }
 
 impl<T> Future for Op<T> {

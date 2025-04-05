@@ -1,7 +1,8 @@
 use crate::fs::{asyncify, File};
-use crate::runtime::context::Op;
+use crate::runtime::context::{Completable, Op};
 
 use std::io;
+use std::os::fd::FromRawFd;
 use std::path::Path;
 
 #[cfg(test)]
@@ -443,7 +444,10 @@ impl OpenOptions {
             // let n = ring.submit_and_wait(1).unwrap();
 
             // println!("buf content:::::::: {:?}", &buf);
-        });
+        })
+        .unwrap();
+
+        let s = op.await;
 
         todo!()
     }
@@ -460,6 +464,14 @@ struct Open {}
 
 // TODO: should be placed elsewhere.
 impl Op<Open> {}
+
+impl Completable for Open {
+    type Output = io::Result<crate::fs::File>;
+    fn complete(self, cqe: crate::runtime::context::CqeResult) -> Self::Output {
+        let fd = cqe.result? as i32;
+        Ok(unsafe { crate::fs::File::from_raw_fd(fd) })
+    }
+}
 
 feature! {
     #![unix]
