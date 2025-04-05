@@ -422,28 +422,10 @@ impl OpenOptions {
             unsafe { ring.submission().push(&open_op).unwrap() };
 
             // io_uring_enter, without waiting.
+            // TODO: ideally, we avoid submit here and utilize batching.
             let n = ring.submit().unwrap();
 
             op
-
-            // let mut fd = 0;
-            // for cqe in ring.completion() {
-            //     fd = cqe.result();
-            // }
-
-            // // read a file
-            // let mut buf = [0u8; 32];
-            // let ptr = buf.as_mut_ptr();
-            // let len = buf.len();
-            // let entry = opcode::Read::new(types::Fd(fd as c_int), ptr, len as _)
-            //     .offset(0)
-            //     .build();
-
-            // unsafe { ring.submission().push(&entry).unwrap() };
-
-            // let n = ring.submit_and_wait(1).unwrap();
-
-            // println!("buf content:::::::: {:?}", &buf);
         })
         .unwrap();
 
@@ -457,6 +439,17 @@ impl OpenOptions {
     pub(super) fn as_inner_mut(&mut self) -> &mut StdOpenOptions {
         &mut self.0
     }
+}
+
+#[test]
+fn test_open2() {
+    let rt = crate::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    rt.block_on(async {
+        OpenOptions::new().open2("foo.txt").await.unwrap();
+    });
 }
 
 // TODO: should be placed elsewhere.

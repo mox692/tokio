@@ -56,6 +56,7 @@
 //! the inject queue indefinitely. This would be a ref-count cycle and a memory
 //! leak.
 
+use crate::io::Interest;
 use crate::loom::sync::{Arc, Mutex};
 use crate::runtime;
 use crate::runtime::scheduler::multi_thread::{
@@ -68,8 +69,10 @@ use crate::runtime::{context, TaskHooks};
 use crate::task::coop;
 use crate::util::atomic_cell::AtomicCell;
 use crate::util::rand::{FastRand, RngSeedGenerator};
+use mio::unix::SourceFd;
 
 use std::cell::RefCell;
+use std::os::fd::AsRawFd;
 use std::task::Waker;
 use std::thread;
 use std::time::Duration;
@@ -490,6 +493,21 @@ fn run(worker: Arc<Worker>) {
     worker.handle.shared.worker_metrics[worker.index].set_thread_id(thread::current().id());
 
     let handle = scheduler::Handle::MultiThread(worker.handle.clone());
+
+    // setup for io_uring
+    let eventfd = worker
+        .handle
+        .driver
+        .io()
+        .with_current_uring(worker.index, |ctx| ctx.eventfd.as_raw_fd());
+
+    // register to epoll
+    let mut source = SourceFd(&eventfd);
+    handle
+        .driver()
+        .io()
+        .add_uring_source(&mut source, Interest::READABLE)
+        .unwrap();
 
     crate::runtime::context::enter_runtime(&handle, true, |_| {
         // Set the worker context.

@@ -10,10 +10,14 @@ use crate::runtime::driver;
 use crate::runtime::io::registration_set;
 use crate::runtime::io::{IoDriverMetrics, RegistrationSet, ScheduledIo};
 
+use io_uring::IoUring;
 use mio::event::Source;
+use mio::Token;
+use nix::sys::eventfd::{EfdFlags, EventFd};
 use std::fmt;
 use std::io;
-use std::sync::Arc;
+use std::os::fd::{AsFd, AsRawFd};
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 /// I/O driver, backed by Mio.
@@ -45,6 +49,27 @@ pub(crate) struct Handle {
     waker: mio::Waker,
 
     pub(crate) metrics: IoDriverMetrics,
+
+    // TODO: can we avoid RwLock?
+    uring_contexts: Box<[RwLock<UringContext>]>,
+}
+
+pub(crate) struct UringContext {
+    pub(crate) uring: io_uring::IoUring,
+    pub(crate) eventfd: EventFd,
+}
+
+impl UringContext {
+    fn new() -> Self {
+        let eventfd = EventFd::from_value_and_flags(0, EfdFlags::EFD_NONBLOCK).unwrap();
+        let uring = IoUring::new(8).unwrap();
+        uring
+            .submitter()
+            .register_eventfd(eventfd.as_fd().as_raw_fd())
+            .unwrap();
+
+        Self { uring, eventfd }
+    }
 }
 
 #[derive(Debug)]
@@ -91,7 +116,7 @@ fn _assert_kinds() {
 impl Driver {
     /// Creates a new event loop, returning any error that happened during the
     /// creation.
-    pub(crate) fn new(nevents: usize) -> io::Result<(Driver, Handle)> {
+    pub(crate) fn new(nevents: usize, num_worker: usize) -> io::Result<(Driver, Handle)> {
         let poll = mio::Poll::new()?;
         #[cfg(not(target_os = "wasi"))]
         let waker = mio::Waker::new(poll.registry(), TOKEN_WAKEUP)?;
@@ -103,6 +128,11 @@ impl Driver {
             poll,
         };
 
+        let uring_contexts = (0..num_worker)
+            .map(|_| RwLock::new(UringContext::new()))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+
         let (registrations, synced) = RegistrationSet::new();
 
         let handle = Handle {
@@ -112,6 +142,7 @@ impl Driver {
             #[cfg(not(target_os = "wasi"))]
             waker,
             metrics: IoDriverMetrics::default(),
+            uring_contexts,
         };
 
         Ok((driver, handle))
@@ -206,6 +237,33 @@ impl Handle {
     pub(crate) fn unpark(&self) {
         #[cfg(not(target_os = "wasi"))]
         self.waker.wake().expect("failed to wake I/O driver");
+    }
+
+    /// Called when runtime starts.
+    pub(crate) fn add_uring_source(
+        &self,
+        source: &mut impl mio::event::Source,
+        interest: Interest,
+    ) -> io::Result<()> {
+        self.registry.register(source, Token(0), interest.to_mio())
+    }
+
+    pub(crate) fn with_current_uring<R>(
+        &self,
+        index: usize,
+        f: impl FnOnce(&UringContext) -> R,
+    ) -> R {
+        let ctx = self.uring_contexts[index].read().unwrap();
+        f(&*ctx)
+    }
+
+    pub(crate) fn with_current_uring_mut<R>(
+        &self,
+        index: usize,
+        f: impl FnOnce(&mut UringContext) -> R,
+    ) -> R {
+        let mut ctx = self.uring_contexts[index].write().unwrap();
+        f(&mut *ctx)
     }
 
     /// Registers an I/O resource with the reactor for a given `mio::Ready` state.
