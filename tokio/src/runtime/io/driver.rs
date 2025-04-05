@@ -6,14 +6,16 @@ cfg_signal_internal_and_unix! {
 use crate::io::interest::Interest;
 use crate::io::ready::Ready;
 use crate::loom::sync::Mutex;
+use crate::runtime::context::Lifecycle;
 use crate::runtime::driver;
 use crate::runtime::io::registration_set;
 use crate::runtime::io::{IoDriverMetrics, RegistrationSet, ScheduledIo};
 
 use io_uring::IoUring;
 use mio::event::Source;
-use mio::Token;
 use nix::sys::eventfd::{EfdFlags, EventFd};
+use nix::unistd::read;
+use slab::Slab;
 use std::fmt;
 use std::io;
 use std::os::fd::{AsFd, AsRawFd};
@@ -56,6 +58,7 @@ pub(crate) struct Handle {
 
 pub(crate) struct UringContext {
     pub(crate) uring: io_uring::IoUring,
+    pub(crate) ops: slab::Slab<Lifecycle>,
     pub(crate) eventfd: EventFd,
 }
 
@@ -68,7 +71,11 @@ impl UringContext {
             .register_eventfd(eventfd.as_fd().as_raw_fd())
             .unwrap();
 
-        Self { uring, eventfd }
+        Self {
+            ops: Slab::new(),
+            uring,
+            eventfd,
+        }
     }
 }
 
@@ -104,6 +111,18 @@ pub(super) enum Tick {
 
 const TOKEN_WAKEUP: mio::Token = mio::Token(0);
 const TOKEN_SIGNAL: mio::Token = mio::Token(1);
+
+fn is_uring_token(token: mio::Token) -> bool {
+    token.0 & (1 << 63) != 0
+}
+
+fn get_worker_index(token: mio::Token) -> usize {
+    (token.0 & 0x7FFF_FFFF_FFFF_FFFF) as usize
+}
+
+fn uring_token(index: usize) -> mio::Token {
+    mio::Token(index | (1 << 63))
+}
 
 fn _assert_kinds() {
     fn _assert<T: Send + Sync>() {}
@@ -197,6 +216,27 @@ impl Driver {
                 // Nothing to do, the event is used to unblock the I/O driver
             } else if token == TOKEN_SIGNAL {
                 self.signal_ready = true;
+            } else if is_uring_token(token) {
+                let index = get_worker_index(token);
+
+                handle.with_current_uring_mut(index, |ctx| {
+                    let mut _buf = [0u8; 32];
+                    read(ctx.eventfd.as_raw_fd(), &mut _buf).unwrap();
+
+                    let cq = ctx.uring.completion();
+                    let ops = &mut ctx.ops;
+
+                    for cqe in cq {
+                        let index = cqe.user_data();
+
+                        let lifecycle: &mut Lifecycle = ops.get_mut(index as usize).unwrap();
+                        match lifecycle {
+                            Lifecycle::Waiting(waker) => waker.wake_by_ref(),
+                            _ => unreachable!(),
+                        };
+                        *lifecycle = Lifecycle::Completed(cqe);
+                    }
+                });
             } else {
                 let ready = Ready::from_mio(event);
                 let ptr = super::EXPOSE_IO.from_exposed_addr(token.0);
@@ -243,9 +283,11 @@ impl Handle {
     pub(crate) fn add_uring_source(
         &self,
         source: &mut impl mio::event::Source,
+        worker_index: usize,
         interest: Interest,
     ) -> io::Result<()> {
-        self.registry.register(source, Token(0), interest.to_mio())
+        self.registry
+            .register(source, uring_token(worker_index), interest.to_mio())
     }
 
     pub(crate) fn with_current_uring<R>(

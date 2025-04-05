@@ -506,7 +506,7 @@ fn run(worker: Arc<Worker>) {
     handle
         .driver()
         .io()
-        .add_uring_source(&mut source, Interest::READABLE)
+        .add_uring_source(&mut source, worker.index, Interest::READABLE)
         .unwrap();
 
     crate::runtime::context::enter_runtime(&handle, true, |_| {

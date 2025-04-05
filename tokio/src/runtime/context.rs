@@ -106,6 +106,7 @@ impl UringContext {
 
 // TODO: should be placed elsewhere.
 #[allow(dead_code)]
+#[derive(Debug)]
 pub(crate) enum Lifecycle {
     /// The operation has been submitted to uring and is currently in-flight
     Submitted,
@@ -124,18 +125,27 @@ pub(crate) enum Lifecycle {
     // CompletionList(SlabListIndices),
 }
 
+// TODO: check!!!
+unsafe impl Send for Lifecycle {}
+unsafe impl Sync for Lifecycle {}
+
 // TODO: should be placed elsewhere.
 pub(crate) struct Op<T> {
     // Operation index in the slab
     index: usize,
-
     // Per operation data.
-    data: T,
+    data: Option<T>,
 }
 
 impl<T> Op<T> {
     pub(crate) fn new(index: usize, data: T) -> Self {
-        Self { index, data }
+        Self {
+            index,
+            data: Some(data),
+        }
+    }
+    pub(crate) fn take_data(&mut self) -> Option<T> {
+        self.data.take()
     }
 }
 
@@ -164,40 +174,47 @@ pub(crate) trait Completable {
     fn complete(self, cqe: CqeResult) -> Self::Output;
 }
 
-impl<T> Future for Op<T> {
-    type Output = Option<T>;
+impl<T: Completable> Future for Op<T> {
+    type Output = T::Output;
     fn poll(
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Self::Output> {
-        with_ringcontext_mut(|ctx| {
-            let ops = &mut ctx.ops;
-            let lifecycle = ops.get_mut(self.index).expect("invalid internal state");
+        let this = unsafe { self.get_unchecked_mut() };
 
-            match mem::replace(lifecycle, Lifecycle::Submitted) {
-                Lifecycle::Submitted => {
-                    *lifecycle = Lifecycle::Waiting(cx.waker().clone());
-                    Poll::Pending
+        let id = thread_id().unwrap().as_u64();
+        let index = this.index;
+
+        let op = crate::runtime::Handle::current()
+            .inner
+            .driver()
+            .io()
+            .with_current_uring_mut(id as usize, |ctx| {
+                let ops = &mut ctx.ops;
+                let lifecycle = ops.get_mut(index).expect("invalid internal state");
+
+                match mem::replace(lifecycle, Lifecycle::Submitted) {
+                    Lifecycle::Submitted => {
+                        *lifecycle = Lifecycle::Waiting(cx.waker().clone());
+                        Poll::Pending
+                    }
+                    Lifecycle::Waiting(waker) if !waker.will_wake(cx.waker()) => {
+                        *lifecycle = Lifecycle::Waiting(cx.waker().clone());
+                        Poll::Pending
+                    }
+                    Lifecycle::Waiting(waker) => {
+                        *lifecycle = Lifecycle::Waiting(waker);
+                        Poll::Pending
+                    }
+                    Lifecycle::Ignored(..) => unreachable!(),
+                    Lifecycle::Completed(cqe) => {
+                        ops.remove(index);
+                        Poll::Ready(this.take_data().unwrap().complete(cqe.into()))
+                    }
                 }
-                Lifecycle::Waiting(waker) if !waker.will_wake(cx.waker()) => {
-                    *lifecycle = Lifecycle::Waiting(cx.waker().clone());
-                    Poll::Pending
-                }
-                Lifecycle::Waiting(waker) => {
-                    *lifecycle = Lifecycle::Waiting(waker);
-                    Poll::Pending
-                }
-                Lifecycle::Ignored(..) => unreachable!(),
-                Lifecycle::Completed(cqe) => {
-                    // self.ops.remove(op.index());
-                    // Poll::Ready(op.take_data().unwrap().complete(cqe.into()))
-                    Poll::Pending
-                } // Lifecycle::CompletionList(..) => {
-                  //     unreachable!("No `more` flag set for SingleCQE")
-                  // }
-            }
-        })
-        .unwrap()
+            });
+
+        op
     }
 }
 

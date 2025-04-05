@@ -96,5 +96,9 @@ path = "named-pipe-multi-client.rs"
 name = "dump"
 path = "dump.rs"
 
+[[example]]
+name = "uring_fs"
+path = "uring_fs.rs"
+
 [lints]
 workspace = true
