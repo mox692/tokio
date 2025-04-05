@@ -1,6 +1,8 @@
 use crate::fs::{asyncify, File};
+use crate::runtime::context::{thread_id, Completable, Op};
 
 use std::io;
+use std::os::fd::FromRawFd;
 use std::path::Path;
 
 #[cfg(test)]
@@ -393,10 +395,80 @@ impl OpenOptions {
         Ok(File::from_std(std))
     }
 
+    /// docs
+    pub async fn open3(&self, path: impl AsRef<Path>) -> io::Result<File> {
+        use io_uring::{opcode, types};
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+
+        let id = thread_id().unwrap();
+        let op = crate::runtime::Handle::current()
+            .inner
+            .driver()
+            .io()
+            .with_current_uring_mut(id.as_u64() as usize, |ctx| {
+                let ring = &mut ctx.uring;
+                // open file
+                let p_ref = path.as_ref().as_os_str().as_bytes();
+                let s = CString::new(p_ref).unwrap();
+                let s = s.as_ptr();
+                let flags = libc::O_CLOEXEC | libc::O_RDWR | libc::O_APPEND | libc::O_CREAT;
+
+                let ops = &mut ctx.ops;
+                let index = ops.insert(crate::runtime::context::Lifecycle::Submitted);
+                let op = Op::new(index, Open {});
+
+                let open_op = opcode::OpenAt::new(types::Fd(libc::AT_FDCWD), s)
+                    .flags(flags)
+                    .mode(0o666)
+                    .build()
+                    .user_data(index as u64);
+
+                unsafe { ring.submission().push(&open_op).unwrap() };
+
+                // io_uring_enter, without waiting.
+                // TODO: ideally, we avoid submit here and utilize batching.
+
+                let n = ring.submit().unwrap();
+
+                op
+            });
+
+        op.await
+    }
+
     /// Returns a mutable reference to the underlying `std::fs::OpenOptions`
     #[cfg(any(windows, unix))]
     pub(super) fn as_inner_mut(&mut self) -> &mut StdOpenOptions {
         &mut self.0
+    }
+}
+
+#[test]
+fn test_open3() {
+    let rt = crate::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async {
+        let file = OpenOptions::new().open3("foo.txt").await.unwrap();
+        let meta = file.metadata().await.unwrap();
+        println!("meta: {:?}", &meta);
+    });
+}
+
+// TODO: should be placed elsewhere.
+struct Open {}
+
+// TODO: should be placed elsewhere.
+impl Op<Open> {}
+
+impl Completable for Open {
+    type Output = io::Result<crate::fs::File>;
+    fn complete(self, cqe: crate::runtime::context::CqeResult) -> Self::Output {
+        let fd = cqe.result? as i32;
+        Ok(unsafe { crate::fs::File::from_raw_fd(fd) })
     }
 }
 

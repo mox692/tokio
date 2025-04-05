@@ -22,6 +22,11 @@ impl ThreadId {
             }
         }
     }
+
+    #[inline]
+    pub(crate) fn as_u64(&self) -> u64 {
+        self.0.get()
+    }
 }
 
 #[cold]
