@@ -206,7 +206,9 @@ impl Driver {
                     let lifecycle: &mut Lifecycle = ops.get_mut(index as usize).unwrap();
                     match lifecycle {
                         Lifecycle::Waiting(waker) => waker.wake_by_ref(),
-                        _ => unreachable!(),
+                        _ => {
+                            panic!("should not reach here; lifecycle: {:?}", &lifecycle);
+                        }
                     };
                     *lifecycle = Lifecycle::Completed(cqe);
                 }
