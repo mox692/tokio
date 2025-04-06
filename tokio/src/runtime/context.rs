@@ -105,6 +105,7 @@ unsafe impl Sync for Lifecycle {}
 pub(crate) enum State {
     Initialize(Option<Entry>),
     EverPolled(usize), // slab key
+    Complete,
 }
 // TODO: should be placed elsewhere.
 pub(crate) struct Op<T> {
@@ -133,7 +134,9 @@ impl<T> Op<T> {
 impl<T> Drop for Op<T> {
     fn drop(&mut self) {
         match self.state {
-            State::Initialize(_) => unreachable!(),
+            // We've already deregistere op. fast path.
+            State::Complete => (),
+            // We have to deregistere op.
             State::EverPolled(index) => {
                 let handle = crate::runtime::Handle::current();
                 handle
@@ -142,6 +145,7 @@ impl<T> Drop for Op<T> {
                     .io()
                     .deregister_op(self.worker_id, index);
             }
+            State::Initialize(_) => unreachable!(),
         }
     }
 }
@@ -223,11 +227,17 @@ impl<T: Completable> Future for Op<T> {
                     Lifecycle::Cancelled => unreachable!(),
                     Lifecycle::Completed(cqe) => {
                         ops.remove(*index);
+
+                        this.state = State::Complete;
+
                         Poll::Ready(this.take_data().unwrap().complete(cqe.into()))
                     }
                 };
                 op
             }
+
+            // TODO: we could reach here if user poll after completion.
+            State::Complete => unreachable!(),
         }
     }
 }
