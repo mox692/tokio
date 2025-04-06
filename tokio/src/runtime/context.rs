@@ -122,6 +122,8 @@ impl<T> Op<T> {
     pub(crate) fn new(entry: Entry, data: T) -> Self {
         Self {
             data: Some(data),
+            // TODO: maybe we should use (thread_id % num_workers) in case
+            //       this task spawned in non-worker thread
             worker_id: thread_id().expect("Failed to get thread ID").as_u64(),
             state: State::Initialize(Some(entry)),
         }
