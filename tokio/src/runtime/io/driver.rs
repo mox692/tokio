@@ -189,6 +189,7 @@ impl Driver {
                 let index = get_worker_index(token);
                 let mut _buf = [0u8; 32];
 
+                // TODO: We should definitely avoid acquiring a lock here.
                 let mut guard = handle.get_uring(index).lock();
                 let ctx = guard.deref_mut();
 
@@ -196,8 +197,9 @@ impl Driver {
                 read(eventfd, &mut _buf).unwrap();
 
                 let ops = &mut ctx.ops;
+                // TODO: safety comment
                 let uring = &mut ctx.uring;
-                for cqe in uring.completion() {
+                for cqe in unsafe { uring.completion_shared() } {
                     let index = cqe.user_data();
 
                     let lifecycle: &mut Lifecycle = ops.get_mut(index as usize).unwrap();

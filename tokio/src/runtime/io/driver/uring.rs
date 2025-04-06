@@ -18,11 +18,14 @@ use std::{
 pub(crate) struct UringContext {
     pub(crate) uring: io_uring::IoUring,
     pub(crate) ops: slab::Slab<Lifecycle>,
+    // TODO: we could eliminate this eventfd, like tokio-uring does?
     pub(crate) eventfd: EventFd,
 }
 
 impl UringContext {
     pub(crate) fn new() -> Self {
+        // TODO: we could eliminate this eventfd, like tokio-uring does? In that case,
+        //       I guess we should just pass the fd of the uring to the epoll_ctl.
         let eventfd = EventFd::from_value_and_flags(0, EfdFlags::EFD_NONBLOCK).unwrap();
         let uring = IoUring::new(8).unwrap();
         uring
@@ -67,7 +70,7 @@ impl Handle {
     }
 
     pub(crate) fn register_op<T>(&self, index: usize, sqe: Entry, data: T) -> Op<T> {
-        let mut ctx = self.uring_contexts[index].lock();
+        let mut ctx = self.get_uring(index).lock();
         let index = ctx
             .ops
             .insert(crate::runtime::context::Lifecycle::Submitted);

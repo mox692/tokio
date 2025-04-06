@@ -414,6 +414,7 @@ impl OpenOptions {
             .mode(mode)
             .build();
 
+        // TODO: can we delay this lock call into poll function?
         let op = crate::runtime::Handle::current()
             .inner
             .driver()
