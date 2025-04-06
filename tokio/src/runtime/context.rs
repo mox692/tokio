@@ -77,9 +77,6 @@ struct Context {
         any(target_arch = "aarch64", target_arch = "x86", target_arch = "x86_64")
     ))]
     trace: trace::Context,
-
-    #[cfg(all(tokio_unstable, feature = "rt", target_os = "linux"))]
-    uring_context: Cell<Option<UringContext>>,
 }
 
 /// Move to other files.
@@ -261,9 +258,6 @@ tokio_thread_local! {
                 )
             ))]
             trace: trace::Context::new(),
-
-            #[cfg(all(tokio_unstable, feature = "rt", target_os = "linux"))]
-            uring_context: Cell::new(None)
         }
     }
 }
@@ -347,15 +341,5 @@ cfg_rt! {
         pub(crate) unsafe fn with_trace<R>(f: impl FnOnce(&trace::Context) -> R) -> Option<R> {
             CONTEXT.try_with(|c| f(&c.trace)).ok()
         }
-    }
-
-    #[cfg(all(tokio_unstable, feature = "rt", target_os = "linux"))]
-    pub(crate) fn with_ringcontext_mut<R>(f: impl FnOnce(&mut UringContext) -> R) -> Option<R> {
-        CONTEXT.try_with(|c| {
-            let mut ctx = c.uring_context.take().unwrap_or(UringContext::new());
-            let res = f(&mut ctx);
-            c.uring_context.set(Some(ctx));
-            res
-        }).ok()
     }
 }
