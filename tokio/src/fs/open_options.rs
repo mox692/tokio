@@ -401,37 +401,42 @@ impl OpenOptions {
         use std::ffi::CString;
         use std::os::unix::ffi::OsStrExt;
 
-        let id = thread_id().unwrap();
+        let id = thread_id().expect("Failed to get thread ID");
+        let path_bytes = path.as_ref().as_os_str().as_bytes();
+        let c_path = CString::new(path_bytes).expect("Path contains null byte");
+
+        // TODO: make configurable
+        let flags = libc::O_CLOEXEC | libc::O_RDWR | libc::O_APPEND | libc::O_CREAT;
+        let mode = 0o666;
+
+        // TODO: move this to somewhare (maybe in the io module?)
         let op = crate::runtime::Handle::current()
             .inner
             .driver()
             .io()
             .with_current_uring_mut(id.as_u64() as usize, |ctx| {
                 let ring = &mut ctx.uring;
-                // open file
-                let p_ref = path.as_ref().as_os_str().as_bytes();
-                let s = CString::new(p_ref).unwrap();
-                let s = s.as_ptr();
-                let flags = libc::O_CLOEXEC | libc::O_RDWR | libc::O_APPEND | libc::O_CREAT;
-
                 let ops = &mut ctx.ops;
-                let index = ops.insert(crate::runtime::context::Lifecycle::Submitted);
-                let op = Op::new(index, Open {});
 
-                let open_op = opcode::OpenAt::new(types::Fd(libc::AT_FDCWD), s)
+                let index = ops.insert(crate::runtime::context::Lifecycle::Submitted);
+                let open_op = opcode::OpenAt::new(types::Fd(libc::AT_FDCWD), c_path.as_ptr())
                     .flags(flags)
-                    .mode(0o666)
+                    .mode(mode)
                     .build()
                     .user_data(index as u64);
 
-                unsafe { ring.submission().push(&open_op).unwrap() };
+                // Safety: We're assuming `open_op` is valid and holding a lock for this ring.
+                unsafe {
+                    ring.submission()
+                        .push(&open_op)
+                        .expect("submission queue is full");
+                }
 
-                // io_uring_enter, without waiting.
-                // TODO: ideally, we avoid submit here and utilize batching.
+                // Submit without waiting.
+                // TODO: Consider batching in the future.
+                let _ = ring.submit().expect("submit failed");
 
-                let n = ring.submit().unwrap();
-
-                op
+                Op::new(index, Open {})
             });
 
         op.await
