@@ -79,28 +79,6 @@ struct Context {
     trace: trace::Context,
 }
 
-/// Move to other files.
-// TODO: should be placed elsewhere.
-pub(crate) struct UringContext {
-    pub(crate) ring: io_uring::IoUring,
-    pub(crate) ops: slab::Slab<Lifecycle>,
-}
-
-impl UringContext {
-    fn new() -> Self {
-        Self {
-            ring: io_uring::IoUring::new(8).unwrap(),
-            ops: slab::Slab::new(),
-        }
-    }
-}
-
-impl UringContext {
-    pub(crate) fn insert(&mut self, lifecycle: Lifecycle) -> usize {
-        self.ops.insert(lifecycle)
-    }
-}
-
 // TODO: should be placed elsewhere.
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -117,9 +95,6 @@ pub(crate) enum Lifecycle {
 
     /// The operation has completed with a single cqe result
     Completed(io_uring::cqueue::Entry),
-    // /// One or more completion results have been recieved
-    // /// This holds the indices uniquely identifying the list within the slab
-    // CompletionList(SlabListIndices),
 }
 
 // TODO: check!!!
@@ -177,6 +152,7 @@ impl<T: Completable> Future for Op<T> {
         self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Self::Output> {
+        // TODO: safety comment
         let this = unsafe { self.get_unchecked_mut() };
 
         let id = thread_id().unwrap().as_u64();
