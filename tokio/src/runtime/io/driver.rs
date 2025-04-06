@@ -19,7 +19,7 @@ use slab::Slab;
 use std::fmt;
 use std::io;
 use std::os::fd::{AsFd, AsRawFd};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
 
 /// I/O driver, backed by Mio.
@@ -53,7 +53,7 @@ pub(crate) struct Handle {
     pub(crate) metrics: IoDriverMetrics,
 
     // TODO: can we avoid RwLock?
-    uring_contexts: Box<[RwLock<UringContext>]>,
+    uring_contexts: Box<[Mutex<UringContext>]>,
 }
 
 pub(crate) struct UringContext {
@@ -148,7 +148,7 @@ impl Driver {
         };
 
         let uring_contexts = (0..num_worker)
-            .map(|_| RwLock::new(UringContext::new()))
+            .map(|_| Mutex::new(UringContext::new()))
             .collect::<Vec<_>>()
             .into_boxed_slice();
 
@@ -290,21 +290,12 @@ impl Handle {
             .register(source, uring_token(worker_index), interest.to_mio())
     }
 
-    pub(crate) fn with_current_uring<R>(
-        &self,
-        index: usize,
-        f: impl FnOnce(&UringContext) -> R,
-    ) -> R {
-        let ctx = self.uring_contexts[index].read().unwrap();
-        f(&*ctx)
-    }
-
     pub(crate) fn with_current_uring_mut<R>(
         &self,
         index: usize,
         f: impl FnOnce(&mut UringContext) -> R,
     ) -> R {
-        let mut ctx = self.uring_contexts[index].write().unwrap();
+        let mut ctx = self.uring_contexts[index].lock();
         f(&mut *ctx)
     }
 
