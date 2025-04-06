@@ -197,8 +197,9 @@ impl Driver {
                 read(eventfd, &mut _buf).unwrap();
 
                 let ops = &mut ctx.ops;
+                let uring = &ctx.uring;
+
                 // TODO: safety comment
-                let uring = &mut ctx.uring;
                 for cqe in unsafe { uring.completion_shared() } {
                     let index = cqe.user_data();
 
