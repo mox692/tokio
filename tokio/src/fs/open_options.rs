@@ -1,6 +1,6 @@
 use crate::fs::{asyncify, File};
 use crate::io::uring::open::Open;
-use crate::runtime::context::thread_id;
+use crate::runtime::context::Op;
 
 use std::io;
 use std::path::Path;
@@ -401,7 +401,6 @@ impl OpenOptions {
         use std::ffi::CString;
         use std::os::unix::ffi::OsStrExt;
 
-        let id = thread_id().expect("Failed to get thread ID");
         let path_bytes = path.as_ref().as_os_str().as_bytes();
         let c_path = CString::new(path_bytes).expect("Path contains null byte");
 
@@ -414,12 +413,7 @@ impl OpenOptions {
             .mode(mode)
             .build();
 
-        // TODO: can we delay this lock call into poll function?
-        let op = crate::runtime::Handle::current()
-            .inner
-            .driver()
-            .io()
-            .register_op(id.as_u64() as usize, open_op, Open {});
+        let op = Op::new(open_op, Open {});
 
         op.await
     }

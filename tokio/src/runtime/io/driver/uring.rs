@@ -2,17 +2,15 @@ use io_uring::{squeue::Entry, IoUring};
 use nix::sys::eventfd::{EfdFlags, EventFd};
 use slab::Slab;
 
-use crate::{
-    io::Interest,
-    loom::sync::Mutex,
-    runtime::context::{Lifecycle, Op},
-};
+use crate::{io::Interest, loom::sync::Mutex, runtime::context::Lifecycle};
 
 use super::{Driver, Handle};
 
 use std::{
     io,
+    ops::DerefMut,
     os::fd::{AsFd, AsRawFd},
+    task::Waker,
 };
 
 pub(crate) struct UringContext {
@@ -65,30 +63,26 @@ impl Handle {
             .register(source, uring_token(worker_index), interest.to_mio())
     }
 
-    pub(crate) fn get_uring(&self, index: usize) -> &Mutex<UringContext> {
-        &self.uring_contexts[index]
+    pub(crate) fn get_uring(&self, worker_index: usize) -> &Mutex<UringContext> {
+        &self.uring_contexts[worker_index]
     }
 
-    pub(crate) fn register_op<T>(&self, index: usize, sqe: Entry, data: T) -> Op<T> {
-        let mut ctx = self.get_uring(index).lock();
-        let index = ctx
-            .ops
-            .insert(crate::runtime::context::Lifecycle::Submitted);
+    pub(crate) fn register_op(&self, worker_id: u64, entry: Entry, waker: Waker) -> usize {
+        let mut guard = self.get_uring(worker_id as usize).lock();
+        let lock = guard.deref_mut();
+        let ring = &mut lock.uring;
+        let ops = &mut lock.ops;
+        let index = ops.insert(Lifecycle::Waiting(waker));
 
-        let ring = &mut ctx.uring;
-
-        // Safety: We're assuming `open_op` is valid and holding a lock for this ring.
         unsafe {
             ring.submission()
-                .push(&sqe.user_data(index as u64))
+                .push(&entry)
                 .expect("submission queue is full");
         }
 
-        // Submit without waiting.
-        // TODO: Consider batching in the future.
         let _ = ring.submit().expect("submit failed");
 
-        Op::new(index, data)
+        index
     }
 }
 

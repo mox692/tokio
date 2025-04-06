@@ -1,4 +1,5 @@
 use io_uring::cqueue;
+use io_uring::squeue::Entry;
 
 use crate::loom::thread::AccessError;
 use crate::task::coop;
@@ -101,19 +102,26 @@ pub(crate) enum Lifecycle {
 unsafe impl Send for Lifecycle {}
 unsafe impl Sync for Lifecycle {}
 
+pub(crate) enum State {
+    Initialize(Option<Entry>),
+    EverPolled(usize), // slab key
+}
 // TODO: should be placed elsewhere.
 pub(crate) struct Op<T> {
-    // Operation index in the slab
-    index: usize,
+    // spawned worker id.
+    worker_id: u64,
+    // state of this Op
+    state: State,
     // Per operation data.
     data: Option<T>,
 }
 
 impl<T> Op<T> {
-    pub(crate) fn new(index: usize, data: T) -> Self {
+    pub(crate) fn new(entry: Entry, data: T) -> Self {
         Self {
-            index,
             data: Some(data),
+            worker_id: thread_id().expect("Failed to get thread ID").as_u64(),
+            state: State::Initialize(Some(entry)),
         }
     }
     pub(crate) fn take_data(&mut self) -> Option<T> {
@@ -154,37 +162,56 @@ impl<T: Completable> Future for Op<T> {
     ) -> std::task::Poll<Self::Output> {
         // TODO: safety comment
         let this = unsafe { self.get_unchecked_mut() };
+        let worker_id = this.worker_id;
 
-        let id = thread_id().unwrap().as_u64();
-        let index = this.index;
+        match &mut this.state {
+            State::Initialize(entry) => {
+                let handle = crate::runtime::Handle::current();
 
-        let handle = crate::runtime::Handle::current();
-        let mut lock = handle.inner.driver().io().get_uring(id as usize).lock();
+                let index = handle.inner.driver().io().register_op(
+                    worker_id,
+                    entry.take().unwrap(),
+                    cx.waker().clone(),
+                );
 
-        let ops = &mut lock.ops;
-        let lifecycle = ops.get_mut(index).expect("invalid internal state");
+                this.state = State::EverPolled(index);
 
-        let op = match mem::replace(lifecycle, Lifecycle::Submitted) {
-            Lifecycle::Submitted => {
-                *lifecycle = Lifecycle::Waiting(cx.waker().clone());
                 Poll::Pending
             }
-            Lifecycle::Waiting(waker) if !waker.will_wake(cx.waker()) => {
-                *lifecycle = Lifecycle::Waiting(cx.waker().clone());
-                Poll::Pending
-            }
-            Lifecycle::Waiting(waker) => {
-                *lifecycle = Lifecycle::Waiting(waker);
-                Poll::Pending
-            }
-            Lifecycle::Ignored(..) => unreachable!(),
-            Lifecycle::Completed(cqe) => {
-                ops.remove(index);
-                Poll::Ready(this.take_data().unwrap().complete(cqe.into()))
-            }
-        };
+            State::EverPolled(index) => {
+                let handle = crate::runtime::Handle::current();
+                let mut lock = handle
+                    .inner
+                    .driver()
+                    .io()
+                    .get_uring(worker_id as usize)
+                    .lock();
 
-        op
+                let ops = &mut lock.ops;
+                let lifecycle = ops.get_mut(*index).unwrap();
+
+                let op = match mem::replace(lifecycle, Lifecycle::Submitted) {
+                    Lifecycle::Submitted => {
+                        *lifecycle = Lifecycle::Waiting(cx.waker().clone());
+                        Poll::Pending
+                    }
+                    Lifecycle::Waiting(waker) if !waker.will_wake(cx.waker()) => {
+                        *lifecycle = Lifecycle::Waiting(cx.waker().clone());
+                        Poll::Pending
+                    }
+                    Lifecycle::Waiting(waker) => {
+                        *lifecycle = Lifecycle::Waiting(waker);
+                        Poll::Pending
+                    }
+                    Lifecycle::Ignored(..) => unreachable!(),
+                    Lifecycle::Completed(cqe) => {
+                        ops.remove(*index);
+                        Poll::Ready(this.take_data().unwrap().complete(cqe.into()))
+                    }
+                };
+                op
+            }
+        }
     }
 }
 

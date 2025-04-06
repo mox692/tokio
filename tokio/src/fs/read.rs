@@ -1,7 +1,7 @@
 use crate::{
     fs::{asyncify, OpenOptions},
     io::uring::read::Read,
-    runtime::context::thread_id,
+    runtime::context::Op,
 };
 
 use std::{io, os::fd::AsRawFd, path::Path};
@@ -56,10 +56,8 @@ pub async fn read(path: impl AsRef<Path>) -> io::Result<Vec<u8>> {
 pub async fn read3(path: impl AsRef<Path>) -> io::Result<Vec<u8>> {
     use io_uring::{opcode, types};
 
-    let id = thread_id().expect("Failed to get thread ID");
-    let file = OpenOptions::new().open3(path).await?;
-
     let mut buf = vec![0u8; 1024];
+    let file = OpenOptions::new().open3(path).await?;
     let read_op = opcode::Read::new(
         types::Fd(file.as_raw_fd()),
         buf.as_mut_ptr(),
@@ -67,13 +65,7 @@ pub async fn read3(path: impl AsRef<Path>) -> io::Result<Vec<u8>> {
     )
     .build();
 
-    let op = crate::runtime::Handle::current()
-        .inner
-        .driver()
-        .io()
-        .register_op(id.as_u64() as usize, read_op, Read {});
-
-    let n = op.await?;
-
+    let op = Op::new(read_op, Read {});
+    let n = op.await;
     Ok(buf)
 }
