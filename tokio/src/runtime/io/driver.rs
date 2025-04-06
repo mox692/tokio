@@ -3,15 +3,17 @@ cfg_signal_internal_and_unix! {
     mod signal;
 }
 
+// io_uring
+mod uring;
+
 use crate::io::interest::Interest;
 use crate::io::ready::Ready;
 use crate::loom::sync::Mutex;
-use crate::runtime::context::{Lifecycle, Op};
+use crate::runtime::context::Lifecycle;
 use crate::runtime::driver;
 use crate::runtime::io::registration_set;
 use crate::runtime::io::{IoDriverMetrics, RegistrationSet, ScheduledIo};
 
-use io_uring::squeue::Entry;
 use io_uring::IoUring;
 use mio::event::Source;
 use nix::sys::eventfd::{EfdFlags, EventFd};
@@ -22,6 +24,7 @@ use std::io;
 use std::os::fd::{AsFd, AsRawFd};
 use std::sync::Arc;
 use std::time::Duration;
+use uring::{get_worker_index, is_uring_token};
 
 /// I/O driver, backed by Mio.
 pub(crate) struct Driver {
@@ -112,18 +115,6 @@ pub(super) enum Tick {
 
 const TOKEN_WAKEUP: mio::Token = mio::Token(0);
 const TOKEN_SIGNAL: mio::Token = mio::Token(1);
-
-fn is_uring_token(token: mio::Token) -> bool {
-    token.0 & (1 << 63) != 0
-}
-
-fn get_worker_index(token: mio::Token) -> usize {
-    (token.0 & 0x7FFF_FFFF_FFFF_FFFF) as usize
-}
-
-fn uring_token(index: usize) -> mio::Token {
-    mio::Token(index | (1 << 63))
-}
 
 fn _assert_kinds() {
     fn _assert<T: Send + Sync>() {}
@@ -217,7 +208,9 @@ impl Driver {
                 // Nothing to do, the event is used to unblock the I/O driver
             } else if token == TOKEN_SIGNAL {
                 self.signal_ready = true;
-            } else if is_uring_token(token) {
+            }
+            // TODO: cfg gate
+            else if is_uring_token(token) {
                 let index = get_worker_index(token);
 
                 handle.with_current_uring_mut(index, |ctx| {
@@ -280,17 +273,6 @@ impl Handle {
         self.waker.wake().expect("failed to wake I/O driver");
     }
 
-    /// Called when runtime starts.
-    pub(crate) fn add_uring_source(
-        &self,
-        source: &mut impl mio::event::Source,
-        worker_index: usize,
-        interest: Interest,
-    ) -> io::Result<()> {
-        self.registry
-            .register(source, uring_token(worker_index), interest.to_mio())
-    }
-
     pub(crate) fn with_current_uring_mut<R>(
         &self,
         index: usize,
@@ -299,29 +281,6 @@ impl Handle {
         let mut ctx = self.uring_contexts[index].lock();
         f(&mut *ctx)
     }
-
-    pub(crate) fn register_op<T>(&self, index: usize, sqe: Entry, data: T) -> Op<T> {
-        let mut ctx = self.uring_contexts[index].lock();
-        let index = ctx
-            .ops
-            .insert(crate::runtime::context::Lifecycle::Submitted);
-
-        let ring = &mut ctx.uring;
-
-        // Safety: We're assuming `open_op` is valid and holding a lock for this ring.
-        unsafe {
-            ring.submission()
-                .push(&sqe.user_data(index as u64))
-                .expect("submission queue is full");
-        }
-
-        // Submit without waiting.
-        // TODO: Consider batching in the future.
-        let _ = ring.submit().expect("submit failed");
-
-        Op::new(index, data)
-    }
-
     /// Registers an I/O resource with the reactor for a given `mio::Ready` state.
     ///
     /// The registration token is returned.

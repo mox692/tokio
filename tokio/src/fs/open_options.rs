@@ -430,20 +430,6 @@ impl OpenOptions {
     }
 }
 
-#[test]
-fn test_open3() {
-    let rt = crate::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .unwrap();
-
-    rt.block_on(async {
-        let file = OpenOptions::new().open3("foo.txt").await.unwrap();
-        let meta = file.metadata().await.unwrap();
-        println!("meta: {:?}", &meta);
-    });
-}
-
 feature! {
     #![unix]
 
