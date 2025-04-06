@@ -61,6 +61,15 @@ impl Handle {
             .register(source, uring_token(worker_index), interest.to_mio())
     }
 
+    pub(crate) fn with_uring_mut<R>(
+        &self,
+        index: usize,
+        f: impl FnOnce(&mut UringContext) -> R,
+    ) -> R {
+        let mut ctx = self.uring_contexts[index].lock();
+        f(&mut *ctx)
+    }
+
     pub(crate) fn register_op<T>(&self, index: usize, sqe: Entry, data: T) -> Op<T> {
         let mut ctx = self.uring_contexts[index].lock();
         let index = ctx

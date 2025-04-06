@@ -162,7 +162,7 @@ impl<T: Completable> Future for Op<T> {
             .inner
             .driver()
             .io()
-            .with_current_uring_mut(id as usize, |ctx| {
+            .with_uring_mut(id as usize, |ctx| {
                 let ops = &mut ctx.ops;
                 let lifecycle = ops.get_mut(index).expect("invalid internal state");
 

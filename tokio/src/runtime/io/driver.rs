@@ -187,7 +187,7 @@ impl Driver {
             else if is_uring_token(token) {
                 let index = get_worker_index(token);
 
-                handle.with_current_uring_mut(index, |ctx| {
+                handle.with_uring_mut(index, |ctx| {
                     let mut _buf = [0u8; 32];
                     read(ctx.eventfd.as_raw_fd(), &mut _buf).unwrap();
 
@@ -247,14 +247,6 @@ impl Handle {
         self.waker.wake().expect("failed to wake I/O driver");
     }
 
-    pub(crate) fn with_current_uring_mut<R>(
-        &self,
-        index: usize,
-        f: impl FnOnce(&mut UringContext) -> R,
-    ) -> R {
-        let mut ctx = self.uring_contexts[index].lock();
-        f(&mut *ctx)
-    }
     /// Registers an I/O resource with the reactor for a given `mio::Ready` state.
     ///
     /// The registration token is returned.

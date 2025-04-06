@@ -499,7 +499,7 @@ fn run(worker: Arc<Worker>) {
         .handle
         .driver
         .io()
-        .with_current_uring_mut(worker.index, |ctx| ctx.eventfd.as_raw_fd());
+        .with_uring_mut(worker.index, |ctx| ctx.eventfd.as_raw_fd());
 
     // register to epoll
     let mut source = SourceFd(&eventfd);
