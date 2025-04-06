@@ -205,12 +205,19 @@ impl Driver {
 
                     let lifecycle: &mut Lifecycle = ops.get_mut(index as usize).unwrap();
                     match lifecycle {
-                        Lifecycle::Waiting(waker) => waker.wake_by_ref(),
+                        Lifecycle::Waiting(waker) => {
+                            waker.wake_by_ref();
+                            *lifecycle = Lifecycle::Completed(cqe);
+                        }
+                        Lifecycle::Cancelled => {
+                            // Op is cancelled and dropped, so we just remove the
+                            // index from the slab
+                            let _ = ops.remove(index as usize);
+                        }
                         _ => {
                             panic!("should not reach here; lifecycle: {:?}", &lifecycle);
                         }
                     };
-                    *lifecycle = Lifecycle::Completed(cqe);
                 }
             } else {
                 let ready = Ready::from_mio(event);

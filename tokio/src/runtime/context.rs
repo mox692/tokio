@@ -92,7 +92,7 @@ pub(crate) enum Lifecycle {
 
     /// The submitter no longer has interest in the operation result. The state
     /// must be passed to the driver and held until the operation completes.
-    Ignored(Box<dyn std::any::Any>),
+    Cancelled,
 
     /// The operation has completed with a single cqe result
     Completed(io_uring::cqueue::Entry),
@@ -108,7 +108,8 @@ pub(crate) enum State {
 }
 // TODO: should be placed elsewhere.
 pub(crate) struct Op<T> {
-    // spawned worker id.
+    // worker thread that created this Op. Note that there could be a case where
+    // this future is sent to another thread. This id is just used for sharding purpose.
     worker_id: u64,
     // state of this Op
     state: State,
@@ -126,6 +127,22 @@ impl<T> Op<T> {
     }
     pub(crate) fn take_data(&mut self) -> Option<T> {
         self.data.take()
+    }
+}
+
+impl<T> Drop for Op<T> {
+    fn drop(&mut self) {
+        match self.state {
+            State::Initialize(_) => unreachable!(),
+            State::EverPolled(index) => {
+                let handle = crate::runtime::Handle::current();
+                handle
+                    .inner
+                    .driver()
+                    .io()
+                    .deregister_op(self.worker_id, index);
+            }
+        }
     }
 }
 
@@ -203,7 +220,7 @@ impl<T: Completable> Future for Op<T> {
                         *lifecycle = Lifecycle::Waiting(waker);
                         Poll::Pending
                     }
-                    Lifecycle::Ignored(..) => unreachable!(),
+                    Lifecycle::Cancelled => unreachable!(),
                     Lifecycle::Completed(cqe) => {
                         ops.remove(*index);
                         Poll::Ready(this.take_data().unwrap().complete(cqe.into()))

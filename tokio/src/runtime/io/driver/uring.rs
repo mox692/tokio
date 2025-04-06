@@ -7,7 +7,7 @@ use crate::{io::Interest, loom::sync::Mutex, runtime::context::Lifecycle};
 use super::{Driver, Handle};
 
 use std::{
-    io,
+    io, mem,
     ops::DerefMut,
     os::fd::{AsFd, AsRawFd},
     task::Waker,
@@ -82,7 +82,27 @@ impl Handle {
 
         let _ = ring.submit().expect("submit failed");
 
+        drop(guard);
+
         index
+    }
+
+    pub(crate) fn deregister_op(&self, worker_id: u64, index: usize) {
+        let mut guard = self.get_uring(worker_id as usize).lock();
+        let lock = guard.deref_mut();
+        let ops = &mut lock.ops;
+        let Some(lifecycle) = ops.get_mut(index) else {
+            // this Op is already done.
+            return;
+        };
+
+        // this Op will be cancelled.
+
+        match mem::replace(lifecycle, Lifecycle::Cancelled) {
+            Lifecycle::Submitted | Lifecycle::Waiting(_) => (),
+            // We should not see a Complete state here.
+            _ => unreachable!(),
+        };
     }
 }
 
