@@ -239,7 +239,7 @@ mod open_options;
 pub use self::open_options::OpenOptions;
 
 mod read;
-pub use self::read::read;
+pub use self::read::{read, read3};
 
 mod read_dir;
 pub use self::read_dir::{read_dir, DirEntry, ReadDir};
