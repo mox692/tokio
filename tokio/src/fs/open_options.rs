@@ -1,8 +1,8 @@
 use crate::fs::{asyncify, File};
-use crate::runtime::context::{thread_id, Completable, Op};
+use crate::io::uring::open::Open;
+use crate::runtime::context::thread_id;
 
 use std::io;
-use std::os::fd::FromRawFd;
 use std::path::Path;
 
 #[cfg(test)]
@@ -409,35 +409,16 @@ impl OpenOptions {
         let flags = libc::O_CLOEXEC | libc::O_RDWR | libc::O_APPEND | libc::O_CREAT;
         let mode = 0o666;
 
-        // TODO: move this to somewhare (maybe in the io module?)
+        let open_op = opcode::OpenAt::new(types::Fd(libc::AT_FDCWD), c_path.as_ptr())
+            .flags(flags)
+            .mode(mode)
+            .build();
+
         let op = crate::runtime::Handle::current()
             .inner
             .driver()
             .io()
-            .with_current_uring_mut(id.as_u64() as usize, |ctx| {
-                let ring = &mut ctx.uring;
-                let ops = &mut ctx.ops;
-
-                let index = ops.insert(crate::runtime::context::Lifecycle::Submitted);
-                let open_op = opcode::OpenAt::new(types::Fd(libc::AT_FDCWD), c_path.as_ptr())
-                    .flags(flags)
-                    .mode(mode)
-                    .build()
-                    .user_data(index as u64);
-
-                // Safety: We're assuming `open_op` is valid and holding a lock for this ring.
-                unsafe {
-                    ring.submission()
-                        .push(&open_op)
-                        .expect("submission queue is full");
-                }
-
-                // Submit without waiting.
-                // TODO: Consider batching in the future.
-                let _ = ring.submit().expect("submit failed");
-
-                Op::new(index, Open {})
-            });
+            .register_op(id.as_u64() as usize, open_op, Open {});
 
         op.await
     }
@@ -461,20 +442,6 @@ fn test_open3() {
         let meta = file.metadata().await.unwrap();
         println!("meta: {:?}", &meta);
     });
-}
-
-// TODO: should be placed elsewhere.
-struct Open {}
-
-// TODO: should be placed elsewhere.
-impl Op<Open> {}
-
-impl Completable for Open {
-    type Output = io::Result<crate::fs::File>;
-    fn complete(self, cqe: crate::runtime::context::CqeResult) -> Self::Output {
-        let fd = cqe.result? as i32;
-        Ok(unsafe { crate::fs::File::from_raw_fd(fd) })
-    }
 }
 
 feature! {

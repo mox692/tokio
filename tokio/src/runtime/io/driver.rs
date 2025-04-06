@@ -6,11 +6,12 @@ cfg_signal_internal_and_unix! {
 use crate::io::interest::Interest;
 use crate::io::ready::Ready;
 use crate::loom::sync::Mutex;
-use crate::runtime::context::Lifecycle;
+use crate::runtime::context::{Lifecycle, Op};
 use crate::runtime::driver;
 use crate::runtime::io::registration_set;
 use crate::runtime::io::{IoDriverMetrics, RegistrationSet, ScheduledIo};
 
+use io_uring::squeue::Entry;
 use io_uring::IoUring;
 use mio::event::Source;
 use nix::sys::eventfd::{EfdFlags, EventFd};
@@ -297,6 +298,28 @@ impl Handle {
     ) -> R {
         let mut ctx = self.uring_contexts[index].lock();
         f(&mut *ctx)
+    }
+
+    pub(crate) fn register_op<T>(&self, index: usize, sqe: Entry, data: T) -> Op<T> {
+        let mut ctx = self.uring_contexts[index].lock();
+        let index = ctx
+            .ops
+            .insert(crate::runtime::context::Lifecycle::Submitted);
+
+        let ring = &mut ctx.uring;
+
+        // Safety: We're assuming `open_op` is valid and holding a lock for this ring.
+        unsafe {
+            ring.submission()
+                .push(&sqe.user_data(index as u64))
+                .expect("submission queue is full");
+        }
+
+        // Submit without waiting.
+        // TODO: Consider batching in the future.
+        let _ = ring.submit().expect("submit failed");
+
+        Op::new(index, data)
     }
 
     /// Registers an I/O resource with the reactor for a given `mio::Ready` state.
