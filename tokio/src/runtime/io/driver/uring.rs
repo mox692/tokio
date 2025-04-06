@@ -1,10 +1,41 @@
-use io_uring::squeue::Entry;
+use io_uring::{squeue::Entry, IoUring};
+use nix::sys::eventfd::{EfdFlags, EventFd};
+use slab::Slab;
 
-use crate::{io::Interest, runtime::context::Op};
+use crate::{
+    io::Interest,
+    runtime::context::{Lifecycle, Op},
+};
 
 use super::{Driver, Handle};
 
-use std::io;
+use std::{
+    io,
+    os::fd::{AsFd, AsRawFd},
+};
+
+pub(crate) struct UringContext {
+    pub(crate) uring: io_uring::IoUring,
+    pub(crate) ops: slab::Slab<Lifecycle>,
+    pub(crate) eventfd: EventFd,
+}
+
+impl UringContext {
+    pub(crate) fn new() -> Self {
+        let eventfd = EventFd::from_value_and_flags(0, EfdFlags::EFD_NONBLOCK).unwrap();
+        let uring = IoUring::new(8).unwrap();
+        uring
+            .submitter()
+            .register_eventfd(eventfd.as_fd().as_raw_fd())
+            .unwrap();
+
+        Self {
+            ops: Slab::new(),
+            uring,
+            eventfd,
+        }
+    }
+}
 
 pub(super) fn is_uring_token(token: mio::Token) -> bool {
     token.0 & (1 << 63) != 0

@@ -14,17 +14,14 @@ use crate::runtime::driver;
 use crate::runtime::io::registration_set;
 use crate::runtime::io::{IoDriverMetrics, RegistrationSet, ScheduledIo};
 
-use io_uring::IoUring;
 use mio::event::Source;
-use nix::sys::eventfd::{EfdFlags, EventFd};
 use nix::unistd::read;
-use slab::Slab;
 use std::fmt;
 use std::io;
-use std::os::fd::{AsFd, AsRawFd};
+use std::os::fd::AsRawFd;
 use std::sync::Arc;
 use std::time::Duration;
-use uring::{get_worker_index, is_uring_token};
+use uring::{get_worker_index, is_uring_token, UringContext};
 
 /// I/O driver, backed by Mio.
 pub(crate) struct Driver {
@@ -58,29 +55,6 @@ pub(crate) struct Handle {
 
     // TODO: can we avoid RwLock?
     uring_contexts: Box<[Mutex<UringContext>]>,
-}
-
-pub(crate) struct UringContext {
-    pub(crate) uring: io_uring::IoUring,
-    pub(crate) ops: slab::Slab<Lifecycle>,
-    pub(crate) eventfd: EventFd,
-}
-
-impl UringContext {
-    fn new() -> Self {
-        let eventfd = EventFd::from_value_and_flags(0, EfdFlags::EFD_NONBLOCK).unwrap();
-        let uring = IoUring::new(8).unwrap();
-        uring
-            .submitter()
-            .register_eventfd(eventfd.as_fd().as_raw_fd())
-            .unwrap();
-
-        Self {
-            ops: Slab::new(),
-            uring,
-            eventfd,
-        }
-    }
 }
 
 #[derive(Debug)]
