@@ -4,6 +4,7 @@ use slab::Slab;
 
 use crate::{
     io::Interest,
+    loom::sync::Mutex,
     runtime::context::{Lifecycle, Op},
 };
 
@@ -61,13 +62,8 @@ impl Handle {
             .register(source, uring_token(worker_index), interest.to_mio())
     }
 
-    pub(crate) fn with_uring_mut<R>(
-        &self,
-        index: usize,
-        f: impl FnOnce(&mut UringContext) -> R,
-    ) -> R {
-        let mut ctx = self.uring_contexts[index].lock();
-        f(&mut *ctx)
+    pub(crate) fn get_uring(&self, index: usize) -> &Mutex<UringContext> {
+        &self.uring_contexts[index]
     }
 
     pub(crate) fn register_op<T>(&self, index: usize, sqe: Entry, data: T) -> Op<T> {

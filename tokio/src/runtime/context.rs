@@ -158,34 +158,31 @@ impl<T: Completable> Future for Op<T> {
         let id = thread_id().unwrap().as_u64();
         let index = this.index;
 
-        let op = crate::runtime::Handle::current()
-            .inner
-            .driver()
-            .io()
-            .with_uring_mut(id as usize, |ctx| {
-                let ops = &mut ctx.ops;
-                let lifecycle = ops.get_mut(index).expect("invalid internal state");
+        let handle = crate::runtime::Handle::current();
+        let mut lock = handle.inner.driver().io().get_uring(id as usize).lock();
 
-                match mem::replace(lifecycle, Lifecycle::Submitted) {
-                    Lifecycle::Submitted => {
-                        *lifecycle = Lifecycle::Waiting(cx.waker().clone());
-                        Poll::Pending
-                    }
-                    Lifecycle::Waiting(waker) if !waker.will_wake(cx.waker()) => {
-                        *lifecycle = Lifecycle::Waiting(cx.waker().clone());
-                        Poll::Pending
-                    }
-                    Lifecycle::Waiting(waker) => {
-                        *lifecycle = Lifecycle::Waiting(waker);
-                        Poll::Pending
-                    }
-                    Lifecycle::Ignored(..) => unreachable!(),
-                    Lifecycle::Completed(cqe) => {
-                        ops.remove(index);
-                        Poll::Ready(this.take_data().unwrap().complete(cqe.into()))
-                    }
-                }
-            });
+        let ops = &mut lock.ops;
+        let lifecycle = ops.get_mut(index).expect("invalid internal state");
+
+        let op = match mem::replace(lifecycle, Lifecycle::Submitted) {
+            Lifecycle::Submitted => {
+                *lifecycle = Lifecycle::Waiting(cx.waker().clone());
+                Poll::Pending
+            }
+            Lifecycle::Waiting(waker) if !waker.will_wake(cx.waker()) => {
+                *lifecycle = Lifecycle::Waiting(cx.waker().clone());
+                Poll::Pending
+            }
+            Lifecycle::Waiting(waker) => {
+                *lifecycle = Lifecycle::Waiting(waker);
+                Poll::Pending
+            }
+            Lifecycle::Ignored(..) => unreachable!(),
+            Lifecycle::Completed(cqe) => {
+                ops.remove(index);
+                Poll::Ready(this.take_data().unwrap().complete(cqe.into()))
+            }
+        };
 
         op
     }

@@ -18,6 +18,7 @@ use mio::event::Source;
 use nix::unistd::read;
 use std::fmt;
 use std::io;
+use std::ops::DerefMut;
 use std::os::fd::AsRawFd;
 use std::sync::Arc;
 use std::time::Duration;
@@ -186,25 +187,26 @@ impl Driver {
             // TODO: cfg gate
             else if is_uring_token(token) {
                 let index = get_worker_index(token);
+                let mut _buf = [0u8; 32];
 
-                handle.with_uring_mut(index, |ctx| {
-                    let mut _buf = [0u8; 32];
-                    read(ctx.eventfd.as_raw_fd(), &mut _buf).unwrap();
+                let mut guard = handle.get_uring(index).lock();
+                let ctx = guard.deref_mut();
 
-                    let cq = ctx.uring.completion();
-                    let ops = &mut ctx.ops;
+                let eventfd = ctx.eventfd.as_raw_fd();
+                read(eventfd, &mut _buf).unwrap();
 
-                    for cqe in cq {
-                        let index = cqe.user_data();
+                let ops = &mut ctx.ops;
+                let uring = &mut ctx.uring;
+                for cqe in uring.completion() {
+                    let index = cqe.user_data();
 
-                        let lifecycle: &mut Lifecycle = ops.get_mut(index as usize).unwrap();
-                        match lifecycle {
-                            Lifecycle::Waiting(waker) => waker.wake_by_ref(),
-                            _ => unreachable!(),
-                        };
-                        *lifecycle = Lifecycle::Completed(cqe);
-                    }
-                });
+                    let lifecycle: &mut Lifecycle = ops.get_mut(index as usize).unwrap();
+                    match lifecycle {
+                        Lifecycle::Waiting(waker) => waker.wake_by_ref(),
+                        _ => unreachable!(),
+                    };
+                    *lifecycle = Lifecycle::Completed(cqe);
+                }
             } else {
                 let ready = Ready::from_mio(event);
                 let ptr = super::EXPOSE_IO.from_exposed_addr(token.0);
