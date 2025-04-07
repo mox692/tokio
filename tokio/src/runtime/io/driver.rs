@@ -55,7 +55,7 @@ pub(crate) struct Handle {
     pub(crate) metrics: IoDriverMetrics,
 
     // TODO: can we avoid RwLock?
-    uring_contexts: Box<[Mutex<UringContext>]>,
+    pub(crate) uring_contexts: Box<[Mutex<UringContext>]>,
 }
 
 #[derive(Debug)]

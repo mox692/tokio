@@ -1,5 +1,6 @@
 #![cfg(unix)]
 
+use tokio::task::JoinSet;
 use tokio_stream::StreamExt;
 
 use tokio::fs::{read, read3, File, OpenOptions};
@@ -107,24 +108,30 @@ fn sync_read(c: &mut Criterion) {
 
 fn open_read_spawn_blocking(c: &mut Criterion) {
     let rt = rt();
-    let num_files = 1000;
+    let num_files = 100;
 
     c.bench_function("open_read_spawn_blocking", |b| {
         b.iter_custom(|iters| {
             let mut dur = None;
             rt.block_on(async {
                 let start = Instant::now();
+                let mut set = JoinSet::new();
                 for _ in 0..iters {
                     for i in 1..=num_files {
-                        let path = format!("/home/mox692/work/tokio/test_file/{i}.txt");
+                        set.spawn(async move {
+                            let path = format!("/home/mox692/work/tokio/test_file/{i}.txt");
 
-                        let file = OpenOptions::new().read(true).open(&path).await.unwrap();
-                        black_box(file);
+                            let file = OpenOptions::new().read(true).open(&path).await.unwrap();
+                            black_box(file);
 
-                        // let res = read(&path).await.unwrap();
-                        // black_box(res);
+                            // let res = read(&path).await.unwrap();
+                            // black_box(res);
+                        });
                     }
                 }
+
+                while let Some(Ok(_)) = set.join_next().await {}
+
                 dur = Some(start.elapsed())
             });
 
@@ -134,23 +141,29 @@ fn open_read_spawn_blocking(c: &mut Criterion) {
 }
 fn open_read_io_uring(c: &mut Criterion) {
     let rt = rt();
-    let num_files = 1000;
+    let num_files = 100;
     c.bench_function("open_read_io_uring", |b| {
         b.iter_custom(|iters| {
             let mut dur = None;
             rt.block_on(async {
                 let start = Instant::now();
+                let mut set = JoinSet::new();
                 for _ in 0..iters {
                     for i in 1..=num_files {
-                        let path = format!("/home/mox692/work/tokio/test_file/{i}.txt");
+                        set.spawn(async move {
+                            let path = format!("/home/mox692/work/tokio/test_file/{i}.txt");
 
-                        let file = OpenOptions::new().read(true).open3(&path).await.unwrap();
-                        black_box(file);
+                            let file = OpenOptions::new().read(true).open3(&path).await.unwrap();
+                            black_box(file);
 
-                        // let res = read3(&path).await.unwrap();
-                        // black_box(res);
+                            // let res = read3(&path).await.unwrap();
+                            // black_box(res);
+                        });
                     }
                 }
+
+                while let Some(Ok(_)) = set.join_next().await {}
+
                 dur = Some(start.elapsed())
             });
 
