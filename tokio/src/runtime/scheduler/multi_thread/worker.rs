@@ -499,7 +499,7 @@ fn run(worker: Arc<Worker>) {
         .handle
         .driver
         .io()
-        .get_uring(worker.index)
+        .get_uring(worker.index + 1)
         .lock()
         .eventfd
         .as_raw_fd();
@@ -509,7 +509,7 @@ fn run(worker: Arc<Worker>) {
     handle
         .driver()
         .io()
-        .add_uring_source(&mut source, worker.index, Interest::READABLE)
+        .add_uring_source(&mut source, worker.index + 1, Interest::READABLE)
         .unwrap();
 
     crate::runtime::context::enter_runtime(&handle, true, |_| {
