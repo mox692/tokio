@@ -73,6 +73,7 @@ impl Handle {
         let ring = &mut lock.uring;
         let ops = &mut lock.ops;
         let index = ops.insert(Lifecycle::Waiting(waker));
+        let entry = entry.user_data(index as u64);
 
         unsafe {
             ring.submission()
