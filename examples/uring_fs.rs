@@ -15,9 +15,13 @@ fn main() {
 
         println!("meta: {:?}", meta);
 
-        let res = read3("/home/mox692/work/tokio/examples/uring_fs.rs")
-            .await
-            .unwrap();
-        println!("content: {:?}", String::from_utf8(res));
+        tokio::spawn(async {
+            let res = read3("/home/mox692/work/tokio/examples/uring_fs.rs")
+                .await
+                .unwrap();
+            println!("content: {:?}", String::from_utf8(res));
+        })
+        .await
+        .unwrap();
     });
 }

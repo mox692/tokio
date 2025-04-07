@@ -203,7 +203,11 @@ impl Driver {
                 for cqe in unsafe { uring.completion_shared() } {
                     let index = cqe.user_data();
 
-                    let lifecycle: &mut Lifecycle = ops.get_mut(index as usize).unwrap();
+                    let lifecycle = ops
+                        .get_mut(index as usize)
+                        // TODO: consider cancel. (we could get None if that Op is already cancelled.)
+                        .expect(format!("worker_index: {worker_index}").as_str());
+
                     match lifecycle {
                         Lifecycle::Waiting(waker) => {
                             waker.wake_by_ref();
