@@ -25,7 +25,8 @@ impl UringContext {
         // TODO: we could eliminate this eventfd, like tokio-uring does? In that case,
         //       I guess we should just pass the fd of the uring to the epoll_ctl.
         let eventfd = EventFd::from_value_and_flags(0, EfdFlags::EFD_NONBLOCK).unwrap();
-        let uring = IoUring::new(8).unwrap();
+        // TODO: make configurable
+        let uring = IoUring::new(1024).unwrap();
         uring
             .submitter()
             .register_eventfd(eventfd.as_fd().as_raw_fd())
