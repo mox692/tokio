@@ -76,13 +76,10 @@ impl Handle {
         let index = ops.insert(Lifecycle::Waiting(waker));
         let entry = entry.user_data(index as u64);
 
-        unsafe {
-            ring.submission()
-                .push(&entry)
-                .expect("submission queue is full");
+        while unsafe { ring.submission().push(&entry).is_err() } {
+            // If the submission queue is full, flush it to the kernel
+            ring.submit().unwrap();
         }
-
-        let _ = ring.submit().expect("submit failed");
 
         drop(guard);
 
