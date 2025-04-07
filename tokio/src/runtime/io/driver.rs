@@ -114,7 +114,7 @@ impl Driver {
             poll,
         };
 
-        let uring_contexts = (0..num_worker)
+        let uring_contexts = (0..num_worker + 1) // including main thread
             .map(|_| Mutex::new(UringContext::new()))
             .collect::<Vec<_>>()
             .into_boxed_slice();
@@ -186,11 +186,11 @@ impl Driver {
             }
             // TODO: cfg gate
             else if is_uring_token(token) {
-                let index = get_worker_index(token);
+                let worker_index = get_worker_index(token);
                 let mut _buf = [0u8; 32];
 
                 // TODO: We should definitely avoid acquiring a lock here.
-                let mut guard = handle.get_uring(index).lock();
+                let mut guard = handle.get_uring(worker_index).lock();
                 let ctx = guard.deref_mut();
 
                 let eventfd = ctx.eventfd.as_raw_fd();

@@ -120,11 +120,15 @@ pub(crate) struct Op<T> {
 
 impl<T> Op<T> {
     pub(crate) fn new(entry: Entry, data: T) -> Self {
+        let uring_len = crate::runtime::Handle::current()
+            .inner
+            .driver()
+            .io()
+            .uring_len();
+
         Self {
             data: Some(data),
-            // TODO: maybe we should use (thread_id % num_workers) in case
-            //       this task spawned in non-worker thread
-            worker_id: thread_id().expect("Failed to get thread ID").as_u64(),
+            worker_id: thread_id().expect("Failed to get thread ID").as_u64() % uring_len as u64,
             state: State::Initialize(Some(entry)),
         }
     }

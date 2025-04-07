@@ -104,6 +104,10 @@ impl Handle {
             _ => unreachable!(),
         };
     }
+
+    pub(crate) fn uring_len(&self) -> usize {
+        self.uring_contexts.len()
+    }
 }
 
 impl Driver {}
