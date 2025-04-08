@@ -459,6 +459,34 @@ where
 
 impl Launch {
     pub(crate) fn launch(mut self) {
+        // setup for io_uring
+        // TODO: this process could be done in the `add_uring_source`
+        let eventfd = self
+            .0
+            .get(0)
+            .as_ref()
+            .unwrap()
+            .handle
+            .driver
+            .io()
+            .get_uring(0)
+            .lock()
+            .uring
+            .as_raw_fd();
+
+        // register to epoll
+        let mut source = SourceFd(&eventfd);
+
+        self.0
+            .get(0)
+            .as_ref()
+            .unwrap()
+            .handle
+            .driver
+            .io()
+            .add_uring_source(&mut source, 0, Interest::READABLE)
+            .unwrap();
+
         for worker in self.0.drain(..) {
             runtime::spawn_blocking(move || run(worker));
         }
@@ -494,24 +522,24 @@ fn run(worker: Arc<Worker>) {
 
     let handle = scheduler::Handle::MultiThread(worker.handle.clone());
 
-    // setup for io_uring
-    // TODO: this process could be done in the `add_uring_source`
-    let eventfd = worker
-        .handle
-        .driver
-        .io()
-        .get_uring(worker.index + 1)
-        .lock()
-        .uring
-        .as_raw_fd();
+    // // setup for io_uring
+    // // TODO: this process could be done in the `add_uring_source`
+    // let eventfd = worker
+    //     .handle
+    //     .driver
+    //     .io()
+    //     .get_uring(worker.index + 1)
+    //     .lock()
+    //     .uring
+    //     .as_raw_fd();
 
-    // register to epoll
-    let mut source = SourceFd(&eventfd);
-    handle
-        .driver()
-        .io()
-        .add_uring_source(&mut source, worker.index + 1, Interest::READABLE)
-        .unwrap();
+    // // register to epoll
+    // let mut source = SourceFd(&eventfd);
+    // handle
+    //     .driver()
+    //     .io()
+    //     .add_uring_source(&mut source, worker.index + 1, Interest::READABLE)
+    //     .unwrap();
 
     crate::runtime::context::enter_runtime(&handle, true, |_| {
         // Set the worker context.
@@ -747,12 +775,15 @@ impl Context {
         // TODO: update detail
         let handle = crate::runtime::Handle::current();
         let driver = handle.inner.driver().io();
-        for context in driver.uring_contexts.iter() {
-            let Some(lock) = context.try_lock() else {
-                continue;
-            };
+        // for context in driver.uring_contexts.iter() {
+        //     let Some(lock) = context.try_lock() else {
+        //         continue;
+        //     };
+        //     lock.uring.submit().unwrap();
+        // }
+        if let Some(lock) = driver.uring_contexts.try_lock() {
             lock.uring.submit().unwrap();
-        }
+        };
 
         if let Some(f) = &self.worker.handle.shared.config.before_park {
             f();

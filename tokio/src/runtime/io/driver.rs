@@ -53,7 +53,7 @@ pub(crate) struct Handle {
     pub(crate) metrics: IoDriverMetrics,
 
     // TODO: can we avoid RwLock?
-    pub(crate) uring_contexts: Box<[Mutex<UringContext>]>,
+    pub(crate) uring_contexts: Mutex<UringContext>,
 }
 
 #[derive(Debug)]
@@ -112,10 +112,11 @@ impl Driver {
             poll,
         };
 
-        let uring_contexts = (0..num_worker + 1) // including main thread
-            .map(|_| Mutex::new(UringContext::new()))
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
+        // let uring_contexts = (0..num_worker + 1) // including main thread
+        //     .map(|_| Mutex::new(UringContext::new()))
+        //     .collect::<Vec<_>>()
+        //     .into_boxed_slice();
+        let uring_contexts = Mutex::new(UringContext::new());
 
         let (registrations, synced) = RegistrationSet::new();
 

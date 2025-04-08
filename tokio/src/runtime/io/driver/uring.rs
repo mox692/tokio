@@ -50,7 +50,7 @@ impl Handle {
     }
 
     pub(crate) fn get_uring(&self, worker_index: usize) -> &Mutex<UringContext> {
-        &self.uring_contexts[worker_index]
+        &self.uring_contexts
     }
 
     pub(crate) fn register_op(&self, worker_id: u64, entry: Entry, waker: Waker) -> usize {
@@ -90,7 +90,8 @@ impl Handle {
     }
 
     pub(crate) fn uring_len(&self) -> usize {
-        self.uring_contexts.len()
+        1
+        // self.uring_contexts.len()
     }
 }
 
