@@ -1,41 +1,26 @@
 use io_uring::{squeue::Entry, IoUring};
-use nix::sys::eventfd::{EfdFlags, EventFd};
 use slab::Slab;
 
 use crate::{io::Interest, loom::sync::Mutex, runtime::context::Lifecycle};
 
 use super::{Driver, Handle};
 
-use std::{
-    io, mem,
-    ops::DerefMut,
-    os::fd::{AsFd, AsRawFd},
-    task::Waker,
-};
+use std::{io, mem, ops::DerefMut, task::Waker};
 
 pub(crate) struct UringContext {
     pub(crate) uring: io_uring::IoUring,
     pub(crate) ops: slab::Slab<Lifecycle>,
-    // TODO: we could eliminate this eventfd, like tokio-uring does?
-    pub(crate) eventfd: EventFd,
 }
 
 impl UringContext {
     pub(crate) fn new() -> Self {
         // TODO: we could eliminate this eventfd, like tokio-uring does? In that case,
         //       I guess we should just pass the fd of the uring to the epoll_ctl.
-        let eventfd = EventFd::from_value_and_flags(0, EfdFlags::EFD_NONBLOCK).unwrap();
         // TODO: make configurable
         let uring = IoUring::new(4096).unwrap();
-        uring
-            .submitter()
-            .register_eventfd(eventfd.as_fd().as_raw_fd())
-            .unwrap();
-
         Self {
             ops: Slab::new(),
             uring,
-            eventfd,
         }
     }
 }

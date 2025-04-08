@@ -15,11 +15,9 @@ use crate::runtime::io::registration_set;
 use crate::runtime::io::{IoDriverMetrics, RegistrationSet, ScheduledIo};
 
 use mio::event::Source;
-use nix::unistd::read;
 use std::fmt;
 use std::io;
 use std::ops::DerefMut;
-use std::os::fd::AsRawFd;
 use std::sync::Arc;
 use std::time::Duration;
 use uring::{get_worker_index, is_uring_token, UringContext};
@@ -192,9 +190,6 @@ impl Driver {
                 // TODO: We should definitely avoid acquiring a lock here.
                 let mut guard = handle.get_uring(worker_index).lock();
                 let ctx = guard.deref_mut();
-
-                let eventfd = ctx.eventfd.as_raw_fd();
-                read(eventfd, &mut _buf).unwrap();
 
                 let ops = &mut ctx.ops;
                 let uring = &ctx.uring;

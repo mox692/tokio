@@ -495,13 +495,14 @@ fn run(worker: Arc<Worker>) {
     let handle = scheduler::Handle::MultiThread(worker.handle.clone());
 
     // setup for io_uring
+    // TODO: this process could be done in the `add_uring_source`
     let eventfd = worker
         .handle
         .driver
         .io()
         .get_uring(worker.index + 1)
         .lock()
-        .eventfd
+        .uring
         .as_raw_fd();
 
     // register to epoll
