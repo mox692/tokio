@@ -12,6 +12,7 @@ impl Completable for Open {
     type Output = io::Result<crate::fs::File>;
     fn complete(self, cqe: crate::runtime::context::CqeResult) -> Self::Output {
         let fd = cqe.result? as i32;
+        // TODO: fix create uring version
         Ok(unsafe { crate::fs::File::from_raw_fd(fd) })
     }
 }
