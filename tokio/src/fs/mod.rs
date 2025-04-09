@@ -236,7 +236,7 @@ mod metadata;
 pub use self::metadata::metadata;
 
 mod open_options;
-pub use self::open_options::OpenOptions;
+pub use self::open_options::{OpenOptions, UringOption};
 
 mod read;
 pub use self::read::{read, read3};

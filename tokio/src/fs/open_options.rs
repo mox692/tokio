@@ -81,7 +81,12 @@ use std::os::windows::fs::OpenOptionsExt;
 /// }
 /// ```
 #[derive(Clone, Debug)]
-pub struct OpenOptions(StdOpenOptions);
+pub struct OpenOptions {
+    std: StdOpenOptions,
+
+    // TODO; cfg gate
+    uring: Option<UringOption>,
+}
 
 impl OpenOptions {
     /// Creates a blank new set of options ready for configuration.
@@ -101,7 +106,10 @@ impl OpenOptions {
     /// let future = options.read(true).open("foo.txt");
     /// ```
     pub fn new() -> OpenOptions {
-        OpenOptions(StdOpenOptions::new())
+        OpenOptions {
+            std: StdOpenOptions::new(),
+            uring: None,
+        }
     }
 
     /// Sets the option for read access.
@@ -130,7 +138,7 @@ impl OpenOptions {
     /// }
     /// ```
     pub fn read(&mut self, read: bool) -> &mut OpenOptions {
-        self.0.read(read);
+        self.std.read(read);
         self
     }
 
@@ -160,7 +168,7 @@ impl OpenOptions {
     /// }
     /// ```
     pub fn write(&mut self, write: bool) -> &mut OpenOptions {
-        self.0.write(write);
+        self.std.write(write);
         self
     }
 
@@ -219,7 +227,7 @@ impl OpenOptions {
     /// }
     /// ```
     pub fn append(&mut self, append: bool) -> &mut OpenOptions {
-        self.0.append(append);
+        self.std.append(append);
         self
     }
 
@@ -252,7 +260,7 @@ impl OpenOptions {
     /// }
     /// ```
     pub fn truncate(&mut self, truncate: bool) -> &mut OpenOptions {
-        self.0.truncate(truncate);
+        self.std.truncate(truncate);
         self
     }
 
@@ -288,7 +296,7 @@ impl OpenOptions {
     /// }
     /// ```
     pub fn create(&mut self, create: bool) -> &mut OpenOptions {
-        self.0.create(create);
+        self.std.create(create);
         self
     }
 
@@ -331,7 +339,7 @@ impl OpenOptions {
     /// }
     /// ```
     pub fn create_new(&mut self, create_new: bool) -> &mut OpenOptions {
-        self.0.create_new(create_new);
+        self.std.create_new(create_new);
         self
     }
 
@@ -389,7 +397,7 @@ impl OpenOptions {
     /// [`PermissionDenied`]: std::io::ErrorKind::PermissionDenied
     pub async fn open(&self, path: impl AsRef<Path>) -> io::Result<File> {
         let path = path.as_ref().to_owned();
-        let opts = self.0.clone();
+        let opts = self.std.clone();
 
         let std = asyncify(move || opts.open(path)).await?;
         Ok(File::from_std(std))
@@ -401,27 +409,45 @@ impl OpenOptions {
         use std::ffi::CString;
         use std::os::unix::ffi::OsStrExt;
 
-        let path_bytes = path.as_ref().as_os_str().as_bytes();
-        let c_path = CString::new(path_bytes).expect("Path contains null byte");
+        match &self.uring {
+            None => {
+                let path = path.as_ref().to_owned();
+                let opts = self.std.clone();
 
-        // TODO: make configurable
-        let flags = libc::O_CLOEXEC | libc::O_RDWR | libc::O_APPEND | libc::O_CREAT;
-        let mode = 0o666;
+                let std = asyncify(move || opts.open(path)).await?;
+                Ok(File::from_std(std))
+            }
+            Some(options) => {
+                let path_bytes = path.as_ref().as_os_str().as_bytes();
+                let c_path = CString::new(path_bytes).expect("Path contains null byte");
 
-        let open_op = opcode::OpenAt::new(types::Fd(libc::AT_FDCWD), c_path.as_ptr())
-            .flags(flags)
-            .mode(mode)
-            .build();
+                // TODO: make configurable
+                let flags = libc::O_CLOEXEC | libc::O_RDWR | libc::O_APPEND | libc::O_CREAT;
+                let mode = 0o666;
 
-        let op = Op::new(open_op, Open {});
+                let open_op = opcode::OpenAt::new(types::Fd(libc::AT_FDCWD), c_path.as_ptr())
+                    .flags(flags)
+                    .mode(mode)
+                    .build();
 
-        op.await
+                let op = Op::new(open_op, Open {});
+
+                op.await
+            }
+        }
     }
 
     /// Returns a mutable reference to the underlying `std::fs::OpenOptions`
     #[cfg(any(windows, unix))]
     pub(super) fn as_inner_mut(&mut self) -> &mut StdOpenOptions {
-        &mut self.0
+        &mut self.std
+    }
+
+    // TODO: cfg_gate
+    /// docs
+    pub fn use_io_uring(&mut self, options: UringOption) -> &mut OpenOptions {
+        self.uring = Some(options);
+        self
     }
 }
 
@@ -676,7 +702,10 @@ cfg_windows! {
 
 impl From<StdOpenOptions> for OpenOptions {
     fn from(options: StdOpenOptions) -> OpenOptions {
-        OpenOptions(options)
+        OpenOptions {
+            std: options,
+            uring: None,
+        }
     }
 }
 
@@ -685,3 +714,6 @@ impl Default for OpenOptions {
         Self::new()
     }
 }
+
+pub mod uring;
+pub use uring::UringOption;

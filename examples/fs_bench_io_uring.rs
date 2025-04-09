@@ -2,7 +2,7 @@
 /// ./target/release/examples/fs_bench_io_uring
 use std::{hint::black_box, time::Instant};
 use tokio::{
-    fs::{read, read3, OpenOptions},
+    fs::{read, read3, OpenOptions, UringOption},
     task::{yield_now, JoinSet},
 };
 
@@ -29,7 +29,12 @@ fn main() {
                 set.spawn(async move {
                     let path = format!("/home/mox692/work/tokio/test_file/{i}.txt");
 
-                    // let file = OpenOptions::new().read(true).open3(&path).await.unwrap();
+                    // let file = OpenOptions::new()
+                    //     .read(true)
+                    //     .use_io_uring(UringOption::new())
+                    //     .open3(&path)
+                    //     .await
+                    //     .unwrap();
                     // black_box(file);
 
                     let res = read3(&path).await.unwrap();

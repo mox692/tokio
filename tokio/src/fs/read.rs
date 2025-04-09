@@ -1,5 +1,5 @@
 use crate::{
-    fs::{asyncify, OpenOptions},
+    fs::{asyncify, open_options::uring::UringOption, OpenOptions},
     io::uring::read::Read,
     runtime::context::Op,
 };
@@ -57,7 +57,10 @@ pub async fn read3(path: impl AsRef<Path>) -> io::Result<Vec<u8>> {
     use io_uring::{opcode, types};
 
     let mut buf = vec![0u8; 1024];
-    let file = OpenOptions::new().open3(path).await?;
+    let file = OpenOptions::new()
+        .use_io_uring(UringOption::new())
+        .open3(path)
+        .await?;
     let read_op = opcode::Read::new(
         types::Fd(file.as_raw_fd()),
         buf.as_mut_ptr(),
