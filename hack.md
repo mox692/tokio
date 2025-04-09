@@ -18,7 +18,11 @@
 
 ```rust
 // TODO: ring sizeのoptionをどうやって提供するか
-let file = File::new(xxx).with_uring_ops(yyy)
+let file = OpenOptions::new()
+    .read(true)
+    .use_io_uring(UringOption::new()) // **NEW**
+    .open(&path)
+    .await;
 ```
 
 ### Register Uring fd
@@ -90,6 +94,7 @@ I think this proposal can be achieved incrementally, like as follows:
 
 1. Initial PR with a minimum support for io_uring file api with `tokio_unstable`
    * Current thread runtime support
+   * Add uring support as an opt-in option to the `OpenOption`.
    * Basic Open, Read, Write operation
    * (possibly) No batching logic for submission
 2. Muti threaded runtime support
@@ -99,7 +104,8 @@ I think this proposal can be achieved incrementally, like as follows:
    * Support more uring Ops
    * Smarter batching logic for submission
    * Utilize registered buffers, registered file
-4. Stabilize 🚀 (remove `tokio_unstable`)
+4. Use io_uring as a default in `File::new`, `fs::read`, `fs::write` etc.
+5. Stabilize 🚀 (remove `tokio_unstable`)
 
 
 ## Prototype
@@ -108,3 +114,8 @@ I think this proposal can be achieved incrementally, like as follows:
   * sharding
   * batching logig
 * 実装の正しさには注意を払ったが, 間違えている可能性はある。testは全部passしてる
+
+## Other Choinces
+* Taskを, 既存のIO Stackを使わない方法もある
+  * tokio-uring的な
+  * slabをglobalに持って, そこでやりとりする
