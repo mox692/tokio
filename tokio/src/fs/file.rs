@@ -23,8 +23,8 @@ use super::mocks::MockFile as StdFile;
 #[cfg(not(test))]
 use std::fs::File as StdFile;
 
-mod thread_pool;
-mod uring;
+pub(crate) mod thread_pool;
+pub(crate) mod uring;
 
 /// A reference to an open file on the filesystem.
 ///
@@ -84,10 +84,10 @@ mod uring;
 /// # }
 /// ```
 pub struct File {
-    inner: Kind,
+    pub(crate) inner: Kind,
 }
 
-enum Kind {
+pub(crate) enum Kind {
     ThreadPool(ThreadPool),
 
     // TODO cfg gate
@@ -622,8 +622,8 @@ impl fmt::Debug for File {
 impl std::os::unix::io::AsRawFd for File {
     fn as_raw_fd(&self) -> std::os::unix::io::RawFd {
         match &self.inner {
-            Kind::ThreadPool(p) => p.std.as_raw_fd(),
-            Kind::Uring(_) => unimplemented!(),
+            Kind::ThreadPool(inner) => inner.std.as_raw_fd(),
+            Kind::Uring(inner) => inner.as_raw_fd(),
         }
     }
 }

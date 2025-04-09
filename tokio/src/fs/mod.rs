@@ -228,6 +228,7 @@ pub use self::dir_builder::DirBuilder;
 
 mod file;
 pub use self::file::File;
+pub(crate) use self::file::{uring::Uring, Kind};
 
 mod hard_link;
 pub use self::hard_link::hard_link;
@@ -278,7 +279,7 @@ mod try_exists;
 pub use self::try_exists::try_exists;
 
 #[cfg(test)]
-mod mocks;
+pub(crate) mod mocks;
 
 feature! {
     #![unix]

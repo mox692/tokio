@@ -1,46 +1,46 @@
+use mio::{event::Source, unix::SourceFd};
+
 #[cfg(test)]
 use super::super::mocks::MockFile as StdFile;
-use mio::{event::Source, unix::SourceFd};
 #[cfg(not(test))]
 use std::fs::File as StdFile;
 use std::{
     io,
-    os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd},
+    os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd},
 };
 
 #[derive(Debug)]
-pub(super) struct Uring {
-    inner: UringInner,
+pub(crate) struct Uring {
+    inner: StdFile,
 }
 
-#[derive(Debug)]
-struct UringInner {
-    fd: RawFd,
-}
-
-impl UringInner {
-    pub(super) fn new(fd: StdFile) -> Self {
-        Self { fd: fd.as_raw_fd() }
-    }
-
-    fn read_inner(&self) -> io::Result<()> {
-        Ok(())
+impl From<StdFile> for Uring {
+    fn from(std: StdFile) -> Self {
+        Self { inner: std }
     }
 }
 
-impl AsRawFd for UringInner {
+impl Uring {
+    pub(crate) fn from_raw_fd(fd: i32) -> Uring {
+        Self {
+            inner: unsafe { StdFile::from_raw_fd(fd) },
+        }
+    }
+}
+
+impl AsRawFd for Uring {
     fn as_raw_fd(&self) -> std::os::unix::prelude::RawFd {
-        self.fd.as_raw_fd()
+        self.inner.as_raw_fd()
     }
 }
 
-impl AsFd for UringInner {
+impl AsFd for Uring {
     fn as_fd(&self) -> BorrowedFd<'_> {
         unsafe { BorrowedFd::borrow_raw(self.as_raw_fd()) }
     }
 }
 
-impl Source for UringInner {
+impl Source for Uring {
     fn register(
         &mut self,
         registry: &mio::Registry,

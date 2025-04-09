@@ -396,15 +396,6 @@ impl OpenOptions {
     /// [`Other`]: std::io::ErrorKind::Other
     /// [`PermissionDenied`]: std::io::ErrorKind::PermissionDenied
     pub async fn open(&self, path: impl AsRef<Path>) -> io::Result<File> {
-        let path = path.as_ref().to_owned();
-        let opts = self.std.clone();
-
-        let std = asyncify(move || opts.open(path)).await?;
-        Ok(File::from_std(std))
-    }
-
-    /// docs
-    pub async fn open3(&self, path: impl AsRef<Path>) -> io::Result<File> {
         use io_uring::{opcode, types};
         use std::ffi::CString;
         use std::os::unix::ffi::OsStrExt;

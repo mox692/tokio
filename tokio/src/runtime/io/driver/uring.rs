@@ -17,7 +17,7 @@ impl UringContext {
         // TODO: we could eliminate this eventfd, like tokio-uring does? In that case,
         //       I guess we should just pass the fd of the uring to the epoll_ctl.
         // TODO: make configurable
-        let uring = IoUring::new(4096).unwrap();
+        let uring = IoUring::new(8192).unwrap();
         Self {
             ops: Slab::new(),
             uring,
