@@ -1,10 +1,14 @@
 use std::io;
 
-use crate::runtime::context::{Completable, Op};
+use crate::runtime::context::Completable;
 
 pub(crate) struct Read {}
 
-impl Op<Read> {}
+impl Read {
+    pub(crate) fn new() -> Self {
+        Self {}
+    }
+}
 
 impl Completable for Read {
     type Output = io::Result<i32>;

@@ -1,21 +1,17 @@
-use crate::{
-    fs::OpenOptions,
-    io::{
-        blocking::Buf,
-        uring::{open::Open, read::Read},
-        AsyncRead, AsyncSeek, AsyncWrite, ReadBuf,
-    },
-    runtime::context::Op,
-    sync::Mutex,
-};
+use io_uring::{opcode, types};
 
 #[cfg(test)]
 use super::super::mocks::MockFile as StdFile;
 use super::File;
+use crate::{
+    fs::OpenOptions,
+    io::{blocking::Buf, uring::read::Read, AsyncRead, AsyncSeek, AsyncWrite, ReadBuf},
+    runtime::context::Op,
+    sync::Mutex,
+};
 #[cfg(not(test))]
 use std::fs::File as StdFile;
 use std::{
-    cmp,
     future::Future,
     io::{self, SeekFrom},
     os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd},
@@ -24,9 +20,6 @@ use std::{
     sync::Arc,
     task::{ready, Context, Poll},
 };
-
-// io_uring operation
-struct Ops {}
 
 pub(crate) struct Uring {
     pub(super) std: Arc<StdFile>,
@@ -50,19 +43,21 @@ pub(super) enum State {
     Busy(OpFuture),
 }
 
-enum OpFuture {
-    Read((Op<Read>, Buf)),
-    Open((Op<Open>, Buf)),
+pub(super) enum OpFuture {
+    Read((Op<Read>, Option<Buf>)),
 }
 
 impl Future for OpFuture {
-    type Output = (Operation, Buf);
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match &mut *self {
-            OpFuture::Open((ref mut s, ref mut buf)) => {
-                let s = Pin::new(s).poll(cx);
+    type Output = io::Result<(Operation, Buf)>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
+        match this {
+            OpFuture::Read((s, b)) => {
+                let res = ready!(Pin::new(s).poll(cx));
+                let buf = b.take().expect("should not be None");
+
+                return Poll::Ready(Ok((Operation::Read(res), buf)));
             }
-            OpFuture::Read((s, buf)) => {}
         };
 
         Poll::Pending
@@ -71,7 +66,7 @@ impl Future for OpFuture {
 
 #[derive(Debug)]
 pub(super) enum Operation {
-    Read(io::Result<usize>),
+    Read(io::Result<i32>),
     Write(io::Result<()>),
     Seek(io::Result<u64>),
 }
@@ -125,6 +120,76 @@ impl Uring {
 
     pub async fn set_len(&self, size: u64) -> io::Result<()> {
         unimplemented!()
+    }
+}
+
+impl AsyncRead for Uring {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        dst: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        ready!(crate::trace::trace_leaf(cx));
+
+        let me = self.get_mut();
+        let fd = me.as_raw_fd();
+        let inner = me.inner.get_mut();
+
+        loop {
+            match inner.state {
+                State::Idle(ref mut buf_cell) => {
+                    let mut buf = buf_cell.take().unwrap();
+
+                    if !buf.is_empty() || dst.remaining() == 0 {
+                        buf.copy_to(dst);
+                        *buf_cell = Some(buf);
+                        return Poll::Ready(Ok(()));
+                    }
+
+                    let ptr = buf.bytes_mut().as_mut_ptr();
+
+                    let read_op = opcode::Read::new(types::Fd(fd), ptr, buf.len() as u32).build();
+
+                    inner.state =
+                        State::Busy(OpFuture::Read((Op::new(read_op, Read::new()), Some(buf))));
+                }
+                State::Busy(ref mut rx) => {
+                    let (op, mut buf) = ready!(Pin::new(rx).poll(cx))?;
+
+                    match op {
+                        Operation::Read(Ok(_)) => {
+                            buf.copy_to(dst);
+                            inner.state = State::Idle(Some(buf));
+                            return Poll::Ready(Ok(()));
+                        }
+                        Operation::Read(Err(e)) => {
+                            assert!(buf.is_empty());
+
+                            inner.state = State::Idle(Some(buf));
+                            return Poll::Ready(Err(e));
+                        }
+                        Operation::Write(Ok(())) => {
+                            assert!(buf.is_empty());
+                            inner.state = State::Idle(Some(buf));
+                            continue;
+                        }
+                        Operation::Write(Err(e)) => {
+                            assert!(inner.last_write_err.is_none());
+                            inner.last_write_err = Some(e.kind());
+                            inner.state = State::Idle(Some(buf));
+                        }
+                        Operation::Seek(result) => {
+                            assert!(buf.is_empty());
+                            inner.state = State::Idle(Some(buf));
+                            if let Ok(pos) = result {
+                                inner.pos = pos;
+                            }
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -212,74 +277,6 @@ impl AsFd for Uring {
         unsafe { BorrowedFd::borrow_raw(self.as_raw_fd()) }
     }
 }
-
-impl AsyncRead for Uring {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        dst: &mut ReadBuf<'_>,
-    ) -> Poll<io::Result<()>> {
-        ready!(crate::trace::trace_leaf(cx));
-
-        let me = self.get_mut();
-        let inner = me.inner.get_mut();
-
-        loop {
-            match inner.state {
-                State::Idle(ref mut buf_cell) => {
-                    let mut buf = buf_cell.take().unwrap();
-
-                    if !buf.is_empty() || dst.remaining() == 0 {
-                        buf.copy_to(dst);
-                        *buf_cell = Some(buf);
-                        return Poll::Ready(Ok(()));
-                    }
-
-                    let std = me.std.clone();
-
-                    let max_buf_size = cmp::min(dst.remaining(), me.max_buf_size);
-                    inner.state = State::Busy(OpFuture::Read((Op::new(todo!(), Read {}), buf)));
-                }
-                State::Busy(ref mut rx) => {
-                    let (op, mut buf) = ready!(Pin::new(rx).poll(cx));
-
-                    match op {
-                        Operation::Read(Ok(_)) => {
-                            buf.copy_to(dst);
-                            inner.state = State::Idle(Some(buf));
-                            return Poll::Ready(Ok(()));
-                        }
-                        Operation::Read(Err(e)) => {
-                            assert!(buf.is_empty());
-
-                            inner.state = State::Idle(Some(buf));
-                            return Poll::Ready(Err(e));
-                        }
-                        Operation::Write(Ok(())) => {
-                            assert!(buf.is_empty());
-                            inner.state = State::Idle(Some(buf));
-                            continue;
-                        }
-                        Operation::Write(Err(e)) => {
-                            assert!(inner.last_write_err.is_none());
-                            inner.last_write_err = Some(e.kind());
-                            inner.state = State::Idle(Some(buf));
-                        }
-                        Operation::Seek(result) => {
-                            assert!(buf.is_empty());
-                            inner.state = State::Idle(Some(buf));
-                            if let Ok(pos) = result {
-                                inner.pos = pos;
-                            }
-                            continue;
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 impl Inner {
     async fn complete_inflight(&mut self) {
         use std::future::poll_fn;
@@ -306,7 +303,7 @@ impl Inner {
 
         let (op, buf) = match self.state {
             State::Idle(_) => return Poll::Ready(Ok(())),
-            State::Busy(ref mut rx) => ready!(Pin::new(rx).poll(cx)),
+            State::Busy(ref mut rx) => ready!(Pin::new(rx).poll(cx))?,
         };
 
         // The buffer is not used here
