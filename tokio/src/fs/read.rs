@@ -58,8 +58,9 @@ pub async fn read3(path: impl AsRef<Path>) -> io::Result<Vec<u8>> {
 
     let mut buf = vec![0u8; 1024];
     let file = OpenOptions::new()
+        .read(true)
         .use_io_uring(UringOption::new())
-        .open3(path)
+        .open(path)
         .await?;
     let read_op = opcode::Read::new(
         types::Fd(file.as_raw_fd()),

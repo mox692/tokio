@@ -496,7 +496,7 @@ fn run(worker: Arc<Worker>) {
 
     // setup for io_uring
     // TODO: this process could be done in the `add_uring_source`
-    let eventfd = worker
+    let uringfd = worker
         .handle
         .driver
         .io()
@@ -506,7 +506,7 @@ fn run(worker: Arc<Worker>) {
         .as_raw_fd();
 
     // register to epoll
-    let mut source = SourceFd(&eventfd);
+    let mut source = SourceFd(&uringfd);
     handle
         .driver()
         .io()

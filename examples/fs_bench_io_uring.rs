@@ -32,7 +32,7 @@ fn main() {
                     // let file = OpenOptions::new()
                     //     .read(true)
                     //     .use_io_uring(UringOption::new())
-                    //     .open3(&path)
+                    //     .open(&path)
                     //     .await
                     //     .unwrap();
                     // black_box(file);
