@@ -233,6 +233,8 @@ impl Driver {
 
                 ready_count += 1;
             }
+
+            // TODO: potentially we want to iterate cq here.
         }
 
         handle.metrics.incr_ready_count_by(ready_count);
