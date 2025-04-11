@@ -3,6 +3,8 @@ One paragraph explanation of the feature.
 
 * support io_uring backed file api
 
+このproposalは議論の出発点となることを目指しており, 議論の度に改訂されることがあります。
+
 # Problem
 backgroundと課題間
 
@@ -18,60 +20,39 @@ backgroundと課題間
 # Archtecture Overview
 ハイレベルなアーキテクチャ
 * epollとio_uringを共存
-  * 変更量が少なくて良い
   * 具体的には, epollでio_uringのイベントを待つ (tokio-uringが行っているように)
+  * この方法のメリットとしては, 変更量が少なくて良い点
 * uringのoperationを表現するFutureを実装する (tokio-uringでは`Op`という構造体がこれをやっている)
   * 初回のpollでsqeにoperationのsubmitを実施
   * operationの完了時, epoll_ctlがreturnして, cqeを走査し, taskをwakeする
+* linux以外のplatformに関しては, 何も変えない
 
 ### Other Options
-* io completionをio-uring で待つか, epollで待つかの選択がある
-  * pros, consをかく
-* 既存のPollEventedのconstructに乗っかる
-  * io-uringでは, operationごとにepoll_etlを呼ばない
-
-* Taskを, 既存のIO Stackを使わない方法もある
-  * tokio-uring的な
-  * slabをglobalに持って, そこでやりとりする
-  * こっちのが実装は楽かも
-  * PollEventedを使った際の難しさの言語化
-    * 既存コードへの変更が大きい
-      * tokenで処理を区別したい -> scheduledIoのpointerとして使うのを変える必要あり
-        * なぜ区別したい？ -> wakeする
-    * fdの登録 (コード的にはPollEventedの作成)
-      * epoll: そのfd自体の登録
-      * uring: sqにsubmit
-    * fdのpoll
-      * epoll: 既存のpoll_ready()
-      * uring: 既存のpoll_ready() (同じ)
-    * completeしたとき
-      * epoll: 
-      * uring: 1つのepollで複数のtaskをwakeすることができるdriverでcqを操作して, uringの結果を適宜taskに渡してwakeする
-    * **まとめ**
-      * 既存のepollのapiは処理1つ1つのfdを登録していくのに対して, uringはuringのfdだけを登録する -> pollEventedが1つ1つsorceを求めてくることに合わない
-      * epollは1つのfd完了eventに対して, 複数のtaskが紐づく, だったが, io_uringの場合は1つのfd完了eventに対して, 複数のioリソースが紐づく
-* epoll_taskがuring_taskを起こすようにする
-  * pros, cons
+* io completionをio-uringで待つか, epollで待つかの選択がある
+  * io-uringでcompletionを待つ場合, runtimeの大きな変更が必要になり, これは避けたい。
 
 # Details
 
-### API surface
-* 後からio_uringの
-* 基本的には, 既存のfile apiを踏襲, 何もしない
-* ring sizeの決定とかはできた方がいい気がする, それを決めるためのoptionはなんとかしないと
+### API Surface
+* 基本的には既存のapi surfaceは変えない。
+* ring sizeの決定とかはできた方がいい気がするので, それを決めるためのoptionはunstableで追加する, 例えば:
 
 ```rust
-// TODO: ring sizeのoptionをどうやって提供するか
 let file = OpenOptions::new()
     .read(true)
-    .use_io_uring(UringOption::new()) // **NEW**
+    .io_uring_config(UringOption::new().ring_size(64)) // **NEW**
     .open(&path)
     .await;
 
 file.read() // this read will use io_uring
 ```
 
-### Register uring file descriptor
+* このようにすることで, 例えば下記のように段階的にio_uringを使うことができる
+  * `OpenOptions` でio_uringのoptionを使ってopenした時だけ, io_uringの実装にfallbackさせる
+  * oneshot operationを `tokio::fs::read()`, `tokio::fs::write()` などをデフォルトでio_uringを使用するように
+  * `tokio::fs::File::create()` などを, デフォルトでio_uringを使用するように
+
+### Register Uring File Descriptor
 
 * io_uringのfdをepollに登録することで, epoll_ctlでuringの完了イベントを受け取れる
 * file IOを最初に行った場合 or runtimeの初期化時に, uringのfdをmio経由でepollに登録
@@ -141,11 +122,13 @@ for cqe in cq.iter() {
 ### feature gate
 * tokio-unstable?
 
+# DrawBacks
+
 ## Next Steps
 I think this proposal can be achieved incrementally, like as follows:
 
 1. Initial PR with a minimum support for io_uring file api with `tokio_unstable`
-   * Current thread runtime support
+   * Enable current thread runtime only 
    * Add uring support as an opt-in option to the `OpenOption`.
    * Basic Open, Read, Write operation
    * (possibly) No batching logic for submission
@@ -181,10 +164,12 @@ I think this proposal can be achieved incrementally, like as follows:
     * **まとめ**
       * 既存のepollのapiは処理1つ1つのfdを登録していくのに対して, uringはuringのfdだけを登録する -> pollEventedが1つ1つsorceを求めてくることに合わない
       * epollは1つのfd完了eventに対して, 複数のtaskが紐づく, だったが, io_uringの場合は1つのfd完了eventに対して, 複数のioリソースが紐づく
-* io completionをio-uring で待つか, epollで待つかの選択がある
-  * pros, consをかく
 * epoll_taskがuring_taskを起こすようにする
   * pros, cons
+* 既存のScheduledIo, PollEventedのconstructに乗っかる 
+  * io-uringでは, operationごとにepoll_ctlは呼ばない
+  * 1つのfdの完了で, 複数のioリソースが
+
 
 ## Prototype
 * 実際に行ったbranchとbenchを載せておいても良いかも (ある程度信頼性が増す?)
