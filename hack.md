@@ -1,18 +1,62 @@
-# Goal
+# Summary
+One paragraph explanation of the feature.
 
 * support io_uring backed file api
 
+# Problem
+backgroundと課題間
 
-# Tenets
-* don't affect existing code base
-  * network部分は引き続きepoll baseのシステムを維持する
-* user can transparently benefit from io_uring file io
-* Incrementally
-  * perhaps we have to make changes in several places.
-  * changes should be done incrementatlly
+# Goal
+* file apiにio_uringを使うようにする.
+  * 初期はopt-inの形で使用できるようにして, 将来的にはユーザーがコードを変えなくても透過的にio_uringのメリットを享受できる
+* 既存のruntimeやnetworkコンポーネントにはperformanceの影響を与えない
+* 既存のfile apiの互換性を維持したまま小さく変更をincrementalに加えていく
 
+# Non-Goal
+* networkでのio_uringの活用
 
-## API surface
+# Archtecture Overview
+ハイレベルなアーキテクチャ
+* epollとio_uringを共存
+  * 変更量が少なくて良い
+  * 具体的には, epollでio_uringのイベントを待つ (tokio-uringが行っているように)
+* uringのoperationを表現するFutureを実装する (tokio-uringでは`Op`という構造体がこれをやっている)
+  * 初回のpollでsqeにoperationのsubmitを実施
+  * operationの完了時, epoll_ctlがreturnして, cqeを走査し, taskをwakeする
+
+### Other Options
+* io completionをio-uring で待つか, epollで待つかの選択がある
+  * pros, consをかく
+* 既存のPollEventedのconstructに乗っかる
+  * io-uringでは, operationごとにepoll_etlを呼ばない
+
+* Taskを, 既存のIO Stackを使わない方法もある
+  * tokio-uring的な
+  * slabをglobalに持って, そこでやりとりする
+  * こっちのが実装は楽かも
+  * PollEventedを使った際の難しさの言語化
+    * 既存コードへの変更が大きい
+      * tokenで処理を区別したい -> scheduledIoのpointerとして使うのを変える必要あり
+        * なぜ区別したい？ -> wakeする
+    * fdの登録 (コード的にはPollEventedの作成)
+      * epoll: そのfd自体の登録
+      * uring: sqにsubmit
+    * fdのpoll
+      * epoll: 既存のpoll_ready()
+      * uring: 既存のpoll_ready() (同じ)
+    * completeしたとき
+      * epoll: 
+      * uring: 1つのepollで複数のtaskをwakeすることができるdriverでcqを操作して, uringの結果を適宜taskに渡してwakeする
+    * **まとめ**
+      * 既存のepollのapiは処理1つ1つのfdを登録していくのに対して, uringはuringのfdだけを登録する -> pollEventedが1つ1つsorceを求めてくることに合わない
+      * epollは1つのfd完了eventに対して, 複数のtaskが紐づく, だったが, io_uringの場合は1つのfd完了eventに対して, 複数のioリソースが紐づく
+* epoll_taskがuring_taskを起こすようにする
+  * pros, cons
+
+# Details
+
+### API surface
+* 後からio_uringの
 * 基本的には, 既存のfile apiを踏襲, 何もしない
 * ring sizeの決定とかはできた方がいい気がする, それを決めるためのoptionはなんとかしないと
 
@@ -23,20 +67,23 @@ let file = OpenOptions::new()
     .use_io_uring(UringOption::new()) // **NEW**
     .open(&path)
     .await;
+
+file.read() // this read will use io_uring
 ```
 
-### Register Uring fd
-* file IOを最初に行った場合に初期化
-* mioのtokenを使える. 一旦NOOP token
+### Register uring file descriptor
+
+* io_uringのfdをepollに登録することで, epoll_ctlでuringの完了イベントを受け取れる
+* file IOを最初に行った場合 or runtimeの初期化時に, uringのfdをmio経由でepollに登録
+* はじめは, mioの dummy token(TOKEN_WAKEUPなど)からスタートできると思う
 
 ```rust
 pub(crate) fn add_uring_source(
     &self,
     source: &mut impl mio::event::Source,
-    interest: Interest,
 ) -> io::Result<()> {
     self.registry
-        .register(source, TOKEN_WAKEUP, interest.to_mio())
+        .register(source, TOKEN_WAKEUP, Interest::READABLE)
 }
 ```
 
@@ -80,11 +127,16 @@ for cqe in cq.iter() {
     let s = slab.get(index);
 }
 ```
+
 ### Multi threaded support
 * シンプルには, ringをglobalでも良い
 * ただし, 現実的にはshardしたほうがいい
   * benchmarkの結果も載せる
 
+### Buffer
+* TODO
+* oneshotではなく, file apiのbufferをどうするか
+  * tokio-uringの既存のworkが参考になりそう
 
 ### feature gate
 * tokio-unstable?
@@ -108,14 +160,35 @@ I think this proposal can be achieved incrementally, like as follows:
 5. Stabilize 🚀 (remove `tokio_unstable`)
 
 
+### Other Options
+* Taskを, 既存のIO Stackを使わない方法もある
+  * tokio-uring的な
+  * slabをglobalに持って, そこでやりとりする
+  * こっちのが実装は楽かも
+  * PollEventedを使った際の難しさの言語化
+    * 既存コードへの変更が大きい
+      * tokenで処理を区別したい -> scheduledIoのpointerとして使うのを変える必要あり
+        * なぜ区別したい？ -> wakeする
+    * fdの登録 (コード的にはPollEventedの作成)
+      * epoll: そのfd自体の登録
+      * uring: sqにsubmit
+    * fdのpoll
+      * epoll: 既存のpoll_ready()
+      * uring: 既存のpoll_ready() (同じ)
+    * completeしたとき
+      * epoll: 
+      * uring: 1つのepollで複数のtaskをwakeすることができるdriverでcqを操作して, uringの結果を適宜taskに渡してwakeする
+    * **まとめ**
+      * 既存のepollのapiは処理1つ1つのfdを登録していくのに対して, uringはuringのfdだけを登録する -> pollEventedが1つ1つsorceを求めてくることに合わない
+      * epollは1つのfd完了eventに対して, 複数のtaskが紐づく, だったが, io_uringの場合は1つのfd完了eventに対して, 複数のioリソースが紐づく
+* io completionをio-uring で待つか, epollで待つかの選択がある
+  * pros, consをかく
+* epoll_taskがuring_taskを起こすようにする
+  * pros, cons
+
 ## Prototype
 * 実際に行ったbranchとbenchを載せておいても良いかも (ある程度信頼性が増す?)
   * multi-threaded
   * sharding
   * batching logig
 * 実装の正しさには注意を払ったが, 間違えている可能性はある。testは全部passしてる
-
-## Other Choinces
-* Taskを, 既存のIO Stackを使わない方法もある
-  * tokio-uring的な
-  * slabをglobalに持って, そこでやりとりする
