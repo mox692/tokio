@@ -70,6 +70,6 @@ pub async fn read3(path: impl AsRef<Path>) -> io::Result<Vec<u8>> {
     .build();
 
     let op = Op::new(read_op, Read {});
-    let n = op.await;
+    let n = op.await.unwrap();
     Ok(buf)
 }
