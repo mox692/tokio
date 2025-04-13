@@ -1,3 +1,5 @@
+#![allow(dead_code, unreachable_code, unreachable_pub, unused_variables)]
+
 use io_uring::{opcode, types};
 
 #[cfg(test)]
@@ -73,8 +75,6 @@ pub(super) enum Operation {
 
 impl Uring {
     pub async fn open(path: impl AsRef<Path>) -> io::Result<File> {
-        // let op = Open::new();
-        // let res = op.await;
         unimplemented!()
     }
 
@@ -96,21 +96,6 @@ impl Uring {
     }
 
     pub async fn sync_all(&self) -> io::Result<()> {
-        // acquire a lock, ensuring all in-flight operations have done
-        // let guard = self.state.lock().await;
-
-        // match &mut *guard {
-        //     State::Idle(_) => {
-        //         // just perform the op
-        //     }
-        //     State::Busy(_) => {}
-        // };
-
-        // let sync_op = Fsync::new();
-
-        // // wait until sync_op done
-        // sync_op.await;
-
         unimplemented!()
     }
 
@@ -207,7 +192,7 @@ impl AsyncSeek for Uring {
 
 impl AsyncWrite for Uring {
     fn poll_write(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         src: &[u8],
     ) -> Poll<io::Result<usize>> {
