@@ -56,16 +56,6 @@ pub(super) enum Operation {
 }
 
 impl ThreadPool {
-    /// Converts a [`std::fs::File`] to a [`tokio::fs::File`](File).
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// // This line could block. It is not recommended to do this on the Tokio
-    /// // runtime.
-    /// let std_file = std::fs::File::open("foo.txt").unwrap();
-    /// let file = tokio::fs::File::from_std(std_file);
-    /// ```
     pub(crate) fn from_std(std: StdFile) -> ThreadPool {
         ThreadPool {
             std: Arc::new(std),
@@ -78,29 +68,6 @@ impl ThreadPool {
         }
     }
 
-    /// Attempts to sync all OS-internal metadata to disk.
-    ///
-    /// This function will attempt to ensure that all in-core data reaches the
-    /// filesystem before returning.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use tokio::fs::File;
-    /// use tokio::io::AsyncWriteExt;
-    ///
-    /// # async fn dox() -> std::io::Result<()> {
-    /// let mut file = File::create("foo.txt").await?;
-    /// file.write_all(b"hello, world!").await?;
-    /// file.sync_all().await?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    ///
-    /// The [`write_all`] method is defined on the [`AsyncWriteExt`] trait.
-    ///
-    /// [`write_all`]: fn@crate::io::AsyncWriteExt::write_all
-    /// [`AsyncWriteExt`]: trait@crate::io::AsyncWriteExt
     pub(crate) async fn sync_all(&self) -> io::Result<()> {
         let mut inner = self.inner.lock().await;
         inner.complete_inflight().await;
@@ -109,33 +76,6 @@ impl ThreadPool {
         asyncify(move || std.sync_all()).await
     }
 
-    /// This function is similar to `sync_all`, except that it may not
-    /// synchronize file metadata to the filesystem.
-    ///
-    /// This is intended for use cases that must synchronize content, but don't
-    /// need the metadata on disk. The goal of this method is to reduce disk
-    /// operations.
-    ///
-    /// Note that some platforms may simply implement this in terms of `sync_all`.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use tokio::fs::File;
-    /// use tokio::io::AsyncWriteExt;
-    ///
-    /// # async fn dox() -> std::io::Result<()> {
-    /// let mut file = File::create("foo.txt").await?;
-    /// file.write_all(b"hello, world!").await?;
-    /// file.sync_data().await?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    ///
-    /// The [`write_all`] method is defined on the [`AsyncWriteExt`] trait.
-    ///
-    /// [`write_all`]: fn@crate::io::AsyncWriteExt::write_all
-    /// [`AsyncWriteExt`]: trait@crate::io::AsyncWriteExt
     pub(crate) async fn sync_data(&self) -> io::Result<()> {
         let mut inner = self.inner.lock().await;
         inner.complete_inflight().await;
@@ -144,36 +84,6 @@ impl ThreadPool {
         asyncify(move || std.sync_data()).await
     }
 
-    /// Truncates or extends the underlying file, updating the size of this file to become size.
-    ///
-    /// If the size is less than the current file's size, then the file will be
-    /// shrunk. If it is greater than the current file's size, then the file
-    /// will be extended to size and have all of the intermediate data filled in
-    /// with 0s.
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if the file is not opened for
-    /// writing.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use tokio::fs::File;
-    /// use tokio::io::AsyncWriteExt;
-    ///
-    /// # async fn dox() -> std::io::Result<()> {
-    /// let mut file = File::create("foo.txt").await?;
-    /// file.write_all(b"hello, world!").await?;
-    /// file.set_len(10).await?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    ///
-    /// The [`write_all`] method is defined on the [`AsyncWriteExt`] trait.
-    ///
-    /// [`write_all`]: fn@crate::io::AsyncWriteExt::write_all
-    /// [`AsyncWriteExt`]: trait@crate::io::AsyncWriteExt
     pub(crate) async fn set_len(&self, size: u64) -> io::Result<()> {
         let mut inner = self.inner.lock().await;
         inner.complete_inflight().await;
@@ -218,41 +128,11 @@ impl ThreadPool {
         }
     }
 
-    /// Queries metadata about the underlying file.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use tokio::fs::File;
-    ///
-    /// # async fn dox() -> std::io::Result<()> {
-    /// let file = File::open("foo.txt").await?;
-    /// let metadata = file.metadata().await?;
-    ///
-    /// println!("{:?}", metadata);
-    /// # Ok(())
-    /// # }
-    /// ```
     pub(crate) async fn metadata(&self) -> io::Result<Metadata> {
         let std = self.std.clone();
         asyncify(move || std.metadata()).await
     }
 
-    /// Creates a new `File` instance that shares the same underlying file handle
-    /// as the existing `File` instance. Reads, writes, and seeks will affect both
-    /// File instances simultaneously.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use tokio::fs::File;
-    ///
-    /// # async fn dox() -> std::io::Result<()> {
-    /// let file = File::open("foo.txt").await?;
-    /// let file_clone = file.try_clone().await?;
-    /// # Ok(())
-    /// # }
-    /// ```
     pub(crate) async fn try_clone(&self) -> io::Result<ThreadPool> {
         self.inner.lock().await.complete_inflight().await;
         let std = self.std.clone();
@@ -260,85 +140,16 @@ impl ThreadPool {
         Ok(ThreadPool::from_std(std_file))
     }
 
-    /// Destructures `File` into a [`std::fs::File`]. This function is
-    /// async to allow any in-flight operations to complete.
-    ///
-    /// Use `File::try_into_std` to attempt conversion immediately.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use tokio::fs::File;
-    ///
-    /// # async fn dox() -> std::io::Result<()> {
-    /// let tokio_file = File::open("foo.txt").await?;
-    /// let std_file = tokio_file.into_std().await;
-    /// # Ok(())
-    /// # }
-    /// ```
     pub(crate) async fn into_std(mut self) -> StdFile {
         self.inner.get_mut().complete_inflight().await;
         Arc::try_unwrap(self.std).expect("Arc::try_unwrap failed")
     }
 
-    /// Changes the permissions on the underlying file.
-    ///
-    /// # Platform-specific behavior
-    ///
-    /// This function currently corresponds to the `fchmod` function on Unix and
-    /// the `SetFileInformationByHandle` function on Windows. Note that, this
-    /// [may change in the future][changes].
-    ///
-    /// [changes]: https://doc.rust-lang.org/std/io/index.html#platform-specific-behavior
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if the user lacks permission change
-    /// attributes on the underlying file. It may also return an error in other
-    /// os-specific unspecified cases.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use tokio::fs::File;
-    ///
-    /// # async fn dox() -> std::io::Result<()> {
-    /// let file = File::open("foo.txt").await?;
-    /// let mut perms = file.metadata().await?.permissions();
-    /// perms.set_readonly(true);
-    /// file.set_permissions(perms).await?;
-    /// # Ok(())
-    /// # }
-    /// ```
     pub(crate) async fn set_permissions(&self, perm: Permissions) -> io::Result<()> {
         let std = self.std.clone();
         asyncify(move || std.set_permissions(perm)).await
     }
 
-    /// Set the maximum buffer size for the underlying [`AsyncRead`] / [`AsyncWrite`] operation.
-    ///
-    /// Although Tokio uses a sensible default value for this buffer size, this function would be
-    /// useful for changing that default depending on the situation.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use tokio::fs::File;
-    /// use tokio::io::AsyncWriteExt;
-    ///
-    /// # async fn dox() -> std::io::Result<()> {
-    /// let mut file = File::open("foo.txt").await?;
-    ///
-    /// // Set maximum buffer size to 8 MiB
-    /// file.set_max_buf_size(8 * 1024 * 1024);
-    ///
-    /// let mut buf = vec![1; 1024 * 1024 * 1024];
-    ///
-    /// // Write the 1 GiB buffer in chunks up to 8 MiB each.
-    /// file.write_all(&mut buf).await?;
-    /// # Ok(())
-    /// # }
-    /// ```
     pub(crate) fn set_max_buf_size(&mut self, max_buf_size: usize) {
         self.max_buf_size = max_buf_size;
     }
