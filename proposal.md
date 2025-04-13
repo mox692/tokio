@@ -1,27 +1,26 @@
 このproposalは議論の出発点となることを目指しており, 議論の度に改訂されることがあります。
 
 # Summary
-[summary]: #summary
 
 * tokioのfile apiに, linux向けにio_uringを使用することを提案します。
 * 当面は, 既存のfile apiの裏側を透過的に置き換えることにフォーカスします。io_uring専用のregistered fd, registered bufferなどの発展的な機能は別のRFCによって解決されます。
 * network ioや, runtimeのio stack全般をio_uringにする試みに関してはこのRFCの対象外です。
 
 # Motivation
-[motivation]: #motivation
+現行の File API は各操作ごとに spawn_blocking を使用しスレッドプール上で処理しています。しかし, linuxにおいてはfile ioに関して io_uring を導入することで, 下記のような点を改善できる可能性があります。
 
-* 現状のfile apiはoperationごとにspawn_blockを使ったthread poolを用いている
-* io_uringを使い, 下記を達成することでFileAPIのpeformance改善を行う
-  * 操作ごとに発生するthread spawnを減らす
-  * system callを減らす
-* file apiによらない, もっと広い文脈に関しては [こちら](https://github.com/tokio-rs/tokio-uring/blob/master/DESIGN.md#motivation) も参考になります。
+* 操作ごとのスレッド生成の削減
+* システムコールの回数削減
+
+これにより、File API 全体の性能向上を図ります。なお、File API に限定されない広い文脈での背景については [tokio-uring の DESIGN ドキュメント](https://github.com/tokio-rs/tokio-uring/blob/master/DESIGN.md#motivation) も参照してください。
+
 
 # Guide-level explanation
 
 ### Overview
 現状, tokioのnetwork IOにはepollを使用しています。 io_uringのfdをepollに登録することで, io_uringのイベントの完了をepoll_ctlから読み取ることでき, この仕組みを用いることでepollとio_uringはある程度共存させることが可能です。
 
-将来的にはio_uringを全面的にsupportすることもできるかもしれませんが, それには大変な労力が必要になります。file apiをio_uringに対応させるだけであれば, epollとio_uringを共存させつつ io_uringのメリットを享受することが十分可能です。
+将来的にはio_uringを全面的にsupportすることもできるかもしれませんが, それには大変な労力が必要になります。file apiをio_uringに対応させるだけであれば, epollとio_uringを共存させつつ io_uringのメリットを享受することが十分可能です。 これらの変更は, 破壊的な変更を必要とせずに実現できると思います。
 
 この変更には, おそらく下記の変更が必要になります:
 
@@ -32,11 +31,9 @@
   * io_uringで完了したtaskのwake
 * fs moduleのapiを io_uring を使用するように変更
 
-これらの変更は, 破壊的な変更を必要とせずに実現できると思います。
-
 
 ### API Surface
-上記にも書いたように, 当面は既存のfile apiのバックエンドをio_uringにすることが目標になるので, apiは基本的には現状のものから変わりません。最終的には, ユーザーはこれまでのコードをそのまま使いつつ, 透過的にio_uringの恩恵を受けることができます。
+当面は既存のfile apiのバックエンドをio_uringにすることを目標にするのがいいと思います。そのため, apiは基本的には現状のものから変わりません。最終的には, ユーザーはこれまでのコードをそのまま使いつつ, 透過的にio_uringの恩恵を受けることができます。
 
 
 もしくは, `fs::OpenOptions`にio_uring用のoption(`io_uring_config`)を追加することを検討できるかもしれません。このようなapiは, 特に `unstable` の間に, io_uringをユーザーに選択的にopt-inさせることを可能にするかもしれません
@@ -54,14 +51,12 @@ file.read(&mut buf).await; // this read will use io_uring
 ```
 
 
-# Implementation Design
+# Implementation
 下記に, 上記を達成するための具体的な実装レベルのproposalを示します。
 
 ### Register Uring File Descriptor
-* io_uringのfdをepollに登録することで, epoll_ctlでuringの完了イベントを受け取れる
-* file IOを最初に行った場合 or runtimeの初期化時に, uringのfdをmio経由でepollに登録
-* これは将来的には各worker threadごとに行うことができる(i.e. threadごとにringを1つ持つ)と思われますが, 実装が複雑になる場合ははじめは1つのglobal ringを持つことから始めることができます。
-* はじめは, mioの dummy token(TOKEN_WAKEUPなど)からスタートできると思う
+io_uring のファイルディスクリプタ（fd）を epoll に登録することで、epoll_ctl を通じて完了イベントを受け取れるようにします。
+File I/O の最初のタイミングやランタイム初期化時に、mio を経由してこの fd を登録します。初期実装では TOKEN_WAKEUP などのダミートークンを用いて開始可能です。
 
 ```rust
 pub(crate) fn add_uring_source(
@@ -76,13 +71,12 @@ pub(crate) fn add_uring_source(
 let uringfd = IoUring::new(num_entry).unwrap();
 let mut source = SourceFd(&uringfd);
 add_uring_source(&mut source);
-
 ```
 
 ### Uring Tasks
-file operationが発行されると, 対応するUringFutureが内部で生成されます。これらのFutureのライフサイクルは次のようになります:
+file apiを呼び出すと, 対応するUringFutureが内部で生成されます。これらのFutureのライフサイクルは次のようになります:
 
-* **Submitted**: 最初にpollされた時,この状態から開始しますす。submission queueに自身のoperationをpushします. さらに, driver側から現在発生しているoperationの一覧にアクセスできるように, operationのリストを保持しているデータ構造に自身を追加します. その後, pendingに遷移します。
+* **Submitted**: 最初にpollされた時,この状態から開始します。submission queueに自身のoperationをpushします. さらに, driver側から現在発生しているoperationの一覧にアクセスできるように, operationのリストを保持しているデータ構造に自身を追加します. その後, pendingに遷移します。
 * **Pending**: operationがまだ完了していない状態. taskのwakerを保持しています.
 * **Completed** driverからwakeされた場合にこの状態になります。 完了した操作をuser programに返します.
 
@@ -101,11 +95,12 @@ driver内の疑似コードは下記になります:
 // Polling events ...
 self.poll.poll(events, max_wait);
 
+// process epoll events
 for event in events.iter() {
-    // process epoll events
 }
 
 /* NEW */
+// process uring events
 for cqe in cq.iter() {
     // process uring events
     let index = cqe.userdata();
