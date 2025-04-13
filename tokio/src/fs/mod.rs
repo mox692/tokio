@@ -240,7 +240,7 @@ mod open_options;
 pub use self::open_options::{OpenOptions, UringOption};
 
 mod read;
-pub use self::read::{read, read3};
+pub use self::read::read;
 
 mod read_dir;
 pub use self::read_dir::{read_dir, DirEntry, ReadDir};

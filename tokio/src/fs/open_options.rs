@@ -408,9 +408,8 @@ impl OpenOptions {
                 let std = asyncify(move || opts.open(path)).await?;
                 Ok(File::from_std(std))
             }
-            Some(options) => {
-                let path_bytes = path.as_ref().as_os_str().as_bytes();
-                let c_path = CString::new(path_bytes).expect("Path contains null byte");
+            Some(_options) => {
+                let c_path = CString::new(path.as_ref().as_os_str().as_bytes())?;
 
                 // TODO: make configurable
                 let flags = libc::O_CLOEXEC | libc::O_RDWR | libc::O_APPEND | libc::O_CREAT;
@@ -706,5 +705,5 @@ impl Default for OpenOptions {
     }
 }
 
-pub mod uring;
+pub(super) mod uring;
 pub use uring::UringOption;

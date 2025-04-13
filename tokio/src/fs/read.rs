@@ -1,5 +1,5 @@
 use crate::{
-    fs::{asyncify, open_options::uring::UringOption, OpenOptions},
+    fs::{open_options::uring::UringOption, OpenOptions},
     io::uring::read::Read,
     runtime::context::Op,
 };
@@ -48,28 +48,35 @@ use std::{io, os::fd::AsRawFd, path::Path};
 /// }
 /// ```
 pub async fn read(path: impl AsRef<Path>) -> io::Result<Vec<u8>> {
-    let path = path.as_ref().to_owned();
-    asyncify(move || std::fs::read(path)).await
+    read_inner(path).await
 }
 
-/// docs
-pub async fn read3(path: impl AsRef<Path>) -> io::Result<Vec<u8>> {
-    use io_uring::{opcode, types};
+cfg_not_uring_fs! {
+    async fn read_inner(path: impl AsRef<Path>) -> io::Result<Vec<u8>> {
+        let path = path.as_ref().to_owned();
+        crate::fs::asyncify(move || std::fs::read(path)).await
+    }
+}
 
-    let mut buf = vec![0u8; 1024];
-    let file = OpenOptions::new()
-        .read(true)
-        .use_io_uring(UringOption::new())
-        .open(path)
-        .await?;
-    let read_op = opcode::Read::new(
-        types::Fd(file.as_raw_fd()),
-        buf.as_mut_ptr(),
-        buf.len() as u32,
-    )
-    .build();
+cfg_uring_fs! {
+    async fn read_inner(path: impl AsRef<Path>) -> io::Result<Vec<u8>> {
+        use io_uring::{opcode, types};
 
-    let op = Op::new(read_op, Read {});
-    let n = op.await.unwrap();
-    Ok(buf)
+        let mut buf = vec![0u8; 1024];
+        let file = OpenOptions::new()
+            .read(true)
+            .use_io_uring(UringOption::new())
+            .open(path)
+            .await?;
+        let read_op = opcode::Read::new(
+            types::Fd(file.as_raw_fd()),
+            buf.as_mut_ptr(),
+            buf.len() as u32,
+        )
+        .build();
+
+        let _ = Op::new(read_op, Read {}).await?;
+
+        Ok(buf)
+    }
 }
