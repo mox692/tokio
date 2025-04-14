@@ -145,6 +145,16 @@ impl ThreadPool {
         Arc::try_unwrap(self.std).expect("Arc::try_unwrap failed")
     }
 
+    pub(crate) fn try_into_std(mut self) -> Result<StdFile, Self> {
+        match Arc::try_unwrap(self.std) {
+            Ok(file) => Ok(file),
+            Err(std_file_arc) => {
+                self.std = std_file_arc;
+                Err(self)
+            }
+        }
+    }
+
     pub(crate) async fn set_permissions(&self, perm: Permissions) -> io::Result<()> {
         let std = self.std.clone();
         asyncify(move || std.set_permissions(perm)).await

@@ -159,19 +159,17 @@ impl<T> Drop for Op<T> {
 /// A single CQE entry
 pub(crate) struct CqeResult {
     pub(crate) result: io::Result<u32>,
-    pub(crate) flags: u32,
 }
 
 impl From<cqueue::Entry> for CqeResult {
     fn from(cqe: cqueue::Entry) -> Self {
         let res = cqe.result();
-        let flags = cqe.flags();
         let result = if res >= 0 {
             Ok(res as u32)
         } else {
             Err(io::Error::from_raw_os_error(-res))
         };
-        CqeResult { result, flags }
+        CqeResult { result }
     }
 }
 

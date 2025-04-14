@@ -69,10 +69,8 @@ use crate::runtime::{context, TaskHooks};
 use crate::task::coop;
 use crate::util::atomic_cell::AtomicCell;
 use crate::util::rand::{FastRand, RngSeedGenerator};
-use mio::unix::SourceFd;
 
 use std::cell::RefCell;
-use std::os::fd::AsRawFd;
 use std::task::Waker;
 use std::thread;
 use std::time::Duration;
@@ -494,23 +492,10 @@ fn run(worker: Arc<Worker>) {
 
     let handle = scheduler::Handle::MultiThread(worker.handle.clone());
 
-    // setup for io_uring
-    // TODO: this process could be done in the `add_uring_source`
-    let uringfd = worker
-        .handle
-        .driver
-        .io()
-        .get_uring(worker.index + 1)
-        .lock()
-        .uring
-        .as_raw_fd();
-
-    // register to epoll
-    let mut source = SourceFd(&uringfd);
     handle
         .driver()
         .io()
-        .add_uring_source(&mut source, worker.index + 1, Interest::READABLE)
+        .add_uring_source(worker.index + 1, Interest::READABLE)
         .unwrap();
 
     crate::runtime::context::enter_runtime(&handle, true, |_| {

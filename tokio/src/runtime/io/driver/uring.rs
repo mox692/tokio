@@ -1,10 +1,12 @@
 use io_uring::{squeue::Entry, IoUring};
+use mio::unix::SourceFd;
 use slab::Slab;
 
 use crate::{io::Interest, loom::sync::Mutex, runtime::context::Lifecycle};
 
 use super::{Driver, Handle};
 
+use std::os::fd::AsRawFd;
 use std::{io, mem, ops::DerefMut, task::Waker};
 
 pub(crate) struct UringContext {
@@ -41,12 +43,15 @@ impl Handle {
     /// Called when runtime starts.
     pub(crate) fn add_uring_source(
         &self,
-        source: &mut impl mio::event::Source,
         worker_index: usize,
         interest: Interest,
     ) -> io::Result<()> {
+        // setup for io_uring
+        // TODO: this process could be done in the `add_uring_source`
+        let uringfd = self.get_uring(worker_index).lock().uring.as_raw_fd();
+        let mut source = SourceFd(&uringfd);
         self.registry
-            .register(source, uring_token(worker_index), interest.to_mio())
+            .register(&mut source, uring_token(worker_index), interest.to_mio())
     }
 
     pub(crate) fn get_uring(&self, worker_index: usize) -> &Mutex<UringContext> {

@@ -457,9 +457,11 @@ impl File {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn try_into_std(mut self) -> Result<StdFile, Self> {
+    pub fn try_into_std(self) -> Result<StdFile, Self> {
         match self.inner {
-            Kind::ThreadPool(p) => unimplemented!(),
+            Kind::ThreadPool(p) => p.try_into_std().map_err(|p| File {
+                inner: Kind::ThreadPool(p),
+            }),
             Kind::Uring(_) => unimplemented!(),
         }
     }
