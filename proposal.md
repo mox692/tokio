@@ -168,7 +168,7 @@ epollとio_uringの統合は, 理論的には, io_uringがepollのイベント�
 # Unresolved questions
 
 **unstableで提供する間のflagの提供方法**  
-移行期間中に, どのようにuserにio_uringをopt-inさせるか(もしくはそもそもopt-inを提供せずに暗黙的に差し替えるか)に関しては明確な答えがまだありません。
+(上記で議論はしましたが,) 移行期間中に, どのようにuserにio_uringをopt-inさせるか(もしくはそもそもopt-inを提供せずに暗黙的に差し替えるか)に関しては明確な答えがまだありません。
 
 **submissionの賢いbatchingロジック**  
 io_uringのperformanceを最大化するには, submit時のbatchingをうまく活用することが重要です。tokioのevent loopの中で, どのようなbatching戦略を取るのかはまだ未解決です。
