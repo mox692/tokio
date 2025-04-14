@@ -46,7 +46,6 @@ impl Handle {
         interest: Interest,
     ) -> io::Result<()> {
         // setup for io_uring
-        // TODO: this process could be done in the `add_uring_source`
         let uringfd = self.get_uring(worker_index).lock().uring.as_raw_fd();
         let mut source = SourceFd(&uringfd);
         self.registry
