@@ -728,8 +728,7 @@ impl Context {
     /// Also, we rely on the workstealing algorithm to spread the tasks amongst workers
     /// after all the IOs get dispatched
     fn park(&self, mut core: Box<Core>) -> Box<Core> {
-        // release all uring.
-        // TODO: update detail
+        // TODO: update details
         let handle = crate::runtime::Handle::current();
         let driver = handle.inner.driver().io();
         for context in driver.uring_contexts.iter() {
