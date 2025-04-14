@@ -1,0 +1,200 @@
+This proposal aims to serve as a starting point for discussion and may be revised as the conversation evolves.
+
+# Summary
+
+* This proposal suggests adding support for `io_uring` in Tokio's file API on Linux.
+* Initially, the focus is on transparently replacing the backend of the existing file API. Advanced features such as registered fds or registered buffers will be addressed in separate RFCs.
+* The application of io_uring to network I/O is outside the scope of this RFC.
+* The implementation will happen incrementally.
+
+# Motivation
+
+The current `File` API uses `spawn_blocking` for each operation, which runs tasks on a thread pool. On Linux, however, using `io_uring` for file I/O can potentially bring the following perf improvements:
+
+* Fewer system calls
+* Reduction in thread creation per operation
+
+For broader background information that is related to introducing io_uring in tokio, refer to the [tokio-uring DESIGN document](https://github.com/tokio-rs/tokio-uring/blob/master/DESIGN.md#motivation).
+
+# Guide-level explanation
+
+### Overview
+
+Currently, Tokio uses `epoll` for network I/O. Since file descriptors created by `io_uring` can be registered with `epoll`, it's possible to detect completion events via `epoll_ctl`. This mechanism allows for some level of coexistence between `epoll` and `io_uring`.
+
+At a high level, the following changes will likely be required:
+
+* Introduce a new `Future` type to represent `io_uring` operations (similar to `tokio-uring`'s `Op<T>`)
+* Modify the driver to:
+  * Register the `io_uring` file descriptor
+  * Submit operations to the submission queue when performing file operations
+  * Wake tasks upon completion via `io_uring`
+* Modify the `fs` module to use `io_uring` internally
+
+I think these changes can be achievable without breaking changes.
+
+### API Surface
+
+For now, the goal should be to replace the backend of the existing file API with `io_uring`. Therefore, the public API will remain unchanged. As a result, users can continue using the current file APIs and transparently benefit from `io_uring`.
+
+### Opt-in options
+
+While the feature is unstable, it may be useful to allow opting in to use `io_uring`. This would help in gradually transitioning the API and would also benefit users who, for example, run on older Linux kernels and prefer to continue using the thread-pool implementation even after stabilization.  
+
+There are some options for this.
+
+**Add config options to `OpenOptions`**  
+One idea would be to add a mode-selection option (e.g., `set_mode`) to `fs::OpenOptions`.
+
+```rust
+let file = OpenOptions::new()
+    .read(true)
+    // A file object that is created by `set_mode(Mode::Uring(...))` will use
+    // io_uring to perform IO.
+    .set_mode(Mode::Uring(uring_config)) // **NEW**
+    .open(&path)
+    .await;
+
+file.read(&mut buf).await; // this read will use io_uring
+```
+
+A downside is that this approach requires adding some new public APIs. Also, it cannot be applied to one-shot operations like `tokio::fs::write()` or `tokio::fs::read()`.
+
+**Support dedicated cfg: `--tokio_uring_fs`**  
+Similar to the existing `taskdump` cfg, a new compile-time cfg option could be introduced. Compared to the runtime opt-in, this has the advantage of supporting one-shot APIs (`tokio::fs::write()`, `tokio::fs::read()` etc). However, it removes the ability to switch implementations at runtime.
+
+# Details
+
+Below is a more concrete implementation side details for how to achieve the goals described above.
+
+### Register Uring File Descriptor
+
+By registering the `io_uring` file descriptor with `epoll`, we can receive completion events via `epoll_ctl`. This can be done at the time of the first file I/O or during runtime initialization using `mio`. For the initial implementation, we can start with a dummy token, e.g. `TOKEN_WAKEUP`.
+
+```rust
+pub(crate) fn add_uring_source(
+    &self,
+    source: &mut impl mio::event::Source,
+) -> io::Result<()> {
+    // Register uringfd to mio
+    self.registry
+        .register(source, TOKEN_WAKEUP, Interest::READABLE)
+}
+
+// Register uringfd
+let uringfd = IoUring::new(num_entry).unwrap();
+let mut source = SourceFd(&uringfd);
+add_uring_source(&mut source);
+```
+
+### Uring Tasks
+
+When the file API is invoked, an associated `UringFuture` is created internally. The lifecycle of these futures is as follows:
+
+* **Submitted**: When the future is created, it starts in this state. It pushes its operation onto the submission queue. It also registers itself in a shared data structure that tracks in-flight operations, then transitions to `Pending`.
+* **Pending**: The operation has not yet completed. The future holds a waker for later use.
+* **Completed**: When the operation completes and the driver wakes the task, the future transitions to this state and returns the result to the user.
+
+The design of these futures will largely follow that of [tokio-uring](https://github.com/tokio-rs/tokio-uring/blob/7761222aa7f4bd48c559ca82e9535d47aac96d53/src/runtime/driver/op/mod.rs#L160-L177).
+
+### Driver
+
+Once the `uringfd` is registered with `epoll`, completion of submitted operations will cause `epoll` to return. After processing regular `epoll` events, the driver can also handle `cqe` entries to wake tasks associated with `io_uring`.
+
+The driver maintains a list of in-flight operations and can identify which operation completed using the `userdata` field in the `cqe`.
+
+A pseudocode example from within the driver:
+
+```rust
+// tokio/src/runtime/io/driver.rs
+
+// Polling events ...
+self.poll.poll(events, max_wait);
+
+// process epoll events
+for event in events.iter() {
+}
+
+/* NEW */
+// process uring events
+for cqe in cq.iter() {
+    // process uring events
+    let index = cqe.userdata();
+    // look up which operation has finished
+    let operation = operation_list.get(index);
+    operation.wake();
+}
+```
+
+### Multi thread
+
+For the multi-threaded runtime, there are multiple strategies for managing rings:
+
+The simplest approach is to maintain a single global ring. This is easy to implement but could become a bottleneck as the number of threads increases.
+
+Alternatively, we can reduce contention by sharding the ring (i.e.assigning a dedicated ring per worker thread). There are several potential approaches to this:
+
+* Encode the `uring`'s array index into `mio::Token` as part of a bit field
+* Include the shard index in the `userdata` field of `io_uring`
+
+However, this comes at the cost of increased implementation complexity.
+
+A reasonable strategy might be to start with a single global ring and introduce sharding as a follow-up.
+
+This approach was adopted in my experimental implementation, and so far it has been working well.
+
+# Drawbacks
+
+* If we adopt a strategy where the driver wakes the epoll event first and then wakes the uring, an implicit prioritization may be introduced into task scheduling. (Tasks triggered by epoll events may be executed preferentially.)
+  * If we can inspect events without distinguishing between epoll and io_uring, and determine whether an event comes from io_uring or epoll, this issue could potentially be resolved.
+
+# Alternatives
+**Waiting for epoll events with io_uring**  
+The integration of epoll and io_uring is theoretically possible by having io_uring wait on epoll events (e.g., using `IORING_OP_POLL_ADD`). However, this would require a major rewrite of the existing epoll-based runtime, making it impractical.
+
+**Defining a dedicated File object for io_uring**  
+This approach would require users to explicitly replace the File object, which is not ideal. Furthermore, it would necessitate maintaining a Linux-specific type, which is undesirable from a maintainability standpoint.
+
+**Creating a Tokio task that polls uring tasks**  
+This is the strategy taken by the `tokio-uring` project. However, unlike `tokio-uring`, this proposal has direct access to the Tokio runtime driver, making it unnecessary to spawn a dedicated polling task. Moreover, using a dedicated task to wake uring tasks introduces fairness concerns.
+
+# Prior art
+
+### tokio-uring
+As prior work, there is the `tokio-uring` project. The differences between that project and this proposal include:
+
+* Supports not only file I/O but also network I/O
+* Based on the current-thread runtime
+* Supports advanced features such as kernel-registered buffers
+
+However, other parts—such as the `Future` related to `Operation` (`Op`)—are likely to be reused or inherited in part.
+
+# Unresolved questions
+
+**How to provide a flag during the unstable period**  
+(Although discussed above,) it is still unclear how users should opt-in to io_uring during the transition period (or whether it should be implicitly substituted without requiring opt-in at all).
+
+**Intelligent batching logic for submission**  
+To maximize io_uring performance, it is important to make effective use of batching at submission time. The batching strategy within Tokio's event loop is still undecided.
+
+This RFC aims to align on a high-level design. The detailed implementation strategy for batching will be handled in a separate issue or PR.
+
+**How to manage the ring in a multi-threaded runtime**  
+The detailed implementation strategy for sharding the ring across threads in a multi-threaded context will also be addressed in a separate issue or PR.
+
+# Future work
+
+I think this proposal can be achieved incrementally, as follows:
+
+1. Add minimal io_uring file API support for the current-thread runtime
+   * Add uring support as an opt-in option (using a dedicated `cfg` or `OpenOptions`)
+   * Initially support only some key APIs (e.g., `File` object only)
+2. Multi-threaded runtime support
+   * For simplicity, we could start with a single global ring
+3. Further improvements, such as:
+   * Sharding rings in the multi-threaded runtime (one ring per thread)
+   * Expanding the use of io_uring to other filesystem APIs
+   * Smarter batching logic for submission
+   * Leveraging registered buffers and registered files
+4. Use io_uring as the default for `File::new`, `fs::read`, `fs::write`, etc.
+5. Stabilize (remove `tokio_unstable`)
