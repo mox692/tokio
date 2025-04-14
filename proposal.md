@@ -5,6 +5,7 @@
 * tokioのfile apiに, linux向けにio_uringを使用することを提案します。
 * 当面は, 既存のfile apiの裏側を透過的に置き換えることにフォーカスします。io_uring専用のregistered fd, registered bufferなどの発展的な機能は別のRFCによって解決されます。
 * network ioや, runtimeのio stack全般をio_uringにする試みに関してはこのRFCの対象外です。
+* 実装は幾つかのフェーズに分けられインクリメンタルに実施されます。
 
 # Motivation
 現行の File API は各操作ごとに spawn_blocking を使用しスレッドプール上で処理しています。しかし, linuxにおいてはfile ioに関して io_uring を導入することで, 下記のような点を改善できる可能性があります。
@@ -34,24 +35,33 @@
 これらの変更は, 破壊的な変更を必要とせずに実現できると思います。ただし作業にはtokioのさまざまな箇所への変更が必要になるため, 変更は小さくかつincrementalに行う必要があります。
 
 ### API Surface
-当面は既存のfile apiのバックエンドをio_uringにすることを目標にするのがいいと思います。そのため, apiは基本的には現状のものから変わりません。最終的には, ユーザーはこれまでのコードをそのまま使いつつ, 透過的にio_uringの恩恵を受けることができます。
 
-**opt-in options**  
+当面は既存のfile apiのバックエンドをio_uringにすることを目標にするのがいいと思います。そのため, apiは基本的には現状のものから変わりません。最終的には, ユーザーはこれまでのfile apiのコードをそのまま使いつつ, 透過的にio_uringの恩恵を受けることができます。
 
-unstableの間に, io_uringを使うことをopt-inさせることができるのは有用だと思われます。1つのアイデアとしては, 
- `fs::OpenOptions`にio_uring用のoption(`io_uring_config`)を追加することを検討できるかもしれません。このようなapiは, 特に `unstable` の間に, io_uringをユーザーに選択的にopt-inさせることを可能にします.
+### Opt-in options
+
+unstableの間に, io_uringを使うことをopt-inさせることができるのは有用だと思われます。これはapiを段階的にio_uringに移行することに役立つし, stableになった後でも何らかの理由(古いlinux kernelを使っている)でこれまでのthread poolの実装を使いたいユーザーにもメリットとなる可能性があります。
+
+**add config options to `OpenOptios`**  
+1つのアイデアとしては, 
+ `fs::OpenOptions`にモードを選択するoption(`set_mode`)を追加することを検討できるかもしれません。
 
 ```rust
 let file = OpenOptions::new()
     .read(true)
-    // A file object that is created by `io_uring_config` will use
+    // A file object that is created by `set_mode(Mode::Uring(...))` will use
     // io_uring to perform IO.
-    .io_uring_config(UringOption::new().ring_size(64)) // **NEW**
+    .set_mode(Mode::Uring(uring_config)) // **NEW**
     .open(&path)
     .await;
 
 file.read(&mut buf).await; // this read will use io_uring
 ```
+
+デメリットは, 必要なpublic APIをいくつか追加する必要があるという点と, ワンショット系のオペレーション(`tokio::fs::write()`, `tokio::fs::read()`)には適用できないという点です。(ワンショット系のオペレーションには, どこかのタイミングでデフォルトを差し替えることを検討できるかもしれません.)
+
+**support dedicated cfg: `--tokio_uring_fs`**  
+現在のtaskdumpと同様に新しいcfgを導入し, io_uringを使うかthread_poolを使うかをcompile時に決定します。上記と比較してメリットはワンショットAPIにも適用できる点ですが, コード内でio_uringとthread_poolを切り替えることができなくなるのがデメリットです。
 
 # Details
 下記に, 上記を達成するための具体的な実装レベルのproposalを示します。
@@ -129,7 +139,6 @@ for cqe in cq.iter() {
 私の実験レポではこの方法を採用していて, 今の所workしています。
 
 # Drawbacks
-[drawbacks]: #drawbacks
 
 * driver内でepollのeventをwakeした後に, uringのwakeを行う戦略をとると, taskのschedulingに暗黙的な優先度が追加される可能性があります。(epollのtaskが優先的に実行される)
   * epoll eventの走査とio_uringの走査を区別せず, eventがio_uringかepollのものかを判別できるようになればこれが解決できる可能性があります。
@@ -167,23 +176,21 @@ io_uringのperformanceを最大化するには, submit時のbatchingをうまく
 このRFCはハイレベルは設計をすり合わせることを目的としており, batchingの詳細な実装戦略は別のissueもしくはPR上で行われます。
 
 **multi thread runtimeでどのようにringを扱うか**  
-multi-threadの詳細な実装戦略は別のissueもしくはPR上で行われます。
+multi-threadでringをshardingする詳細な実装戦略は別のissueもしくはPR上で行われます。
 
 # Future work
 
 I think this proposal can be achieved incrementally, like as follows:
 
 1. Add minimal io_uring file api support for current thread runtime
-   * Add uring support as an opt-in option to the `OpenOption`.
-   * Basic Open, Read, Write operation
-   * (possibly) No batching logic for submission
+   * Add uring support as an opt-in option (using dedicated cfg or `OpenOptions`)
+   * Only some important apis are supported (e.g. `File` object only at first)
 2. Muti threaded runtime support
    *  Maybe we could start having only one global ring, for simplicity.
 3. Further improvements, such as
    * Sharding rings for multi-threaded runtime (having one ring per thread)
-   * Increase fs api adapted to io_uring
+   * Expand the usage of io_uring to other fs apis
    * Smarter batching logic for submission
    * Utilize registered buffers, registered file
 4. Use io_uring as a default in `File::new`, `fs::read`, `fs::write` etc.
 5. Stabilize (remove `tokio_unstable`)
-
