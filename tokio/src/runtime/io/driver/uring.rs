@@ -4,10 +4,12 @@ use slab::Slab;
 
 use crate::{io::Interest, loom::sync::Mutex, runtime::context::Lifecycle};
 
-use super::{Driver, Handle};
+use super::Handle;
 
 use std::os::fd::AsRawFd;
 use std::{io, mem, ops::DerefMut, task::Waker};
+
+const DEFAULT_RING_SIZE: u32 = 8192;
 
 pub(crate) struct UringContext {
     pub(crate) uring: io_uring::IoUring,
@@ -16,13 +18,10 @@ pub(crate) struct UringContext {
 
 impl UringContext {
     pub(crate) fn new() -> Self {
-        // TODO: we could eliminate this eventfd, like tokio-uring does? In that case,
-        //       I guess we should just pass the fd of the uring to the epoll_ctl.
-        // TODO: make configurable
-        let uring = IoUring::new(8192).unwrap();
         Self {
             ops: Slab::new(),
-            uring,
+            // TODO: make configurable
+            uring: IoUring::new(DEFAULT_RING_SIZE).unwrap(),
         }
     }
 }
@@ -98,5 +97,3 @@ impl Handle {
         self.uring_contexts.len()
     }
 }
-
-impl Driver {}

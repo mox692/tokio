@@ -3,7 +3,6 @@ cfg_signal_internal_and_unix! {
     mod signal;
 }
 
-// io_uring
 mod uring;
 
 use crate::io::interest::Interest;
@@ -52,7 +51,7 @@ pub(crate) struct Handle {
 
     pub(crate) metrics: IoDriverMetrics,
 
-    // TODO: can we avoid RwLock?
+    // TODO: Can we avoid Mutex?
     pub(crate) uring_contexts: Box<[Mutex<UringContext>]>,
 }
 
