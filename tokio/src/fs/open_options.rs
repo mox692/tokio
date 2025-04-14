@@ -433,11 +433,12 @@ impl OpenOptions {
         &mut self.std
     }
 
-    // TODO: cfg_gate
-    /// docs
-    pub fn use_io_uring(&mut self, options: UringOption) -> &mut OpenOptions {
-        self.uring = Some(options);
-        self
+    cfg_uring_fs! {
+        /// docs
+        pub fn use_io_uring(&mut self, options: UringOption) -> &mut OpenOptions {
+            self.uring = Some(options);
+            self
+        }
     }
 }
 

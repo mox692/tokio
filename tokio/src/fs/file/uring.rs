@@ -136,7 +136,7 @@ impl AsyncRead for Uring {
                     let read_op = opcode::Read::new(types::Fd(fd), ptr, buf.len() as u32).build();
 
                     inner.state =
-                        State::Busy(OpFuture::Read((Op::new(read_op, Read::new()), Some(buf))));
+                        State::Busy(OpFuture::Read((Op::new(read_op, Read {}), Some(buf))));
                 }
                 State::Busy(ref mut rx) => {
                     let (op, mut buf) = ready!(Pin::new(rx).poll(cx))?;
