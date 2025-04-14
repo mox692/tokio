@@ -22,7 +22,7 @@
 
 将来的にはio_uringを全面的にsupportすることもできるかもしれませんが, それには大変な労力が必要になります。file apiをio_uringに対応させるだけであれば, epollとio_uringを共存させつつ io_uringのメリットを享受することが十分可能です。 これらの変更は, 破壊的な変更を必要とせずに実現できると思います。
 
-この変更には, おそらく下記の変更が必要になります:
+この変更には, おそらくハイレベルには下記の変更が必要になります:
 
 * io_uringのoperationを表現するFutureの追加 (tokio-uringの`Op<T>` のようなもの)
 * Driverの変更
@@ -31,12 +31,15 @@
   * io_uringで完了したtaskのwake
 * fs moduleのapiを io_uring を使用するように変更
 
+これらの変更は, 破壊的な変更を必要とせずに実現できると思います。ただし作業にはtokioのさまざまな箇所への変更が必要になるため, 変更は小さくかつincrementalに行う必要があります。
 
 ### API Surface
 当面は既存のfile apiのバックエンドをio_uringにすることを目標にするのがいいと思います。そのため, apiは基本的には現状のものから変わりません。最終的には, ユーザーはこれまでのコードをそのまま使いつつ, 透過的にio_uringの恩恵を受けることができます。
 
+**opt-in options**  
 
-もしくは, `fs::OpenOptions`にio_uring用のoption(`io_uring_config`)を追加することを検討できるかもしれません。このようなapiは, 特に `unstable` の間に, io_uringをユーザーに選択的にopt-inさせることを可能にするかもしれません
+unstableの間に, io_uringを使うことをopt-inさせることができるのは有用だと思われます。1つのアイデアとしては, 
+ `fs::OpenOptions`にio_uring用のoption(`io_uring_config`)を追加することを検討できるかもしれません。このようなapiは, 特に `unstable` の間に, io_uringをユーザーに選択的にopt-inさせることを可能にします.
 
 ```rust
 let file = OpenOptions::new()
@@ -50,8 +53,7 @@ let file = OpenOptions::new()
 file.read(&mut buf).await; // this read will use io_uring
 ```
 
-
-# Implementation
+# Details
 下記に, 上記を達成するための具体的な実装レベルのproposalを示します。
 
 ### Register Uring File Descriptor
@@ -76,14 +78,14 @@ add_uring_source(&mut source);
 ### Uring Tasks
 file apiを呼び出すと, 対応するUringFutureが内部で生成されます。これらのFutureのライフサイクルは次のようになります:
 
-* **Submitted**: 最初にpollされた時,この状態から開始します。submission queueに自身のoperationをpushします. さらに, driver側から現在発生しているoperationの一覧にアクセスできるように, operationのリストを保持しているデータ構造に自身を追加します. その後, pendingに遷移します。
-* **Pending**: operationがまだ完了していない状態. taskのwakerを保持しています.
-* **Completed** driverからwakeされた場合にこの状態になります。 完了した操作をuser programに返します.
+* **Submitted**: Futureが生成された際,この状態から開始します。submission queueに自身のoperationをpushします. さらに, driver側から現在発生しているoperationの一覧にアクセスできるように, operationのリストを保持しているデータ構造に自身を追加します. その後, pendingに遷移します。
+* **Pending**: operationがまだ完了していない状態です. taskのwakerを保持しています.
+* **Completed** io_uringのoperationが完了して, driverからwakeされた場合にこの状態になります。 完了した操作をuser programに返します.
 
-これらのFutureのデザインは[tokio-uring](https://github.com/tokio-rs/tokio-uring/blob/7761222aa7f4bd48c559ca82e9535d47aac96d53/src/runtime/driver/op/mod.rs#L160-L177)とほぼ同じものです
+これらのFutureのデザインは[tokio-uring](https://github.com/tokio-rs/tokio-uring/blob/7761222aa7f4bd48c559ca82e9535d47aac96d53/src/runtime/driver/op/mod.rs#L160-L177)とほぼ同じものを継承すると思います。
 
 ### Driver
-uringfdをepollに登録したことで, uringでsubmitしたoperationが完了したらepollが返るようになリマス。
+uringfdをepollに登録したことで, uringでsubmitしたoperationが完了したらepollが返るようになります。
 driverでは, 普通のepollの処理を終えた後に, cqeの操作も行うことで, uringのtaskもwakeすることが可能になります。  
 driverは現在in-flightになっているoperationのlistを保持しており, cqeから得られるuserdataから, どのoperationが完了したのかを判別することができます。
 
@@ -116,21 +118,23 @@ for cqe in cq.iter() {
 
 シンプルな方法はglobalにringを1つだけ保持する方法です。これは実装が簡単ですが, スレッドが増えるとringに対する競合が増える可能性があります。
 
-この対抗策として, worker threadの数分だけringをshardingすることで(workerごとにringを割り当てる), 競合を減らせる可能性があります。 これにはいくつか実現方法が考えられますが, 実装の複雑さが増す可能性があります。
+この対抗策として, worker threadの数分だけringをshardingすることで(workerごとにringを割り当てる), 競合を減らせる可能性があります。これにはいくつか実現方法が考えられます(io_uringのuserdataにshard indexを含むデータを保存するようにする, mioのtokenに細工をしてbit fieldにindex情報を持たせるようにする etc).
 
+* io_uringのuserdataにshard indexを含むデータを保存するようにして, 
+* mioの`Token`に細工をしてbit fieldにuringのindex情報を持たせるようにする
+
+ただし, その対価として実装の複雑さが増す可能性があります。
+おそらく最初はユニークなグローバルringからstartして, follow-upでringのshardingを追加できます。
+
+私の実験レポではこの方法を採用していて, 今の所workしています。
 
 # Drawbacks
 [drawbacks]: #drawbacks
 
-* tokioの複数のcomponentに変更を入れる必要があるため, 変更はincrementalに行われる必要があります。
 * driver内でepollのeventをwakeした後に, uringのwakeを行う戦略をとると, taskのschedulingに暗黙的な優先度が追加される可能性があります。(epollのtaskが優先的に実行される)
   * epoll eventの走査とio_uringの走査を区別せず, eventがio_uringかepollのものかを判別できるようになればこれが解決できる可能性があります。
 
 # Alternatives
-**io_uringを使うためのapiを提供しない**  
-io_uringに関するフラグを提供せずに, tokio側で透過的にどんどんfs moduleをio_uringを使用するように変更している方針も考えられます。
-
-
 **io_uringでepollのeventを待つ**  
 epollとio_uringの統合は, 理論的には, io_uringがepollのイベントを待つようにすることも可能です。(`IORING_OP_POLL_ADD` 等を用いて)。しかし, これは既存のepollベースのruntimeを大きく書き換える必要があり, あまり現実的ではありません。
 
@@ -154,11 +158,16 @@ epollとio_uringの統合は, 理論的には, io_uringがepollのイベント�
 
 # Unresolved questions
 
-**submissionの賢いbatchingロジック**  
-io_uringのperformanceを最大化するには, batchingをうまく活用することが重要です。tokioのイベントループの中で, いつエントリをバッチでsubmitすべきかの詳細な検証は, 今後実施されます
-
 **unstableで提供する間のflagの提供方法**  
-`OpenOption`を用いてio_uringの使用を切り替えるアイデアを上記で書きましたが, よりいい方法がある可能性があります。
+移行期間中に, どのようにuserにio_uringをopt-inさせるか(もしくはそもそもopt-inを提供せずに暗黙的に差し替えるか)に関しては明確な答えがまだありません。
+
+**submissionの賢いbatchingロジック**  
+io_uringのperformanceを最大化するには, submit時のbatchingをうまく活用することが重要です。tokioのevent loopの中で, どのようなbatching戦略を取るのかはまだ未解決です。
+
+このRFCはハイレベルは設計をすり合わせることを目的としており, batchingの詳細な実装戦略は別のissueもしくはPR上で行われます。
+
+**multi thread runtimeでどのようにringを扱うか**  
+multi-threadの詳細な実装戦略は別のissueもしくはPR上で行われます。
 
 # Future work
 
@@ -172,7 +181,7 @@ I think this proposal can be achieved incrementally, like as follows:
    *  Maybe we could start having only one global ring, for simplicity.
 3. Further improvements, such as
    * Sharding rings for multi-threaded runtime (having one ring per thread)
-   * Support more uring Ops
+   * Increase fs api adapted to io_uring
    * Smarter batching logic for submission
    * Utilize registered buffers, registered file
 4. Use io_uring as a default in `File::new`, `fs::read`, `fs::write` etc.
