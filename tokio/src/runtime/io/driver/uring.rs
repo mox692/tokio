@@ -2,7 +2,8 @@ use io_uring::{squeue::Entry, IoUring};
 use mio::unix::SourceFd;
 use slab::Slab;
 
-use crate::{io::Interest, loom::sync::Mutex, runtime::context::Lifecycle};
+use crate::runtime::driver::op::Lifecycle;
+use crate::{io::Interest, loom::sync::Mutex};
 
 use super::Handle;
 

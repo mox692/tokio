@@ -8,8 +8,8 @@ mod uring;
 use crate::io::interest::Interest;
 use crate::io::ready::Ready;
 use crate::loom::sync::Mutex;
-use crate::runtime::context::Lifecycle;
 use crate::runtime::driver;
+use crate::runtime::driver::op::Lifecycle;
 use crate::runtime::io::registration_set;
 use crate::runtime::io::{IoDriverMetrics, RegistrationSet, ScheduledIo};
 

@@ -1,7 +1,6 @@
 use crate::{
     fs::{open_options::uring::UringOption, OpenOptions},
     io::uring::read::Read,
-    runtime::context::Op,
 };
 
 use std::{io, os::fd::AsRawFd, path::Path};
@@ -75,7 +74,7 @@ cfg_uring_fs! {
         )
         .build();
 
-        let _ = Op::new(read_op, Read {}).await?;
+        let _ = crate::runtime::driver::op::Op::new(read_op, Read {}).await?;
 
         Ok(buf)
     }
