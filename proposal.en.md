@@ -24,11 +24,11 @@ Currently, Tokio uses `epoll` for network I/O. Since file descriptors created by
 
 At a high level, the following changes will likely be required:
 
-* Introduce a new `Future` type to represent `io_uring` operations (similar to `tokio-uring`'s `Op<T>`)
 * Modify the driver to:
   * Register the `io_uring` file descriptor
   * Submit operations to the submission queue when performing file operations
   * Wake tasks upon completion via `io_uring`
+* Introduce a new `Future` type to represent `io_uring` operations (similar to `tokio-uring`'s `Op<T>`)
 * Modify the `fs` module to use `io_uring` internally
 
 I think these changes can be achievable without breaking changes.
@@ -150,12 +150,12 @@ Alternatively, we can reduce contention by sharding the ring (i.e.assigning a de
 * Store a data structure dedicated to io_uring inside mio's `Token`, and keep the shard_id (index of the worker) in that data structure.
 * Give each worker thread its own io_uring driver (submissions and completions happen within the worker thread.)
 
-We can probably start with a single global ring, and then work on sharding as a follow-up.
+But we could probably start with a single global ring, and then work on sharding as a follow-up.
 
 # Drawbacks
 
-* If we adopt a strategy where the driver wakes the epoll event first and then wakes the uring, an implicit prioritization may be introduced into task scheduling. (Tasks triggered by epoll events may be executed preferentially.)
-  * If we can inspect events without distinguishing between epoll and io_uring, and determine whether an event comes from io_uring or epoll, this issue could potentially be resolved.
+* Since we will support this incrementally, certain workloads might not benefit much in terms of performance until batching or sharding rings are well supported.
+* If we adopt a strategy where the driver wakes the epoll event first and then wakes the uring, an implicit prioritization may be introduced into task scheduling. (Tasks triggered by epoll events may be executed first.)
 
 # Alternatives
 **Waiting for epoll events with io_uring**  
@@ -195,12 +195,12 @@ I think this proposal can be achieved incrementally, as follows:
 
 1. Add minimal io_uring file API support for the current-thread runtime
    * Add uring support as an opt-in option (using a dedicated `cfg` or `OpenOptions`)
-   * Initially support only some key APIs (e.g., `File` object only)
+   * Initially support only some key APIs (e.g., `fs::read()`, `fs::write()` object only)
 2. Multi-threaded runtime support
    * For simplicity, we could start with a single global ring
 3. Further improvements, such as:
    * Sharding rings in the multi-threaded runtime (one ring per thread)
-   * Expanding the use of io_uring to other filesystem APIs
+   * Expanding the use of io_uring to other filesystem APIs (e.g., `fs::File`)
    * Smarter batching logic for submission
    * Exploring the possibilities of using advanced features, such as registered buffers or registered files
 4. Use io_uring as the default for `File::new`, `fs::read`, `fs::write`, etc.
