@@ -1,9 +1,9 @@
-This proposal aims to serve as a starting point for discussion and may be revised as the conversation evolves.
+This proposal aims to serve as a starting point for discussion and may be revised in the future.
 
 # Summary
 
 * This proposal suggests adding support for `io_uring` in Tokio's file API on Linux.
-* Initially, the focus is on transparently replacing the backend of the existing file API. Advanced features such as registered fds or registered buffers will be addressed in separate RFCs.
+* Initially, the goal is to transparently replace the file API backend with io_uring from a thread pool. Advanced features such as registered fds or registered buffers will be addressed in separate RFCs.
 * The application of io_uring to network I/O is outside the scope of this RFC.
 * The implementation will happen incrementally.
 
@@ -43,7 +43,7 @@ While the feature is unstable, it may be useful to allow opting in to use `io_ur
 
 There are some options for this.
 
-**Add config options to `OpenOptions`**  
+**Add config options to `OpenOptions`?**  
 One idea would be to add a mode-selection option (e.g., `set_mode`) to `fs::OpenOptions`.
 
 ```rust
@@ -58,10 +58,21 @@ let file = OpenOptions::new()
 file.read(&mut buf).await; // this read will use io_uring
 ```
 
-A downside is that this approach requires adding some new public APIs that is only used in linux. Also, it cannot be applied to one-shot operations like `tokio::fs::write()` or `tokio::fs::read()`.
+* pros
+  * It will also be possible to configure a dedicated setting for io_uring.
+* cons
+  * This approach requires adding some new public APIs that is only used in linux.
+  * It cannot be applied to one-shot operations like `tokio::fs::write()` or `tokio::fs::read()`.
 
-**Support dedicated cfg: `--tokio_uring_fs`**  
+
+**Support dedicated cfg: `--tokio_uring_fs`?**  
 Similar to the existing `taskdump` cfg, a new compile-time cfg option could be introduced. Compared to the runtime opt-in, this has the advantage of supporting one-shot APIs (`tokio::fs::write()`, `tokio::fs::read()` etc). However, it removes the ability to switch implementations at runtime.
+
+* pros
+  * It supports one-shot APIs (`tokio::fs::write()`, `tokio::fs::read()` etc)
+* cons
+  * No ability to switch implementations between thread pool and uring at runtime.
+
 
 # Details
 
@@ -172,9 +183,8 @@ However, some parts, such as the `Future` related to `Operation` (`Op`), are lik
 (Although discussed above,) it is still unclear how users should opt-in to io_uring during the transition period.
 
 **Intelligent batching logic for submission**  
-To maximize io_uring performance, it is important to make effective use of batching at submission. The best strategy for batching within Tokio's event loop is still unclear.
-
-This RFC aims to align on a high-level design. The detailed implementation strategy for batching will be handled in a separate issue or PR.
+To maximize io_uring performance, it is important to make effective use of batching at submission. The best strategy for batching within Tokio's event loop is still unclear.  
+Also, this RFC aims to align on a high-level design. The detailed implementation strategy for batching will be handled in a separate issue or PR.
 
 **How to manage the ring in a multi-threaded runtime**  
 Detailed implementation strategies for sharding rings across threads in a multithreaded will also continue to be discussed in a separate issue or PR.
