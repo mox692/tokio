@@ -2,7 +2,7 @@ This proposal aims to serve as a starting point for discussion and may be revise
 
 # Summary
 
-* This proposal suggests adding support for `io_uring` in Tokio's file API on Linux.
+* This proposal suggests adding support for `io_uring` in Tokio's file API.
 * Initially, the goal is to transparently replace the file API backend with io_uring from a thread pool. Advanced features such as registered fds or registered buffers will be addressed in separate RFCs.
 * The application of io_uring to network I/O is outside the scope of this RFC.
 * The implementation will happen incrementally.
@@ -180,7 +180,7 @@ As prior work, there is the `tokio-uring` project. The differences between that 
 * Supports advanced features such as kernel-registered buffers
 * Based on the current-thread runtime
 
-However, some parts, such as the `Future` related to `Operation` (`Op`), are likely to be inherited in part.
+However, some parts, such as the `Future` related to `Operation` (`Op`), are likely to be inherited.
 
 # Unresolved questions
 
@@ -189,7 +189,7 @@ However, some parts, such as the `Future` related to `Operation` (`Op`), are lik
 
 **Intelligent batching logic for submission**  
 To maximize io_uring performance, it is important to make effective use of batching at submission. The best strategy for batching within Tokio's event loop is still unclear.  
-Also, this RFC aims to align on a high-level design. The detailed implementation strategy for batching will be handled in a separate issue or PR.
+But, this RFC aims to align on a high-level design, so the detailed implementation strategy for batching will be handled in a separate issue or PR.
 
 **How to manage the ring in a multi-threaded runtime**  
 Detailed implementation strategies for sharding rings across threads in a multithreaded will also continue to be discussed in a separate issue or PR.
