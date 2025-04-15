@@ -20,7 +20,7 @@ For broader background information that is related to introducing io_uring in to
 
 ### Overview
 
-Currently, Tokio uses `epoll` for network I/O. Since file descriptors created by `io_uring` can be registered with `epoll`, it's possible to detect completion events via `epoll_ctl`. This mechanism allows for some level of coexistence between `epoll` and `io_uring`.
+Currently, Tokio uses `epoll` for IO operation. Since file descriptors created by `io_uring` can be registered with `epoll`, it's possible to detect completion events via `epoll_ctl`. This mechanism allows for some level of coexistence between `epoll` and `io_uring`.
 
 At a high level, the following changes will likely be required:
 
@@ -72,6 +72,7 @@ Similar to the existing `taskdump` cfg, a new compile-time cfg option could be i
   * It supports one-shot APIs (`tokio::fs::write()`, `tokio::fs::read()` etc)
 * cons
   * No ability to switch implementations between thread pool and uring at runtime.
+  * No opt-out way when io_uring is going to be default
 
 
 # Details
@@ -195,7 +196,7 @@ I think this proposal can be achieved incrementally, as follows:
 
 1. Add minimal io_uring file API support for the current-thread runtime
    * Add uring support as an opt-in option (using a dedicated `cfg` or `OpenOptions`)
-   * Initially support only some key APIs (e.g., `fs::read()`, `fs::write()` object only)
+   * Initially support only some key APIs (e.g., `fs::read()`, `fs::write()` only)
 2. Multi-threaded runtime support
    * For simplicity, we could start with a single global ring
 3. Further improvements, such as:
