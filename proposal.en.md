@@ -58,7 +58,7 @@ let file = OpenOptions::new()
 file.read(&mut buf).await; // this read will use io_uring
 ```
 
-A downside is that this approach requires adding some new public APIs. Also, it cannot be applied to one-shot operations like `tokio::fs::write()` or `tokio::fs::read()`.
+A downside is that this approach requires adding some new public APIs that is only used in linux. Also, it cannot be applied to one-shot operations like `tokio::fs::write()` or `tokio::fs::read()`.
 
 **Support dedicated cfg: `--tokio_uring_fs`**  
 Similar to the existing `taskdump` cfg, a new compile-time cfg option could be introduced. Compared to the runtime opt-in, this has the advantage of supporting one-shot APIs (`tokio::fs::write()`, `tokio::fs::read()` etc). However, it removes the ability to switch implementations at runtime.
@@ -69,7 +69,9 @@ Below is a more concrete implementation side details for how to achieve the goal
 
 ### Register Uring File Descriptor
 
-By registering the `io_uring` file descriptor with `epoll`, we can receive completion events via `epoll_ctl`. This can be done at the time of the first file I/O or during runtime initialization using `mio`. For the initial implementation, we can start with a dummy token, e.g. `TOKEN_WAKEUP`.
+By registering the `io_uring` file descriptor with `epoll`, we can receive completion events via `epoll_ctl`. This can be done at the time of the first file I/O or during runtime initialization using mio. For the initial implementation, we can start with a dummy token, e.g. `TOKEN_WAKEUP`.
+
+The code for uring fd initialization would look like this:
 
 ```rust
 pub(crate) fn add_uring_source(
@@ -134,14 +136,10 @@ The simplest approach is to maintain a single global ring. This is easy to imple
 
 Alternatively, we can reduce contention by sharding the ring (i.e.assigning a dedicated ring per worker thread). There are several potential approaches to this:
 
-* Encode the `uring`'s array index into `mio::Token` as part of a bit field
-* Include the shard index in the `userdata` field of `io_uring`
+* Store a data structure dedicated to io_uring inside mio's `Token`, and keep the shard_id (index of the worker) in that data structure.
+* Give each worker thread its own io_uring driver (submissions and completions happen within the worker thread.)
 
-However, this comes at the cost of increased implementation complexity.
-
-A reasonable strategy might be to start with a single global ring and introduce sharding as a follow-up.
-
-This approach was adopted in my experimental implementation, and so far it has been working well.
+We can probably start with a single global ring, and then work on sharding as a follow-up.
 
 # Drawbacks
 
@@ -150,37 +148,36 @@ This approach was adopted in my experimental implementation, and so far it has b
 
 # Alternatives
 **Waiting for epoll events with io_uring**  
-The integration of epoll and io_uring is theoretically possible by having io_uring wait on epoll events (e.g., using `IORING_OP_POLL_ADD`). However, this would require a major rewrite of the existing epoll-based runtime, making it impractical.
+
+The integration of epoll and io_uring is also possible by having io_uring wait on epoll events (e.g., using `IORING_OP_POLL_ADD`). However, this would require large changes of the existing epoll-based runtime.
 
 **Defining a dedicated File object for io_uring**  
-This approach would require users to explicitly replace the File object, which is not ideal. Furthermore, it would necessitate maintaining a Linux-specific type, which is undesirable from a maintainability standpoint.
 
-**Creating a Tokio task that polls uring tasks**  
-This is the strategy taken by the `tokio-uring` project. However, unlike `tokio-uring`, this proposal has direct access to the Tokio runtime driver, making it unnecessary to spawn a dedicated polling task. Moreover, using a dedicated task to wake uring tasks introduces fairness concerns.
+Instead of replacing the I/O backend, we could provide a new File object dedicated to io_uring. This approach would require users to explicitly replace the File object, which is not ideal. Furthermore, it would necessitate maintaining a Linux-specific type.
 
 # Prior art
 
 ### tokio-uring
-As prior work, there is the `tokio-uring` project. The differences between that project and this proposal include:
+As prior work, there is the `tokio-uring` project. The differences between that project and this proposal are:
 
 * Supports not only file I/O but also network I/O
-* Based on the current-thread runtime
 * Supports advanced features such as kernel-registered buffers
+* Based on the current-thread runtime
 
-However, other parts—such as the `Future` related to `Operation` (`Op`)—are likely to be reused or inherited in part.
+However, some parts, such as the `Future` related to `Operation` (`Op`), are likely to be inherited in part.
 
 # Unresolved questions
 
 **How to provide a flag during the unstable period**  
-(Although discussed above,) it is still unclear how users should opt-in to io_uring during the transition period (or whether it should be implicitly substituted without requiring opt-in at all).
+(Although discussed above,) it is still unclear how users should opt-in to io_uring during the transition period.
 
 **Intelligent batching logic for submission**  
-To maximize io_uring performance, it is important to make effective use of batching at submission time. The batching strategy within Tokio's event loop is still undecided.
+To maximize io_uring performance, it is important to make effective use of batching at submission. The best strategy for batching within Tokio's event loop is still unclear.
 
 This RFC aims to align on a high-level design. The detailed implementation strategy for batching will be handled in a separate issue or PR.
 
 **How to manage the ring in a multi-threaded runtime**  
-The detailed implementation strategy for sharding the ring across threads in a multi-threaded context will also be addressed in a separate issue or PR.
+Detailed implementation strategies for sharding rings across threads in a multithreaded will also continue to be discussed in a separate issue or PR.
 
 # Future work
 
@@ -195,6 +192,6 @@ I think this proposal can be achieved incrementally, as follows:
    * Sharding rings in the multi-threaded runtime (one ring per thread)
    * Expanding the use of io_uring to other filesystem APIs
    * Smarter batching logic for submission
-   * Leveraging registered buffers and registered files
+   * Exploring the possibilities of using advanced features, such as registered buffers or registered files
 4. Use io_uring as the default for `File::new`, `fs::read`, `fs::write`, etc.
 5. Stabilize (remove `tokio_unstable`)
