@@ -1,10 +1,10 @@
-This proposal aims to serve as a starting point for discussion and may be revised in the future.
+This proposal is intended to initiate discussion and is subject to future revisions.
 
 # Summary
 
 * This proposal suggests adding support for `io_uring` in Tokio's file API.
-* Initially, the goal is to transparently replace the file API backend with io_uring from a thread pool. Advanced features such as registered fds or registered buffers will be addressed in separate RFCs.
-* The application of io_uring to network I/O is outside the scope of this RFC.
+* Initially, the goal is to transparently replace the file API backend with io_uring from a thread pool. Advanced features such as registered fds or registered buffers will be addressed in separate proposal.
+* The application of io_uring to network I/O is outside the scope of this proposal.
 * The implementation will happen incrementally.
 
 # Motivation
@@ -189,7 +189,7 @@ However, some parts, such as the `Future` related to `Operation` (`Op`), are lik
 
 **Intelligent batching logic for submission**  
 To maximize io_uring performance, it is important to make effective use of batching at submission. The best strategy for batching within Tokio's event loop is still unclear.  
-But, this RFC aims to align on a high-level design, so the detailed implementation strategy for batching will be handled in a separate issue or PR.
+But, this proposal aims to align on a high-level design, so the detailed implementation strategy for batching will be handled in a separate issue or PR.
 
 **How to manage the ring in a multi-threaded runtime**  
 Detailed implementation strategies for sharding rings across threads in a multithreaded will also continue to be discussed in a separate issue or PR.
