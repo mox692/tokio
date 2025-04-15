@@ -125,16 +125,16 @@ A pseudocode example from within the driver:
 // Polling events ...
 self.poll.poll(events, max_wait);
 
-// process epoll events
+// Process epoll events
 for event in events.iter() {
 }
 
 /* NEW */
-// process uring events
+// Process uring events
 for cqe in cq.iter() {
-    // process uring events
+    // Process uring events
     let index = cqe.userdata();
-    // look up which operation has finished
+    // Look up which operation has finished
     let operation = operation_list.get(index);
     operation.wake();
 }
@@ -166,6 +166,10 @@ The integration of epoll and io_uring is also possible by having io_uring wait o
 **Defining a dedicated File object for io_uring**  
 
 Instead of replacing the I/O backend, we could provide a new File object dedicated to io_uring. This approach would require users to explicitly replace the File object, which is not ideal. Furthermore, it would necessitate maintaining a Linux-specific type.
+
+**Creating a Tokio task that polls uring tasks**
+
+This is the strategy that tokio-uring uses. However, unlike tokio-uring, this proposal has direct access to the Tokio runtime driver, so there's no need to create a dedicated task for that purpose.
 
 # Prior art
 
