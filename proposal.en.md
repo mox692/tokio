@@ -69,6 +69,7 @@ file.read(&mut buf).await; // this read will use io_uring
 Similar to the existing `taskdump` cfg, a new compile-time cfg option could be introduced. Compared to the runtime opt-in, this has the advantage of supporting one-shot APIs (`tokio::fs::write()`, `tokio::fs::read()` etc). However, it removes the ability to switch implementations at runtime.
 
 * pros
+  * It's possible to switch between `spawn_blocking` and `io_uring` even when using the same source.
   * It supports one-shot APIs (`tokio::fs::write()`, `tokio::fs::read()` etc)
 * cons
   * No ability to switch implementations between thread pool and uring at runtime.
