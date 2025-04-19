@@ -89,7 +89,7 @@ impl Handle {
         match mem::replace(lifecycle, Lifecycle::Cancelled) {
             Lifecycle::Submitted | Lifecycle::Waiting(_) => (),
             // We should not see a Complete state here.
-            _ => unreachable!(),
+            prev => panic!("Unexpected state: {:?}", prev),
         };
     }
 

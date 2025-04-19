@@ -85,7 +85,7 @@ pub struct OpenOptions {
     std: StdOpenOptions,
 
     // TODO; cfg gate
-    uring: Option<UringOption>,
+    pub(crate) uring: Option<UringOption>,
 }
 
 impl OpenOptions {
@@ -396,10 +396,6 @@ impl OpenOptions {
     /// [`Other`]: std::io::ErrorKind::Other
     /// [`PermissionDenied`]: std::io::ErrorKind::PermissionDenied
     pub async fn open(&self, path: impl AsRef<Path>) -> io::Result<File> {
-        use io_uring::{opcode, types};
-        use std::ffi::CString;
-        use std::os::unix::ffi::OsStrExt;
-
         match &self.uring {
             None => {
                 let path = path.as_ref().to_owned();
@@ -408,24 +404,7 @@ impl OpenOptions {
                 let std = asyncify(move || opts.open(path)).await?;
                 Ok(File::from_std(std))
             }
-            Some(options) => {
-                let c_path = CString::new(path.as_ref().as_os_str().as_bytes())?;
-
-                let custom_flags = self.uring.as_ref().unwrap().custom_flags;
-                let flags = libc::O_CLOEXEC
-                    | self.access_mode()?
-                    | self.creation_mode()?
-                    | (custom_flags & !libc::O_ACCMODE);
-
-                let open_op = opcode::OpenAt::new(types::Fd(libc::AT_FDCWD), c_path.as_ptr())
-                    .flags(flags)
-                    .mode(options.mode)
-                    .build();
-
-                let op = Op::new(open_op, Open {});
-
-                op.await
-            }
+            Some(_options) => Op::open(path.as_ref(), self)?.await,
         }
     }
 

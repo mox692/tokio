@@ -2,7 +2,7 @@
 /// ./target/release/examples/fs_bench_io_uring
 use std::{hint::black_box, time::Instant};
 use tokio::{
-    fs::{read, read3, OpenOptions},
+    fs::{read, OpenOptions},
     task::{yield_now, JoinSet},
 };
 
