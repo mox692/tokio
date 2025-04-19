@@ -2,8 +2,16 @@
 * 実験repoを形にする
   * `open`, `read`, `write` をちゃんと実装する (より実際的な労力を知るため)
   * cancelの実装ちゃんとしてる？
-  * // potentially we want to iterate cq here. のことろを治す
   * テストを追加
+  * Opのリファクタ
+    * StateをOpに持たせないように
+      * 初回pollまでlazyにできるって思ってたけど, Op単体でuserに返すことはないからこれは問題にならないかも. tokio-uringに近くした方がreviewしやすそう
+      * OpのFutreの実装がすっきりするはず
+    * uringContextをDriver::Handle以外の場所におく
+      * とはいえ適切な置き場所がわからん
+    * Op自体にdriverのreference持たせる？
+      * tokio-uring は `Rc<RefCell<Driver>>` だからうま味あったかもだが, tokioでやろうとすると Arc<Mutex<Driver>>になりそう
+      * チェーンが短くなる方法があれば, それは採用したいかも
   * (ワンチャン) global ringに戻す
 * 新しいbranch切って, 実際にPRを出す粒度でcommitを作っていく
   * initial infrastructure

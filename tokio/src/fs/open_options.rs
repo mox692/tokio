@@ -1,5 +1,4 @@
 use crate::fs::{asyncify, File};
-use crate::io::uring::open::Open;
 use crate::runtime::driver::op::Op;
 
 use std::io;
