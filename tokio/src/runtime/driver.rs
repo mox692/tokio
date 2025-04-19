@@ -12,6 +12,10 @@ use crate::runtime::park::{ParkThread, UnparkThread};
 use std::io;
 use std::time::Duration;
 
+cfg_uring_fs! {
+    pub(crate) mod op;
+}
+
 #[derive(Debug)]
 pub(crate) struct Driver {
     inner: TimeDriver,

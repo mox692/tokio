@@ -1,11 +1,16 @@
 use io_uring::{squeue::Entry, IoUring};
+use mio::unix::SourceFd;
 use slab::Slab;
 
-use crate::{io::Interest, loom::sync::Mutex, runtime::context::Lifecycle};
+use crate::runtime::driver::op::Lifecycle;
+use crate::{io::Interest, loom::sync::Mutex};
 
-use super::{Driver, Handle};
+use super::Handle;
 
+use std::os::fd::AsRawFd;
 use std::{io, mem, ops::DerefMut, task::Waker};
+
+const DEFAULT_RING_SIZE: u32 = 8192;
 
 pub(crate) struct UringContext {
     pub(crate) uring: io_uring::IoUring,
@@ -14,13 +19,10 @@ pub(crate) struct UringContext {
 
 impl UringContext {
     pub(crate) fn new() -> Self {
-        // TODO: we could eliminate this eventfd, like tokio-uring does? In that case,
-        //       I guess we should just pass the fd of the uring to the epoll_ctl.
-        // TODO: make configurable
-        let uring = IoUring::new(4096).unwrap();
         Self {
             ops: Slab::new(),
-            uring,
+            // TODO: make configurable
+            uring: IoUring::new(DEFAULT_RING_SIZE).unwrap(),
         }
     }
 }
@@ -41,12 +43,14 @@ impl Handle {
     /// Called when runtime starts.
     pub(crate) fn add_uring_source(
         &self,
-        source: &mut impl mio::event::Source,
         worker_index: usize,
         interest: Interest,
     ) -> io::Result<()> {
+        // setup for io_uring
+        let uringfd = self.get_uring(worker_index).lock().uring.as_raw_fd();
+        let mut source = SourceFd(&uringfd);
         self.registry
-            .register(source, uring_token(worker_index), interest.to_mio())
+            .register(&mut source, uring_token(worker_index), interest.to_mio())
     }
 
     pub(crate) fn get_uring(&self, worker_index: usize) -> &Mutex<UringContext> {
@@ -85,7 +89,7 @@ impl Handle {
         match mem::replace(lifecycle, Lifecycle::Cancelled) {
             Lifecycle::Submitted | Lifecycle::Waiting(_) => (),
             // We should not see a Complete state here.
-            _ => unreachable!(),
+            prev => panic!("Unexpected state: {:?}", prev),
         };
     }
 
@@ -94,5 +98,3 @@ impl Handle {
         // self.uring_contexts.len()
     }
 }
-
-impl Driver {}

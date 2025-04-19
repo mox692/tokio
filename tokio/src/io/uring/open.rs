@@ -1,17 +1,46 @@
-use std::{io, os::fd::FromRawFd};
+use super::utils::cstr;
+use crate::{
+    fs::{Kind, OpenOptions, Uring},
+    runtime::driver::op::{Completable, CqeResult, Op},
+};
+use io_uring::{opcode, types};
+use std::{ffi::CString, io, path::Path};
 
-use crate::runtime::context::{Completable, Op};
+pub(crate) struct Open {
+    #[allow(dead_code)]
+    path: CString,
+}
 
-// TODO: should be placed elsewhere.
-pub(crate) struct Open {}
-
-// TODO: should be placed elsewhere.
 impl Op<Open> {}
 
 impl Completable for Open {
     type Output = io::Result<crate::fs::File>;
-    fn complete(self, cqe: crate::runtime::context::CqeResult) -> Self::Output {
+    fn complete(self, cqe: CqeResult) -> Self::Output {
         let fd = cqe.result? as i32;
-        Ok(unsafe { crate::fs::File::from_raw_fd(fd) })
+        let file = crate::fs::File {
+            inner: Kind::Uring(Uring::from_raw_fd(fd)),
+        };
+        Ok(file)
+    }
+}
+
+impl Op<Open> {
+    /// Submit a request to open a file.
+    pub(crate) fn open(path: &Path, options: &OpenOptions) -> io::Result<Op<Open>> {
+        let inner_opt = options.uring.as_ref().unwrap();
+        let path = cstr(path)?;
+
+        let custom_flags = inner_opt.custom_flags;
+        let flags = libc::O_CLOEXEC
+            | options.access_mode()?
+            | options.creation_mode()?
+            | (custom_flags & !libc::O_ACCMODE);
+
+        let open_op = opcode::OpenAt::new(types::Fd(libc::AT_FDCWD), path.as_ptr())
+            .flags(flags)
+            .mode(inner_opt.mode)
+            .build();
+
+        Ok(Op::new(open_op, Open { path }))
     }
 }

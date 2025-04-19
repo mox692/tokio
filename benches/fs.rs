@@ -1,9 +1,16 @@
+#![allow(
+    unused_imports,
+    dead_code,
+    unreachable_code,
+    unreachable_pub,
+    unused_variables
+)]
 #![cfg(unix)]
 
 use tokio::task::JoinSet;
 use tokio_stream::StreamExt;
 
-use tokio::fs::{read, read3, File, OpenOptions};
+use tokio::fs::{read, File, OpenOptions, UringOption};
 use tokio::io::AsyncReadExt;
 use tokio_util::codec::{BytesCodec, FramedRead /*FramedWrite*/};
 
@@ -153,7 +160,12 @@ fn open_read_io_uring(c: &mut Criterion) {
                         set.spawn(async move {
                             let path = format!("/home/mox692/work/tokio/test_file/{i}.txt");
 
-                            let file = OpenOptions::new().read(true).open3(&path).await.unwrap();
+                            let file = OpenOptions::new()
+                                .read(true)
+                                .use_io_uring(UringOption::new())
+                                .open(&path)
+                                .await
+                                .unwrap();
                             black_box(file);
 
                             // let res = read3(&path).await.unwrap();
@@ -178,7 +190,7 @@ criterion_group!(
     // async_read_buf,
     // async_read_codec,
     // sync_read
-    open_read_spawn_blocking,
     open_read_io_uring,
+    open_read_spawn_blocking,
 );
 criterion_main!(file);

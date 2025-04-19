@@ -1,5 +1,3 @@
-use crate::fs::asyncify;
-
 use std::fs::Metadata;
 use std::io;
 use std::path::Path;
@@ -41,6 +39,17 @@ use std::path::Path;
 /// }
 /// ```
 pub async fn metadata(path: impl AsRef<Path>) -> io::Result<Metadata> {
-    let path = path.as_ref().to_owned();
-    asyncify(|| std::fs::metadata(path)).await
+    metadata_inner(path).await
+}
+cfg_not_uring_fs! {
+    async fn metadata_inner(path: impl AsRef<Path>) -> io::Result<Metadata> {
+        let path = path.as_ref().to_owned();
+        crate::fs::asyncify(|| std::fs::metadata(path)).await
+    }
+}
+
+cfg_uring_fs! {
+    async fn metadata_inner(path: impl AsRef<Path>) -> io::Result<Metadata> {
+        crate::runtime::driver::op::Op::metadata(path.as_ref())?.await
+    }
 }

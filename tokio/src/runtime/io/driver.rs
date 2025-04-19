@@ -3,14 +3,13 @@ cfg_signal_internal_and_unix! {
     mod signal;
 }
 
-// io_uring
 mod uring;
 
 use crate::io::interest::Interest;
 use crate::io::ready::Ready;
 use crate::loom::sync::Mutex;
-use crate::runtime::context::Lifecycle;
 use crate::runtime::driver;
+use crate::runtime::driver::op::Lifecycle;
 use crate::runtime::io::registration_set;
 use crate::runtime::io::{IoDriverMetrics, RegistrationSet, ScheduledIo};
 
@@ -186,38 +185,31 @@ impl Driver {
             // TODO: cfg gate
             else if is_uring_token(token) {
                 let worker_index = get_worker_index(token);
-                let mut _buf = [0u8; 32];
-
-                // TODO: We should definitely avoid acquiring a lock here.
-                let mut guard = handle.get_uring(worker_index).lock();
-                let ctx = guard.deref_mut();
-
+                let mut lock = handle.get_uring(worker_index).lock();
+                let ctx = lock.deref_mut();
                 let ops = &mut ctx.ops;
-                let uring = &ctx.uring;
 
-                // TODO: safety comment
-                for cqe in unsafe { uring.completion_shared() } {
-                    let index = cqe.user_data();
+                for cqe in unsafe { ctx.uring.completion_shared() } {
+                    let index = cqe.user_data() as usize;
 
-                    let lifecycle = ops
-                        .get_mut(index as usize)
-                        // TODO: consider cancel. (we could get None if that Op is already cancelled.)
-                        .expect(format!("worker_index: {worker_index}").as_str());
-
-                    match lifecycle {
-                        Lifecycle::Waiting(waker) => {
+                    match ops.get_mut(index) {
+                        Some(Lifecycle::Waiting(waker)) => {
                             waker.wake_by_ref();
-                            *lifecycle = Lifecycle::Completed(cqe);
+                            ops[index] = Lifecycle::Completed(cqe);
                         }
-                        Lifecycle::Cancelled => {
-                            // Op is cancelled and dropped, so we just remove the
-                            // index from the slab
-                            let _ = ops.remove(index as usize);
+                        Some(Lifecycle::Cancelled) => {
+                            let _ = ops.remove(index);
                         }
-                        _ => {
-                            panic!("should not reach here; lifecycle: {:?}", &lifecycle);
+                        Some(other) => {
+                            panic!("should not reach here; lifecycle: {:?}", other);
                         }
-                    };
+                        None => {
+                            panic!(
+                                "Op not found for index {} (worker_index: {})",
+                                index, worker_index
+                            );
+                        }
+                    }
                 }
             } else {
                 let ready = Ready::from_mio(event);
@@ -234,6 +226,8 @@ impl Driver {
 
                 ready_count += 1;
             }
+
+            // TODO: potentially we want to iterate cq here.
         }
 
         handle.metrics.incr_ready_count_by(ready_count);

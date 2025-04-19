@@ -69,10 +69,8 @@ use crate::runtime::{context, TaskHooks};
 use crate::task::coop;
 use crate::util::atomic_cell::AtomicCell;
 use crate::util::rand::{FastRand, RngSeedGenerator};
-use mio::unix::SourceFd;
 
 use std::cell::RefCell;
-use std::os::fd::AsRawFd;
 use std::task::Waker;
 use std::thread;
 use std::time::Duration;
@@ -459,24 +457,6 @@ where
 
 impl Launch {
     pub(crate) fn launch(mut self) {
-        // setup for io_uring
-        // TODO: this process could be done in the `add_uring_source`
-        let eventfd = self
-            .0
-            .get(0)
-            .as_ref()
-            .unwrap()
-            .handle
-            .driver
-            .io()
-            .get_uring(0)
-            .lock()
-            .uring
-            .as_raw_fd();
-
-        // register to epoll
-        let mut source = SourceFd(&eventfd);
-
         self.0
             .get(0)
             .as_ref()
@@ -484,7 +464,7 @@ impl Launch {
             .handle
             .driver
             .io()
-            .add_uring_source(&mut source, 0, Interest::READABLE)
+            .add_uring_source(0, Interest::READABLE)
             .unwrap();
 
         for worker in self.0.drain(..) {
@@ -521,25 +501,6 @@ fn run(worker: Arc<Worker>) {
     worker.handle.shared.worker_metrics[worker.index].set_thread_id(thread::current().id());
 
     let handle = scheduler::Handle::MultiThread(worker.handle.clone());
-
-    // // setup for io_uring
-    // // TODO: this process could be done in the `add_uring_source`
-    // let eventfd = worker
-    //     .handle
-    //     .driver
-    //     .io()
-    //     .get_uring(worker.index + 1)
-    //     .lock()
-    //     .uring
-    //     .as_raw_fd();
-
-    // // register to epoll
-    // let mut source = SourceFd(&eventfd);
-    // handle
-    //     .driver()
-    //     .io()
-    //     .add_uring_source(&mut source, worker.index + 1, Interest::READABLE)
-    //     .unwrap();
 
     crate::runtime::context::enter_runtime(&handle, true, |_| {
         // Set the worker context.
@@ -771,8 +732,7 @@ impl Context {
     /// Also, we rely on the workstealing algorithm to spread the tasks amongst workers
     /// after all the IOs get dispatched
     fn park(&self, mut core: Box<Core>) -> Box<Core> {
-        // release all uring.
-        // TODO: update detail
+        // TODO: update details
         let handle = crate::runtime::Handle::current();
         let driver = handle.inner.driver().io();
         // for context in driver.uring_contexts.iter() {
