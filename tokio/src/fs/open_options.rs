@@ -408,16 +408,18 @@ impl OpenOptions {
                 let std = asyncify(move || opts.open(path)).await?;
                 Ok(File::from_std(std))
             }
-            Some(_options) => {
+            Some(options) => {
                 let c_path = CString::new(path.as_ref().as_os_str().as_bytes())?;
 
-                // TODO: make configurable
-                let flags = libc::O_CLOEXEC | libc::O_RDWR | libc::O_APPEND | libc::O_CREAT;
-                let mode = 0o666;
+                let custom_flags = self.uring.as_ref().unwrap().custom_flags;
+                let flags = libc::O_CLOEXEC
+                    | self.access_mode()?
+                    | self.creation_mode()?
+                    | (custom_flags & !libc::O_ACCMODE);
 
                 let open_op = opcode::OpenAt::new(types::Fd(libc::AT_FDCWD), c_path.as_ptr())
                     .flags(flags)
-                    .mode(mode)
+                    .mode(options.mode)
                     .build();
 
                 let op = Op::new(open_op, Open {});
@@ -425,6 +427,43 @@ impl OpenOptions {
                 op.await
             }
         }
+    }
+
+    pub(crate) fn access_mode(&self) -> io::Result<libc::c_int> {
+        let uring = self.uring.as_ref().unwrap();
+        match (uring.read, uring.write, uring.append) {
+            (true, false, false) => Ok(libc::O_RDONLY),
+            (false, true, false) => Ok(libc::O_WRONLY),
+            (true, true, false) => Ok(libc::O_RDWR),
+            (false, _, true) => Ok(libc::O_WRONLY | libc::O_APPEND),
+            (true, _, true) => Ok(libc::O_RDWR | libc::O_APPEND),
+            (false, false, false) => Err(io::Error::from_raw_os_error(libc::EINVAL)),
+        }
+    }
+
+    pub(crate) fn creation_mode(&self) -> io::Result<libc::c_int> {
+        let uring = self.uring.as_ref().unwrap();
+        match (uring.write, uring.append) {
+            (true, false) => {}
+            (false, false) => {
+                if uring.truncate || uring.create || uring.create_new {
+                    return Err(io::Error::from_raw_os_error(libc::EINVAL));
+                }
+            }
+            (_, true) => {
+                if uring.truncate && !uring.create_new {
+                    return Err(io::Error::from_raw_os_error(libc::EINVAL));
+                }
+            }
+        }
+
+        Ok(match (uring.create, uring.truncate, uring.create_new) {
+            (false, false, false) => 0,
+            (true, false, false) => libc::O_CREAT,
+            (false, true, false) => libc::O_TRUNC,
+            (true, true, false) => libc::O_CREAT | libc::O_TRUNC,
+            (_, _, true) => libc::O_CREAT | libc::O_EXCL,
+        })
     }
 
     /// Returns a mutable reference to the underlying `std::fs::OpenOptions`
