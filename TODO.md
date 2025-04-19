@@ -32,8 +32,9 @@
       * 労力はわからんが, openがないと何もできないかも
       * ただし, public 関数ではない
       * これ, いっそOpenOptionsと一緒にできない?
-    * `fstat()`
+    * `statx()`
       * readで必要
+      * そこそこ実装が必要かも. これがないとreadが提供できなくて地獄
     * `read()`
       * open, fstatも呼び出しが必要かも. そこそこ大きなロジックになるかも
       * /home/mox692/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/pal/unix/fs.rs

@@ -1,12 +1,13 @@
-use io_uring::{opcode, types};
-
+use super::utils::cstr;
 use crate::{
     fs::{Kind, OpenOptions, Uring},
     runtime::driver::op::{Completable, CqeResult, Op},
 };
+use io_uring::{opcode, types};
 use std::{ffi::CString, io, path::Path};
 
 pub(crate) struct Open {
+    #[allow(dead_code)]
     path: CString,
 }
 
@@ -42,9 +43,4 @@ impl Op<Open> {
 
         Ok(Op::new(open_op, Open { path }))
     }
-}
-
-pub(crate) fn cstr(p: &Path) -> io::Result<CString> {
-    use std::os::unix::ffi::OsStrExt;
-    Ok(CString::new(p.as_os_str().as_bytes())?)
 }
