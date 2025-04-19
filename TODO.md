@@ -15,7 +15,11 @@
     * globalなuring contextをdriverに突っ込む
     * tokio/src/runtime/driver/op.rs の内容
     * test
-  * read / write + a lot of document
+  * actual operation support
+    * write
+    * open
+    * statx
+    * ...
 * PRどのようにsplitするのかを考える
   * 
   * just idea
