@@ -24,10 +24,6 @@ pub(crate) enum Lifecycle {
     Completed(io_uring::cqueue::Entry),
 }
 
-// TODO: check!!!
-unsafe impl Send for Lifecycle {}
-unsafe impl Sync for Lifecycle {}
-
 pub(crate) enum State {
     Initialize(Option<Entry>),
     EverPolled(usize), // slab key
