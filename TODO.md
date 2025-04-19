@@ -1,10 +1,10 @@
 
 * 実験repoを形にする
   * `read`, `write` をちゃんと実装する (より実際的な労力を知るため)
-  * cancelの実装
+  * cancelの実装ちゃんとしてる？
   * // potentially we want to iterate cq here. のことろを治す
-  * (ワンチャン) global ringに戻す
   * テストを追加
+  * (ワンチャン) global ringに戻す
 * 新しいbranch切って, 実際にPRを出す粒度でcommitを作っていく
   * initial infrastructure
     * changes to the driver
