@@ -1,3 +1,4 @@
+use crate::io::Interest;
 use crate::loom::sync::atomic::AtomicBool;
 use crate::loom::sync::Arc;
 use crate::runtime::driver::{self, Driver};
@@ -135,6 +136,12 @@ impl CurrentThread {
     ) -> (CurrentThread, Arc<Handle>) {
         let worker_metrics = WorkerMetrics::from_config(&config);
         worker_metrics.set_thread_id(thread::current().id());
+
+        // TODO: move this somewhere else
+        driver_handle
+            .io()
+            .add_uring_source(0, Interest::READABLE)
+            .unwrap();
 
         // Get the configured global queue interval, or use the default.
         let global_queue_interval = config

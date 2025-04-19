@@ -22,6 +22,10 @@ use std::io::Read as StdRead;
 use std::time::{Duration, Instant};
 
 fn rt() -> tokio::runtime::Runtime {
+    // tokio::runtime::Builder::new_current_thread()
+    //     .enable_all()
+    //     .build()
+    //     .unwrap()
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .worker_threads(8)
