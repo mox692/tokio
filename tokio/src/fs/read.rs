@@ -61,6 +61,27 @@ cfg_uring_fs! {
     async fn read_inner(path: impl AsRef<Path>) -> io::Result<Vec<u8>> {
         use io_uring::{opcode, types};
 
+        // In the future, code would be something like this. (once we implement statx)
+        // By usign metadata, we can get a file size and pre-allocate the buffer.
+
+        // let file = crate::fs::File::open(path.as_ref()).await?;
+        // let metadata = Op::metadata(path.as_ref())?.await?;
+
+        // let len = metadata.len();
+        // let mut buf = vec![0u8; len as usize];
+
+        // let read_op = opcode::Read::new(
+        //     types::Fd(file.as_raw_fd()),
+        //     buf.as_mut_ptr(),
+        //     buf.len() as u32,
+        // )
+        // .build();
+
+        // Op::new(read_op, Read {}).await?;
+
+        // Ok(buf)
+
+
         let mut buf = vec![0u8; 1024];
         let file = OpenOptions::new()
             .read(true)
