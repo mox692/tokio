@@ -199,14 +199,27 @@ Detailed implementation strategies for sharding rings across threads in a multit
 
 I think this proposal can be achieved incrementally, as follows:
 
-1. Add minimal io_uring file API support for the current-thread runtime
-   * Add uring support as an opt-in option (using a dedicated `cfg` or `OpenOptions`)
-   * Initially support only some key APIs (e.g., `fs::read()`, `fs::write()` only)
-2. Multi-threaded runtime support
-   * For simplicity, we could start with a single global ring
+1. Initial Infrastructure Code
+   * Introduce foundational changes to support io_uring operations, including:
+     * Driver (both single-threaded and multi-threaded):
+       * Add (global) ring to the driver
+       * Implement registration logic for uringfd
+       * Wake io_uring tasks after epoll_ctl returns
+     * Add a dedicated configuration flag (cfg)
+     * Add Op futures for io_uring operations
+   * These changes should not affect the existing codebase at this stage.
+2. Implementing Actual io_uring Operations
+   * operations are:
+     * `write()`
+     * `open()`
+     * `statx()`
+     ...
+   * At this phase, changes will start to impact user code (behind a cfg gate).
+   * Each operation can be added incrementally via separate pull requests.
+   * Note: Some filesystem APIs depend on others.
+     * For example, read() depends on statx() since we need to know the file size beforehand.
 3. Further improvements, such as:
    * Sharding rings in the multi-threaded runtime (one ring per thread)
-   * Expanding the use of io_uring to other filesystem APIs (e.g., `fs::File`)
    * Smarter batching logic for submission
    * Exploring the possibilities of using advanced features, such as registered buffers or registered files
 4. Use io_uring as the default for `File::new`, `fs::read`, `fs::write`, etc.
