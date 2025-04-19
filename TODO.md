@@ -1,9 +1,21 @@
 
 * 実験repoを形にする
   * `read`, `write` をちゃんと実装する (より実際的な労力を知るため)
+  * cancelの実装
   * // potentially we want to iterate cq here. のことろを治す
   * (ワンチャン) global ringに戻す
   * テストを追加
+* 新しいbranch切って, 実際にPRを出す粒度でcommitを作っていく
+  * initial infrastructure
+    * changes to the driver
+      * epollのwake処理
+      * globalなuring contextをdriverに突っ込む
+      * tokio/src/runtime/io/driver/uring.rs
+    * add cfg
+    * globalなuring contextをdriverに突っ込む
+    * tokio/src/runtime/driver/op.rs の内容
+    * test
+  * read / write + a lot of document
 * PRどのようにsplitするのかを考える
   * 
   * just idea
