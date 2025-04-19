@@ -733,17 +733,11 @@ impl Context {
     /// after all the IOs get dispatched
     fn park(&self, mut core: Box<Core>) -> Box<Core> {
         // TODO: update details
-        let handle = crate::runtime::Handle::current();
-        let driver = handle.inner.driver().io();
-        // for context in driver.uring_contexts.iter() {
-        //     let Some(lock) = context.try_lock() else {
-        //         continue;
-        //     };
+        // let handle = crate::runtime::Handle::current();
+        // let driver = handle.inner.driver().io();
+        // if let Some(lock) = driver.uring_contexts.try_lock() {
         //     lock.uring.submit().unwrap();
-        // }
-        if let Some(lock) = driver.uring_contexts.try_lock() {
-            lock.uring.submit().unwrap();
-        };
+        // };
 
         if let Some(f) = &self.worker.handle.shared.config.before_park {
             f();

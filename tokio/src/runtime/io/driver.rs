@@ -87,6 +87,7 @@ pub(super) enum Tick {
 
 const TOKEN_WAKEUP: mio::Token = mio::Token(0);
 const TOKEN_SIGNAL: mio::Token = mio::Token(1);
+const TOKEN_URING: mio::Token = mio::Token(2);
 
 fn _assert_kinds() {
     fn _assert<T: Send + Sync>() {}
@@ -99,7 +100,7 @@ fn _assert_kinds() {
 impl Driver {
     /// Creates a new event loop, returning any error that happened during the
     /// creation.
-    pub(crate) fn new(nevents: usize, num_worker: usize) -> io::Result<(Driver, Handle)> {
+    pub(crate) fn new(nevents: usize, _num_worker: usize) -> io::Result<(Driver, Handle)> {
         let poll = mio::Poll::new()?;
         #[cfg(not(target_os = "wasi"))]
         let waker = mio::Waker::new(poll.registry(), TOKEN_WAKEUP)?;
@@ -111,10 +112,6 @@ impl Driver {
             poll,
         };
 
-        // let uring_contexts = (0..num_worker + 1) // including main thread
-        //     .map(|_| Mutex::new(UringContext::new()))
-        //     .collect::<Vec<_>>()
-        //     .into_boxed_slice();
         let uring_contexts = Mutex::new(UringContext::new());
 
         let (registrations, synced) = RegistrationSet::new();
@@ -181,11 +178,8 @@ impl Driver {
                 // Nothing to do, the event is used to unblock the I/O driver
             } else if token == TOKEN_SIGNAL {
                 self.signal_ready = true;
-            }
-            // TODO: cfg gate
-            else if is_uring_token(token) {
-                let worker_index = get_worker_index(token);
-                let mut lock = handle.get_uring(worker_index).lock();
+            } else if token == TOKEN_URING {
+                let mut lock = handle.get_uring(0).lock();
                 let ctx = lock.deref_mut();
                 let ops = &mut ctx.ops;
 
@@ -204,10 +198,7 @@ impl Driver {
                             panic!("should not reach here; lifecycle: {:?}", other);
                         }
                         None => {
-                            panic!(
-                                "Op not found for index {} (worker_index: {})",
-                                index, worker_index
-                            );
+                            panic!("Op not found for index {} (worker_index: {})", index, 0);
                         }
                     }
                 }
@@ -226,8 +217,6 @@ impl Driver {
 
                 ready_count += 1;
             }
-
-            // TODO: potentially we want to iterate cq here.
         }
 
         handle.metrics.incr_ready_count_by(ready_count);

@@ -5,7 +5,7 @@ use slab::Slab;
 use crate::runtime::driver::op::Lifecycle;
 use crate::{io::Interest, loom::sync::Mutex};
 
-use super::Handle;
+use super::{Handle, TOKEN_URING};
 
 use std::os::fd::AsRawFd;
 use std::{io, mem, ops::DerefMut, task::Waker};
@@ -50,7 +50,7 @@ impl Handle {
         let uringfd = self.get_uring(worker_index).lock().uring.as_raw_fd();
         let mut source = SourceFd(&uringfd);
         self.registry
-            .register(&mut source, uring_token(worker_index), interest.to_mio())
+            .register(&mut source, TOKEN_URING, interest.to_mio())
     }
 
     pub(crate) fn get_uring(&self, worker_index: usize) -> &Mutex<UringContext> {
@@ -65,10 +65,13 @@ impl Handle {
         let index = ops.insert(Lifecycle::Waiting(waker));
         let entry = entry.user_data(index as u64);
 
-        while unsafe { ring.submission().push(&entry).is_err() } {
-            // If the submission queue is full, flush it to the kernel
-            ring.submit().unwrap();
-        }
+        unsafe { ring.submission().push(&entry).unwrap() };
+        ring.submit().unwrap();
+
+        // while unsafe { ring.submission().push(&entry).is_err() } {
+        //     // If the submission queue is full, flush it to the kernel
+        //     ring.submit().unwrap();
+        // }
 
         drop(guard);
 
