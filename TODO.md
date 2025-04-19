@@ -1,6 +1,6 @@
 
 * 実験repoを形にする
-  * `read`, `write` をちゃんと実装する (より実際的な労力を知るため)
+  * `open`, `read`, `write` をちゃんと実装する (より実際的な労力を知るため)
   * cancelの実装ちゃんとしてる？
   * // potentially we want to iterate cq here. のことろを治す
   * テストを追加
@@ -26,12 +26,22 @@
 ### Api Tier
 * 順ばん(仮). https://docs.rs/tokio/latest/tokio/fs/index.html を上から順番に確認
   * tier 1: relatively easy to support io_uring
-    * `read()`
     * `write()`
+      * tokio uringを見た感じ, 実装は楽そう
+    * `open()`
+      * 労力はわからんが, openがないと何もできないかも
+      * ただし, public 関数ではない
+      * これ, いっそOpenOptionsと一緒にできない?
+    * `fstat()`
+      * readで必要
+    * `read()`
+      * open, fstatも呼び出しが必要かも. そこそこ大きなロジックになるかも
+      * /home/mox692/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/std/src/sys/pal/unix/fs.rs
     * `read_to_string()`
       * almost the same as `read()`
     * `hard_link`
     * `metadata`
+      * fstatが必要
   * tier 2: not hard, but requires implementation a bit
     * `fs::File`
     * `fs::copy()`
