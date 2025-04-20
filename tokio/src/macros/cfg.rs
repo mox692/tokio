@@ -616,3 +616,31 @@ macro_rules! cfg_metrics_variant {
         }
     }
 }
+
+macro_rules! cfg_tokio_unstable_uring {
+    ($($item:item)*) => {
+        $(
+            #[cfg(all(
+                tokio_unstable_uring,
+                feature = "rt",
+                feature = "fs",
+                target_os = "linux",
+            ))]
+            $item
+        )*
+    };
+}
+
+macro_rules! cfg_not_tokio_unstable_uring {
+    ($($item:item)*) => {
+        $(
+            #[cfg(not(all(
+                tokio_unstable_uring,
+                feature = "rt",
+                feature = "fs",
+                target_os = "linux",
+            )))]
+            $item
+        )*
+    };
+}
