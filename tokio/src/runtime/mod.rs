@@ -323,11 +323,11 @@ pub(crate) mod context;
 
 pub(crate) mod park;
 
-mod driver;
+pub(crate) mod driver;
 
 pub(crate) mod scheduler;
 
-cfg_io_driver_impl! {
+cfg_io_driver_or_uring! {
     pub(crate) mod io;
 }
 
@@ -420,4 +420,9 @@ cfg_rt! {
 
     /// After thread starts / before thread stops
     type Callback = std::sync::Arc<dyn Fn() + Send + Sync>;
+}
+
+cfg_tokio_unstable_uring! {
+    pub(crate) mod op_id;
+    pub(crate) use op_id::OpId;
 }
