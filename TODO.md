@@ -2,11 +2,16 @@
 * 実験repoを形にする
   * `open`, `read`, `write` をちゃんと実装する (より実際的な労力を知るため)
   * cancelの実装ちゃんとしてる？
-  * テストを追加
+  * driverのdropの実装
   * Opのリファクタ
     * StateをOpに持たせないように
       * 初回pollまでlazyにできるって思ってたけど, Op単体でuserに返すことはないからこれは問題にならないかも. tokio-uringに近くした方がreviewしやすそう
       * OpのFutreの実装がすっきりするはず
+      * ... と思ったが, マルチスレッドだと少し問題がありそう
+        * Opが初回Pollされて, PollPendingを返そうとしている時に, driver側で完了が検知されると, taskがwakeされなくなるシナリオがありそう
+          * 詰まるところ, sqへのsubmitの前に, wakerをlifecycleに保存しておく必要があるが, eargerにsubmitするtokio-uringの方針だとこれが満たされていない
+      * あるタスクがすでに動いている時に, そのtaskのwakeを起動したらどうなる?
+        * 正確な実験はできなかったが,  再スケジュールされるはず. (自身でwake_by_refを使ってPendingを返すコードとかと実質的に同じはず)
     * uringContextをDriver::Handle以外の場所におく
       * とはいえ適切な置き場所がわからん
     * Op自体にdriverのreference持たせる？
