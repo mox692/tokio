@@ -103,6 +103,10 @@ socket2 = { version = "0.5.5", optional = true, features = ["all"] }
 [target.'cfg(tokio_unstable)'.dependencies]
 tracing = { version = "0.1.29", default-features = false, features = ["std"], optional = true } # Not in full
 
+[target.'cfg(all(tokio_unstable_uring, target_os = "linux"))'.dependencies]
+io-uring = "0.7.4"
+slab = "0.4.9"
+
 # Currently unstable. The API exposed by these features may be broken at any time.
 # Requires `--cfg tokio_unstable` to enable.
 [target.'cfg(tokio_taskdump)'.dependencies]
