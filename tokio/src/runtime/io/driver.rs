@@ -2,6 +2,10 @@
 cfg_signal_internal_and_unix! {
     mod signal;
 }
+cfg_tokio_unstable_uring! {
+    mod uring;
+    use uring::UringHandle;
+}
 
 use crate::io::interest::Interest;
 use crate::io::ready::Ready;
@@ -45,6 +49,14 @@ pub(crate) struct Handle {
     waker: mio::Waker,
 
     pub(crate) metrics: IoDriverMetrics,
+
+    #[cfg(all(
+        tokio_unstable_uring,
+        feature = "rt",
+        feature = "fs",
+        target_os = "linux",
+    ))]
+    pub(crate) uring_handle: Mutex<UringHandle>,
 }
 
 #[derive(Debug)]
@@ -79,6 +91,9 @@ pub(super) enum Tick {
 
 const TOKEN_WAKEUP: mio::Token = mio::Token(0);
 const TOKEN_SIGNAL: mio::Token = mio::Token(1);
+cfg_tokio_unstable_uring! {
+    pub(crate) const TOKEN_URING: mio::Token = mio::Token(2);
+}
 
 fn _assert_kinds() {
     fn _assert<T: Send + Sync>() {}
@@ -112,6 +127,13 @@ impl Driver {
             #[cfg(not(target_os = "wasi"))]
             waker,
             metrics: IoDriverMetrics::default(),
+            #[cfg(all(
+                tokio_unstable_uring,
+                feature = "rt",
+                feature = "fs",
+                target_os = "linux",
+            ))]
+            uring_handle: Mutex::new(UringHandle::new()),
         };
 
         Ok((driver, handle))

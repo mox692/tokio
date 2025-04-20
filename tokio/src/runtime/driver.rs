@@ -86,13 +86,11 @@ impl Handle {
         self.io.unpark();
     }
 
-    cfg_io_driver! {
-        #[track_caller]
-        pub(crate) fn io(&self) -> &crate::runtime::io::Handle {
-            self.io
+    #[track_caller]
+    pub(crate) fn io(&self) -> &crate::runtime::io::Handle {
+        self.io
                 .as_ref()
                 .expect("A Tokio 1.x context was found, but IO is disabled. Call `enable_io` on the runtime builder to enable IO.")
-        }
     }
 
     cfg_signal_internal_and_unix! {
@@ -228,6 +226,11 @@ cfg_not_io_driver! {
             false
         }
     }
+    impl IoHandle {
+        pub(crate) fn as_ref(&self) -> Option<&crate::runtime::io::Handle> {
+            todo!()
+        }
+    }
 }
 
 // ===== signal driver =====
@@ -350,4 +353,8 @@ cfg_not_time! {
     ) -> (TimeDriver, TimeHandle) {
         (io_stack, ())
     }
+}
+
+cfg_tokio_unstable_uring! {
+    pub(crate) mod op;
 }
