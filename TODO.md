@@ -1,5 +1,10 @@
 
 * 実験repoを形にする
+  * uringを, io driverに組み込むのではなく, 独自のdriverに分けれないか？ tokio/src/runtime/driver.rs にいろいろdriverがあるように。
+    * モチベ
+      * 既存コードへの影響を減らす
+      * レビューを楽にする
+      * 既存のio driverに追加すると, cfg_io_driver!をいじる必要性が出てくる
   * `open`, `read`, `write` をちゃんと実装する (より実際的な労力を知るため)
   * cancelの実装ちゃんとしてる？
   * driverのdropの実装
