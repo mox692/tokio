@@ -96,7 +96,7 @@ pub(crate) mod markers;
 
 pub(crate) mod cacheline;
 
-cfg_io_driver_impl! {
+cfg_io_driver_or_uring! {
     pub(crate) mod ptr_expose;
 }
 

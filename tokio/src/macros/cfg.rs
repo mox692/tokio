@@ -644,3 +644,17 @@ macro_rules! cfg_not_tokio_unstable_uring {
         )*
     };
 }
+
+macro_rules! cfg_io_driver_or_uring {
+    ( $( $item:item )* ) => {
+        $(
+            #[cfg(any(
+                feature = "net",
+                all(unix, feature = "process"),
+                all(unix, feature = "signal"),
+                tokio_unstable_uring
+            ))]
+            $item
+        )*
+    }
+}
