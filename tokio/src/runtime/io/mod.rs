@@ -45,36 +45,24 @@ cfg_not_io_driver! {
         pub(super) fn new() -> (RegistrationSet, Synced) {
             todo!()
         }
-
         pub(super) fn is_shutdown(&self, synced: &Synced) -> bool {
             todo!()
         }
-
-        /// Returns `true` if there are registrations that need to be released
         pub(super) fn needs_release(&self) -> bool {
             todo!()
         }
-
         pub(super) fn allocate(&self, synced: &mut Synced) -> std::io::Result<Arc<ScheduledIo>> {
             todo!()
         }
-
-        // Returns `true` if the caller should unblock the I/O driver to purge
-        // registrations pending release.
         pub(super) fn deregister(&self, synced: &mut Synced, registration: &Arc<ScheduledIo>) -> bool {
             todo!()
         }
-
         pub(super) fn shutdown(&self, synced: &mut Synced) -> Vec<Arc<ScheduledIo>> {
             todo!()
         }
-
         pub(super) fn release(&self, synced: &mut Synced) {
             todo!()
         }
-
-        // This function is marked as unsafe, because the caller must make sure that
-        // `io` is part of the registration set.
         pub(super) unsafe fn remove(&self, synced: &mut Synced, io: &Arc<ScheduledIo>) {
             todo!()
         }
@@ -118,7 +106,6 @@ cfg_not_io_driver! {
         }
     }
     struct Readiness<'a>(PhantomData<&'a ()>);
-
 
     #[derive(Default)]
     pub(crate) struct IoDriverMetrics{}
