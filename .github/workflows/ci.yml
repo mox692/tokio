@@ -580,14 +580,14 @@ jobs:
         include:
           - target: i686-unknown-linux-gnu
             os: ubuntu-latest
-            rustflags: --cfg tokio_taskdump --cfg tokio_unstable_uring
+            rustflags: --cfg tokio_taskdump
           - target: armv5te-unknown-linux-gnueabi
             os: ubuntu-latest
           - target: armv7-unknown-linux-gnueabihf
             os: ubuntu-22.04-arm # TODO: update to 24.04 when https://github.com/rust-lang/rust/issues/135867 solved
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-22.04-arm # TODO: update to 24.04 when https://github.com/rust-lang/rust/issues/135867 solved
-            rustflags: --cfg tokio_taskdump --cfg tokio_unstable_uring
+            rustflags: --cfg tokio_taskdump
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust stable
@@ -624,14 +624,14 @@ jobs:
         include:
           - target: i686-unknown-linux-gnu
             os: ubuntu-latest
-            rustflags: --cfg tokio_taskdump --cfg tokio_unstable_uring
+            rustflags: --cfg tokio_taskdump
           - target: armv5te-unknown-linux-gnueabi
             os: ubuntu-latest
           - target: armv7-unknown-linux-gnueabihf
             os: ubuntu-22.04-arm # TODO: update to 24.04 when https://github.com/rust-lang/rust/issues/135867 solved
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-22.04-arm # TODO: update to 24.04 when https://github.com/rust-lang/rust/issues/135867 solved
-            rustflags: --cfg tokio_taskdump --cfg tokio_unstable_uring
+            rustflags: --cfg tokio_taskdump
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust stable
@@ -694,7 +694,7 @@ jobs:
           cargo test --doc -Zbuild-std --target target-specs/i686-unknown-linux-gnu.json -p tokio --all-features
         env:
           RUST_TEST_THREADS: 1
-          RUSTFLAGS: --cfg tokio_unstable --cfg tokio_taskdump --cfg tokio_unstable_uring --cfg=io_uring_skip_arch_check -Dwarnings --cfg tokio_no_tuning_tests
+          RUSTFLAGS: --cfg tokio_unstable --cfg tokio_taskdump --cfg=io_uring_skip_arch_check -Dwarnings --cfg tokio_no_tuning_tests
 
   no-atomic-u64-check:
     name: Check tokio --feature-powerset --depth 2 on i686-unknown-linux-gnu without AtomicU64
@@ -719,7 +719,7 @@ jobs:
       - name: Check
         run: cargo hack check -Zbuild-std --target target-specs/i686-unknown-linux-gnu.json -p tokio --feature-powerset --depth 2 --keep-going
         env:
-          RUSTFLAGS: --cfg tokio_unstable --cfg tokio_taskdump --cfg tokio_unstable_uring -Dwarnings
+          RUSTFLAGS: --cfg tokio_unstable --cfg tokio_taskdump -Dwarnings
 
   features:
     name: features ${{ matrix.name }}

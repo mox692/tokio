@@ -4,6 +4,8 @@
 //! under miri, pointer casts are replaced with lookups in a hash map. This makes Tokio compatible
 //! with strict provenance when running under miri (which comes with a performance cost).
 
+#![allow(dead_code)]
+
 use std::marker::PhantomData;
 #[cfg(miri)]
 use {crate::loom::sync::Mutex, std::collections::BTreeMap};
