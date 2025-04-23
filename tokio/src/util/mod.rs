@@ -1,4 +1,4 @@
-cfg_io_driver! {
+cfg_io_driver_or_uring! {
     pub(crate) mod bit;
 }
 
@@ -29,6 +29,7 @@ pub(crate) mod metric_atomics;
     feature = "signal",
     // time driver uses `WakeList` in `Handle::process_at_time`.
     feature = "time",
+    tokio_unstable_uring
 ))]
 mod wake_list;
 #[cfg(any(
@@ -39,6 +40,7 @@ mod wake_list;
     feature = "rt",
     feature = "signal",
     feature = "time",
+    tokio_unstable_uring
 ))]
 pub(crate) use wake_list::WakeList;
 
@@ -50,6 +52,7 @@ pub(crate) use wake_list::WakeList;
     feature = "sync",
     feature = "signal",
     feature = "time",
+    tokio_unstable_uring
 ))]
 pub(crate) mod linked_list;
 
@@ -96,7 +99,7 @@ pub(crate) mod markers;
 
 pub(crate) mod cacheline;
 
-cfg_io_driver_impl! {
+cfg_io_driver_or_uring! {
     pub(crate) mod ptr_expose;
 }
 

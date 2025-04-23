@@ -231,6 +231,14 @@ cfg_io_driver_impl! {
     pub(crate) use poll_evented::PollEvented;
 }
 
+cfg_not_io_driver! {
+    cfg_tokio_unstable_uring! {
+        pub(crate) mod ready;
+        pub(crate) mod interest;
+        pub use interest::Interest;
+    }
+}
+
 // The bsd module can't be build on Windows, so we completely ignore it, even
 // when building documentation.
 #[cfg(unix)]

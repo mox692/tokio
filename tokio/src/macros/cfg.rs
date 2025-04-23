@@ -652,7 +652,12 @@ macro_rules! cfg_io_driver_or_uring {
                 feature = "net",
                 all(unix, feature = "process"),
                 all(unix, feature = "signal"),
-                tokio_unstable_uring
+                all(
+                    tokio_unstable_uring,
+                    feature = "rt",
+                    feature = "fs",
+                    target_os = "linux",
+                )
             ))]
             $item
         )*
