@@ -216,9 +216,12 @@ pub use std::io::{Error, ErrorKind, Result, SeekFrom};
 
 cfg_io_driver_or_uring! {
     pub(crate) mod interest;
-    pub use interest::Interest;
     pub(crate) mod ready;
-    pub use ready::Ready;
+
+    cfg_net_or_uring! {
+        pub use interest::Interest;
+        pub use ready::Ready;
+    }
 
     cfg_io_driver! {
         #[cfg_attr(target_os = "wasi", allow(unused_imports))]
