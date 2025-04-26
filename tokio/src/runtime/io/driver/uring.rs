@@ -32,18 +32,18 @@ impl Handle {
     #[allow(dead_code)]
     pub(crate) fn add_uring_source(&self, interest: Interest) -> io::Result<()> {
         // setup for io_uring
-        let uringfd = self.get_uring(0).lock().uring.as_raw_fd();
+        let uringfd = self.get_uring().lock().uring.as_raw_fd();
         let mut source = SourceFd(&uringfd);
         self.registry
             .register(&mut source, TOKEN_URING, interest.to_mio())
     }
 
-    pub(crate) fn get_uring(&self, _worker_index: usize) -> &Mutex<UringHandle> {
+    pub(crate) fn get_uring(&self) -> &Mutex<UringHandle> {
         &self.uring_handle
     }
 
-    pub(crate) fn register_op(&self, worker_id: u64, entry: Entry, waker: Waker) -> usize {
-        let mut guard = self.get_uring(worker_id as usize).lock();
+    pub(crate) fn register_op(&self, entry: Entry, waker: Waker) -> usize {
+        let mut guard = self.get_uring().lock();
         let lock = guard.deref_mut();
         let ring = &mut lock.uring;
         let ops = &mut lock.ops;
@@ -60,8 +60,8 @@ impl Handle {
         index
     }
 
-    pub(crate) fn deregister_op(&self, worker_id: u64, index: usize) {
-        let mut guard = self.get_uring(worker_id as usize).lock();
+    pub(crate) fn deregister_op(&self, index: usize) {
+        let mut guard = self.get_uring().lock();
         let lock = guard.deref_mut();
         let ops = &mut lock.ops;
         let Some(lifecycle) = ops.get_mut(index) else {

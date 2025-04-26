@@ -57,7 +57,7 @@ impl<T> Drop for Op<T> {
             // We have to deregistere Op.
             State::EverPolled(index) => {
                 let handle = crate::runtime::Handle::current();
-                handle.inner.driver().io().deregister_op(0, index);
+                handle.inner.driver().io().deregister_op(index);
             }
             State::Initialize(_) => unreachable!(),
         }
@@ -95,17 +95,16 @@ impl<T: Completable> Future for Op<T> {
     ) -> std::task::Poll<Self::Output> {
         // TODO: safety comment
         let this = unsafe { self.get_unchecked_mut() };
-        let worker_id = 0;
 
         match &mut this.state {
             State::Initialize(entry) => {
                 let handle = crate::runtime::Handle::current();
 
-                let index = handle.inner.driver().io().register_op(
-                    worker_id,
-                    entry.take().unwrap(),
-                    cx.waker().clone(),
-                );
+                let index = handle
+                    .inner
+                    .driver()
+                    .io()
+                    .register_op(entry.take().unwrap(), cx.waker().clone());
 
                 this.state = State::EverPolled(index);
 
@@ -113,12 +112,7 @@ impl<T: Completable> Future for Op<T> {
             }
             State::EverPolled(index) => {
                 let handle = crate::runtime::Handle::current();
-                let mut lock = handle
-                    .inner
-                    .driver()
-                    .io()
-                    .get_uring(worker_id as usize)
-                    .lock();
+                let mut lock = handle.inner.driver().io().get_uring().lock();
 
                 let ops = &mut lock.ops;
                 let lifecycle = ops.get_mut(*index).unwrap();
