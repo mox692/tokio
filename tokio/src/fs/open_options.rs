@@ -15,8 +15,10 @@ use mock_open_options::MockOpenOptions as StdOpenOptions;
 #[cfg(not(test))]
 use std::fs::OpenOptions as StdOpenOptions;
 
-#[cfg(unix)]
-use std::os::unix::fs::OpenOptionsExt;
+cfg_not_tokio_unstable_uring! {
+    #[cfg(unix)]
+    use std::os::unix::fs::OpenOptionsExt;
+}
 #[cfg(windows)]
 use std::os::windows::fs::OpenOptionsExt;
 
@@ -428,11 +430,20 @@ impl OpenOptions {
         Ok(File::from_std(std))
     }
 
-    /// Returns a mutable reference to the underlying `std::fs::OpenOptions`
-    #[cfg(any(windows, unix))]
-    pub(super) fn as_inner_mut(&mut self) -> &mut StdOpenOptions {
-        // &mut self.0
-        todo!()
+    cfg_not_tokio_unstable_uring! {
+        /// Returns a mutable reference to the underlying `std::fs::OpenOptions`
+        #[cfg(any(windows, unix))]
+        pub(super) fn as_inner_mut(&mut self) -> &mut StdOpenOptions {
+            &mut self.0
+        }
+    }
+
+    cfg_tokio_unstable_uring! {
+        /// Returns a mutable reference to the underlying `std::fs::OpenOptions`
+        #[cfg(any(windows, unix))]
+        pub(super) fn as_inner_mut(&mut self) -> &mut UringOpenOptions {
+            &mut self.0
+        }
     }
 }
 

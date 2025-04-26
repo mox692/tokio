@@ -64,4 +64,12 @@ impl UringOpenOptions {
     pub fn write(&mut self, write: bool) -> &mut Self {
         todo!()
     }
+
+    pub fn mode(&mut self, mode: u32) -> &mut Self {
+        todo!()
+    }
+
+    pub fn custom_flags(&mut self, mode: i32) -> &mut Self {
+        todo!()
+    }
 }
