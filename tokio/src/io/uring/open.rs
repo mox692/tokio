@@ -14,8 +14,8 @@ pub(crate) struct Open {
 impl Op<Open> {}
 
 impl Completable for Open {
-    type Output = io::Result<crate::fs::File>;
-    fn complete(self, cqe: CqeResult) -> Self::Output {
+    type Output = crate::fs::File;
+    fn complete(self, cqe: CqeResult) -> io::Result<Self::Output> {
         let fd = cqe.result? as i32;
         let file = unsafe { crate::fs::File::from_raw_fd(fd) };
         Ok(file)
