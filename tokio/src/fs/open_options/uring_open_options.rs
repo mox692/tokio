@@ -1,6 +1,5 @@
 use std::io;
 
-/// docs
 #[derive(Debug, Clone)]
 pub(crate) struct UringOpenOptions {
     pub(crate) read: bool,
