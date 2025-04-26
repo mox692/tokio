@@ -42,7 +42,7 @@ impl Handle {
         &self.uring_handle
     }
 
-    pub(crate) fn register_op(&self, entry: Entry, waker: Waker) -> usize {
+    pub(crate) fn register_op(&self, entry: Entry, waker: Waker) -> io::Result<usize> {
         let mut guard = self.get_uring().lock();
         let lock = guard.deref_mut();
         let ring = &mut lock.uring;
@@ -55,9 +55,11 @@ impl Handle {
             ring.submit().unwrap();
         }
 
+        ring.submit()?;
+
         drop(guard);
 
-        index
+        Ok(index)
     }
 
     pub(crate) fn deregister_op(&self, index: usize) {
