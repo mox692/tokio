@@ -3,6 +3,11 @@ use crate::fs::{asyncify, File};
 use std::io;
 use std::path::Path;
 
+cfg_tokio_unstable_uring! {
+    mod uring_open_options;
+    use uring_open_options::UringOpenOptions;
+}
+
 #[cfg(test)]
 mod mock_open_options;
 #[cfg(test)]
@@ -79,7 +84,22 @@ use std::os::windows::fs::OpenOptionsExt;
 /// }
 /// ```
 #[derive(Clone, Debug)]
-pub struct OpenOptions(StdOpenOptions);
+pub struct OpenOptions(
+    #[cfg(not(all(
+        tokio_unstable_uring,
+        feature = "rt",
+        feature = "fs",
+        target_os = "linux",
+    )))]
+    StdOpenOptions,
+    #[cfg(all(
+        tokio_unstable_uring,
+        feature = "rt",
+        feature = "fs",
+        target_os = "linux",
+    ))]
+    UringOpenOptions,
+);
 
 impl OpenOptions {
     /// Creates a blank new set of options ready for configuration.
@@ -99,7 +119,22 @@ impl OpenOptions {
     /// let future = options.read(true).open("foo.txt");
     /// ```
     pub fn new() -> OpenOptions {
-        OpenOptions(StdOpenOptions::new())
+        OpenOptions(
+            #[cfg(not(all(
+                tokio_unstable_uring,
+                feature = "rt",
+                feature = "fs",
+                target_os = "linux",
+            )))]
+            StdOpenOptions::new(),
+            #[cfg(all(
+                tokio_unstable_uring,
+                feature = "rt",
+                feature = "fs",
+                target_os = "linux",
+            ))]
+            UringOpenOptions::new(),
+        )
     }
 
     /// Sets the option for read access.
@@ -396,7 +431,8 @@ impl OpenOptions {
     /// Returns a mutable reference to the underlying `std::fs::OpenOptions`
     #[cfg(any(windows, unix))]
     pub(super) fn as_inner_mut(&mut self) -> &mut StdOpenOptions {
-        &mut self.0
+        // &mut self.0
+        todo!()
     }
 }
 
@@ -649,9 +685,21 @@ cfg_windows! {
     }
 }
 
-impl From<StdOpenOptions> for OpenOptions {
-    fn from(options: StdOpenOptions) -> OpenOptions {
-        OpenOptions(options)
+cfg_not_tokio_unstable_uring! {
+    impl From<StdOpenOptions> for OpenOptions {
+        fn from(options: StdOpenOptions) -> OpenOptions {
+            OpenOptions(options)
+        }
+    }
+}
+
+cfg_tokio_unstable_uring! {
+    impl From<StdOpenOptions> for OpenOptions {
+        fn from(_options: StdOpenOptions) -> OpenOptions {
+            // * https://github.com/rust-lang/rust/issues/76801
+            // * https://github.com/rust-lang/rust/issues/74943
+            panic!("Conversion from std's OpenOptions to io_uring's one is not supported")
+        }
     }
 }
 
