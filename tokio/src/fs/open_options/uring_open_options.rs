@@ -1,13 +1,4 @@
-#![allow(dead_code)]
-#![allow(unused_variables)]
-#![allow(unreachable_pub)]
-
-use std::{io, path::Path};
-
-#[cfg(test)]
-use crate::fs::mocks::MockFile;
-#[cfg(not(test))]
-use std::fs::File as MockFile;
+use std::io;
 
 /// docs
 #[derive(Debug, Clone)]
@@ -75,10 +66,6 @@ impl UringOpenOptions {
     pub(crate) fn custom_flags(&mut self, flags: i32) -> &mut Self {
         self.custom_flags = flags;
         self
-    }
-
-    pub(crate) fn open<P: AsRef<Path> + 'static>(&self, path: P) -> io::Result<MockFile> {
-        todo!()
     }
 
     pub(crate) fn access_mode(&self) -> io::Result<libc::c_int> {
