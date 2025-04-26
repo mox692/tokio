@@ -1,7 +1,4 @@
-use crate::{
-    fs::{open_options::uring::UringOptions, OpenOptions},
-    io::uring::read::Read,
-};
+use crate::{fs::OpenOptions, io::uring::read::Read};
 
 use std::{io, os::fd::AsRawFd, path::Path};
 

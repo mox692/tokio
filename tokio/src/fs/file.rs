@@ -5,7 +5,7 @@
 use thread_pool::{Inner, State, ThreadPool};
 use uring::Uring;
 
-use crate::fs::{asyncify, OpenOptions};
+use crate::fs::OpenOptions;
 use crate::io::blocking::{Buf, DEFAULT_MAX_BUF_SIZE};
 use crate::io::{AsyncRead, AsyncSeek, AsyncWrite, ReadBuf};
 use crate::sync::Mutex;
@@ -127,12 +127,29 @@ impl File {
     /// [`read_to_end`]: fn@crate::io::AsyncReadExt::read_to_end
     /// [`AsyncReadExt`]: trait@crate::io::AsyncReadExt
     pub async fn open(path: impl AsRef<Path>) -> io::Result<File> {
-        let path = path.as_ref().to_owned();
-        let std = asyncify(|| StdFile::open(path)).await?;
+        Self::open_inner(path).await
+    }
 
-        Ok(Self {
-            inner: Kind::ThreadPool(ThreadPool::from_std(std)),
-        })
+    cfg_not_uring_fs! {
+        async fn open_inner(path: impl AsRef<Path>) -> io::Result<File> {
+            let path = path.as_ref().to_owned();
+            let std = asyncify(|| StdFile::open(path)).await?;
+
+            Ok(Self {
+                inner: Kind::ThreadPool(ThreadPool::from_std(std)),
+            })
+        }
+    }
+
+    cfg_uring_fs! {
+        async fn open_inner(path: impl AsRef<Path>) -> io::Result<File> {
+            use crate::runtime::driver::op::Op;
+            let mut opt = OpenOptions::new();
+            let opt = opt.read(true);
+
+            Op::open(path.as_ref(), opt)?.await
+
+        }
     }
 
     /// Opens a file in write-only mode.
@@ -167,11 +184,32 @@ impl File {
     /// [`write_all`]: fn@crate::io::AsyncWriteExt::write_all
     /// [`AsyncWriteExt`]: trait@crate::io::AsyncWriteExt
     pub async fn create(path: impl AsRef<Path>) -> io::Result<File> {
-        let path = path.as_ref().to_owned();
-        let std_file = asyncify(move || StdFile::create(path)).await?;
-        Ok(Self {
-            inner: Kind::ThreadPool(ThreadPool::from_std(std_file)),
-        })
+        Self::create_inner(path).await
+        // let path = path.as_ref().to_owned();
+        // let std_file = asyncify(move || StdFile::create(path)).await?;
+        // Ok(Self {
+        //     inner: Kind::ThreadPool(ThreadPool::from_std(std_file)),
+        // })
+    }
+
+    cfg_not_uring_fs! {
+        async fn create_inner(path: impl AsRef<Path>) -> io::Result<File> {
+            let path = path.as_ref().to_owned();
+            let std_file = asyncify(move || StdFile::create(path)).await?;
+            Ok(Self {
+                inner: Kind::ThreadPool(ThreadPool::from_std(std_file)),
+            })
+        }
+    }
+
+    cfg_uring_fs! {
+        async fn create_inner(path: impl AsRef<Path>) -> io::Result<File> {
+            use crate::runtime::driver::op::Op;
+            let mut opt = OpenOptions::new();
+            let opt = opt.write(true).truncate(true);
+
+            Op::open(path.as_ref(), opt)?.await
+        }
     }
 
     /// Opens a file in read-write mode.

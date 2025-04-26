@@ -1,4 +1,4 @@
-use crate::fs::{asyncify, File};
+use crate::fs::File;
 use crate::runtime::driver::op::Op;
 
 use std::io;

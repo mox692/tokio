@@ -1,4 +1,4 @@
-use tokio::fs::{read, OpenOptions, UringOptions};
+use tokio::fs::{read, OpenOptions};
 
 fn main() {
     let rt = tokio::runtime::Builder::new_multi_thread()
@@ -7,7 +7,7 @@ fn main() {
         .unwrap();
 
     rt.block_on(async {
-        let file = OpenOptions::new()
+        let _file = OpenOptions::new()
             .read(true)
             .open("/home/mox692/work/tokio/examples/uring_fs.rs")
             .await
