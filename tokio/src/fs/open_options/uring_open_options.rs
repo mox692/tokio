@@ -38,38 +38,46 @@ impl UringOpenOptions {
     }
 
     pub fn append(&mut self, append: bool) -> &mut Self {
-        todo!()
+        self.append = append;
+        self
     }
 
     pub fn create(&mut self, create: bool) -> &mut Self {
-        todo!()
+        self.create = create;
+        self
     }
 
     pub fn create_new(&mut self, create_new: bool) -> &mut Self {
-        todo!()
-    }
-
-    pub fn open<P: AsRef<Path> + 'static>(&self, path: P) -> io::Result<MockFile> {
-        todo!()
+        self.create_new = create_new;
+        self
     }
 
     pub fn read(&mut self, read: bool) -> &mut Self {
-        todo!()
-    }
-
-    pub fn truncate(&mut self, truncate: bool) -> &mut Self {
-        todo!()
+        self.read = read;
+        self
     }
 
     pub fn write(&mut self, write: bool) -> &mut Self {
-        todo!()
+        self.write = write;
+        self
+    }
+
+    pub fn truncate(&mut self, truncate: bool) -> &mut Self {
+        self.truncate = truncate;
+        self
     }
 
     pub fn mode(&mut self, mode: u32) -> &mut Self {
-        todo!()
+        self.mode = mode as libc::mode_t;
+        self
     }
 
-    pub fn custom_flags(&mut self, mode: i32) -> &mut Self {
+    pub fn custom_flags(&mut self, flags: i32) -> &mut Self {
+        self.custom_flags = flags;
+        self
+    }
+
+    pub fn open<P: AsRef<Path> + 'static>(&self, path: P) -> io::Result<MockFile> {
         todo!()
     }
 }
