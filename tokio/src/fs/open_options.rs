@@ -1,4 +1,4 @@
-use crate::fs::{asyncify, File};
+use crate::fs::File;
 
 use std::io;
 use std::path::Path;
@@ -17,8 +17,10 @@ use std::fs::OpenOptions as StdOpenOptions;
 
 cfg_not_tokio_unstable_uring! {
     #[cfg(unix)]
-    use std::os::unix::fs::OpenOptionsExt;
+        use std::os::unix::fs::OpenOptionsExt;
+        use crate::fs::asyncify;
 }
+
 #[cfg(windows)]
 use std::os::windows::fs::OpenOptionsExt;
 
@@ -100,7 +102,7 @@ pub struct OpenOptions(
         feature = "fs",
         target_os = "linux",
     ))]
-    UringOpenOptions,
+    pub(crate) UringOpenOptions,
 );
 
 impl OpenOptions {
@@ -423,14 +425,18 @@ impl OpenOptions {
     /// [`Other`]: std::io::ErrorKind::Other
     /// [`PermissionDenied`]: std::io::ErrorKind::PermissionDenied
     pub async fn open(&self, path: impl AsRef<Path>) -> io::Result<File> {
-        let path = path.as_ref().to_owned();
-        let opts = self.0.clone();
-
-        let std = asyncify(move || opts.open(path)).await?;
-        Ok(File::from_std(std))
+        self.open_inner(path).await
     }
 
     cfg_not_tokio_unstable_uring! {
+        async fn open_inner(&self, path: impl AsRef<Path>) -> io::Result<File> {
+            let path = path.as_ref().to_owned();
+            let opts = self.0.clone();
+
+            let std = asyncify(move || opts.open(path)).await?;
+            Ok(File::from_std(std))
+        }
+
         /// Returns a mutable reference to the underlying `std::fs::OpenOptions`
         #[cfg(any(windows, unix))]
         pub(super) fn as_inner_mut(&mut self) -> &mut StdOpenOptions {
@@ -439,6 +445,10 @@ impl OpenOptions {
     }
 
     cfg_tokio_unstable_uring! {
+        async fn open_inner(&self, path: impl AsRef<Path>) -> io::Result<File> {
+            crate::runtime::driver::op::Op::open(path.as_ref(), self)?.await
+        }
+
         /// Returns a mutable reference to the underlying `std::fs::OpenOptions`
         #[cfg(any(windows, unix))]
         pub(super) fn as_inner_mut(&mut self) -> &mut UringOpenOptions {
