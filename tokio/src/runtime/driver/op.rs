@@ -86,11 +86,11 @@ impl From<cqueue::Entry> for CqeResult {
 pub(crate) trait Completable {
     type Output;
     /// `complete` will be called for cqe's do not have the `more` flag set
-    fn complete(self, cqe: CqeResult) -> Self::Output;
+    fn complete(self, cqe: CqeResult) -> io::Result<Self::Output>;
 }
 
 impl<T: Completable> Future for Op<T> {
-    type Output = T::Output;
+    type Output = io::Result<T::Output>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // SAFETY: `Op` is !Unpin, but we never move any of its fields by
@@ -99,12 +99,11 @@ impl<T: Completable> Future for Op<T> {
         let waker = cx.waker().clone();
         let handle = crate::runtime::Handle::current();
         let driver = &handle.inner.driver().io();
-        const WORKER_ID: u32 = 0;
 
         match &mut this.state {
             State::Initialize(entry_opt) => {
                 let entry = entry_opt.take().expect("Initialize must hold an entry");
-                let idx = driver.register_op(entry, waker);
+                let idx = driver.register_op(entry, waker)?;
                 this.state = State::EverPolled(idx);
                 Poll::Pending
             }
