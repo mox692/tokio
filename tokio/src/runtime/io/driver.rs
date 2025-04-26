@@ -5,20 +5,20 @@ cfg_signal_internal_and_unix! {
 cfg_tokio_unstable_uring! {
     mod uring;
     use uring::UringHandle;
+    use crate::runtime::driver::op::Lifecycle;
+    use std::ops::DerefMut;
 }
 
 use crate::io::interest::Interest;
 use crate::io::ready::Ready;
 use crate::loom::sync::Mutex;
 use crate::runtime::driver;
-use crate::runtime::driver::op::Lifecycle;
 use crate::runtime::io::registration_set;
 use crate::runtime::io::{IoDriverMetrics, RegistrationSet, ScheduledIo};
 
 use mio::event::Source;
 use std::fmt;
 use std::io;
-use std::ops::DerefMut;
 use std::sync::Arc;
 use std::time::Duration;
 
