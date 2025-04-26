@@ -1,4 +1,8 @@
-
+* noteを追記する
+  * 具体的に, どう言うstepで進めるかの更新
+    * initial infra
+    * 各Opを, 優先度順にsupport
+      * supprot されているAPIについては, docsにめいきしておくのが吉
 * 実験repoを形にする
   * uringを, io driverに組み込むのではなく, 独自のdriverに分けれないか？ tokio/src/runtime/driver.rs にいろいろdriverがあるように。
     * モチベ
@@ -6,7 +10,6 @@
       * レビューを楽にする
       * 既存のio driverに追加すると, cfg_io_driver!をいじる必要性が出てくる
   * `open`, `read`, `write` をちゃんと実装する (より実際的な労力を知るため)
-  * cancelの実装ちゃんとしてる？
   * driverのdropの実装
   * Opのリファクタ
     * StateをOpに持たせないように
@@ -38,22 +41,24 @@
     * open
     * statx
     * ...
-* PRどのようにsplitするのかを考える
-  * 
-  * just idea
-    * initial infra structureと, 実際のopを別のPRに分けれるのじゃないかな
-
 * carlとaliceに, incrementalに対応するopを増やすことがokかを聞く
 
 ### Api Tier
 * 順ばん(仮). https://docs.rs/tokio/latest/tokio/fs/index.html を上から順番に確認
   * tier 1: relatively easy to support io_uring
+    * `File::open()`, `File::create()`, `OpenOptions`
+      * file openをio_uringでやる
+      * 労力はわからんが, openがないと何もできないかも
+      * この `open` 関数は, tokioの現行のFile objectを返す
+      * 後続のuringの処理は, そのfileObjectからfdを取得して, 
+      * publicにする必要はない, 一旦privateのOpenOptionsを導入して, todo commentとかで最終的に既存のOpenOptionsと統合すると記入しておく
+        * このopenOptionsは, tokio-uringを参考にできると思う
+      * 代案として, 最初からuring対応の`File` objectをsupportしてしまうという方法もある. (`File::open()`, `File::create()`)
+        * デメリットとしては, File apiの一部だけ uring を使うという中途半端な状態になりうる点
+        * でも意外と問題ないかも
+      * first PRで, `File::open`, `File::create` をsupportする, でいいかも (cfgついた時だけuring)
     * `write()`
       * tokio uringを見た感じ, 実装は楽そう
-    * `open()`
-      * 労力はわからんが, openがないと何もできないかも
-      * ただし, public 関数ではない
-      * これ, いっそOpenOptionsと一緒にできない?
     * `statx()`
       * readで必要
       * そこそこ実装が必要かも. これがないとreadが提供できなくて地獄
@@ -66,7 +71,7 @@
     * `metadata`
       * fstatが必要
   * tier 2: not hard, but requires implementation a bit
-    * `fs::File`
+    * `fs::File` の他のapi
     * `fs::copy()`
     * dir系 (fileと違って、どのapiもDirBuilderを経由するっぽい)
       * `DirBuilder`
