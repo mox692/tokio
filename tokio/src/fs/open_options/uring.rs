@@ -1,6 +1,6 @@
 /// docs
 #[derive(Debug, Clone)]
-pub struct UringOption {
+pub struct UringOptions {
     pub(crate) read: bool,
     pub(crate) write: bool,
     pub(crate) append: bool,
@@ -11,14 +11,12 @@ pub struct UringOption {
     pub(crate) custom_flags: libc::c_int,
 }
 
-impl UringOption {
+impl UringOptions {
     /// docs
     pub fn new() -> Self {
         Self {
-            // generic
-            // TODO: default should be false
-            read: true,
-            write: true,
+            read: false,
+            write: false,
             append: false,
             truncate: false,
             create: false,

@@ -1,4 +1,4 @@
-use tokio::fs::{read, read3, OpenOptions, UringOption};
+use tokio::fs::{read, OpenOptions, UringOptions};
 
 fn main() {
     let rt = tokio::runtime::Builder::new_multi_thread()
@@ -8,7 +8,7 @@ fn main() {
 
     rt.block_on(async {
         let file = OpenOptions::new()
-            .use_io_uring(UringOption::new())
+            .read(true)
             .open("/home/mox692/work/tokio/examples/uring_fs.rs")
             .await
             .unwrap();
@@ -17,7 +17,7 @@ fn main() {
         // println!("meta: {:?}", meta);
 
         tokio::spawn(async {
-            let res = read3("/home/mox692/work/tokio/examples/uring_fs.rs")
+            let res = read("/home/mox692/work/tokio/examples/uring_fs.rs")
                 .await
                 .unwrap();
             println!("content: {:?}", String::from_utf8(res));

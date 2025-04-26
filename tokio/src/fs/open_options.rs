@@ -10,6 +10,7 @@ mod mock_open_options;
 use mock_open_options::MockOpenOptions as StdOpenOptions;
 #[cfg(not(test))]
 use std::fs::OpenOptions as StdOpenOptions;
+use uring::UringOptions;
 
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
@@ -83,8 +84,10 @@ use std::os::windows::fs::OpenOptionsExt;
 pub struct OpenOptions {
     std: StdOpenOptions,
 
-    // TODO; cfg gate
-    pub(crate) uring: Option<UringOption>,
+    // TODO* maybe we could completely split struct
+    /// io_uring specific options
+    #[cfg(all(tokio_unstable, feature = "rt", feature = "fs", target_os = "linux",))]
+    pub(crate) uring: UringOptions,
 }
 
 impl OpenOptions {
@@ -107,7 +110,7 @@ impl OpenOptions {
     pub fn new() -> OpenOptions {
         OpenOptions {
             std: StdOpenOptions::new(),
-            uring: None,
+            uring: UringOptions::new(),
         }
     }
 
@@ -138,6 +141,12 @@ impl OpenOptions {
     /// ```
     pub fn read(&mut self, read: bool) -> &mut OpenOptions {
         self.std.read(read);
+
+        #[cfg(all(tokio_unstable, feature = "rt", feature = "fs", target_os = "linux",))]
+        {
+            self.uring.read = read;
+        }
+
         self
     }
 
@@ -168,6 +177,11 @@ impl OpenOptions {
     /// ```
     pub fn write(&mut self, write: bool) -> &mut OpenOptions {
         self.std.write(write);
+
+        #[cfg(all(tokio_unstable, feature = "rt", feature = "fs", target_os = "linux",))]
+        {
+            self.uring.write = write;
+        }
         self
     }
 
@@ -227,6 +241,12 @@ impl OpenOptions {
     /// ```
     pub fn append(&mut self, append: bool) -> &mut OpenOptions {
         self.std.append(append);
+
+        #[cfg(all(tokio_unstable, feature = "rt", feature = "fs", target_os = "linux",))]
+        {
+            self.uring.append = append;
+        }
+
         self
     }
 
@@ -260,6 +280,12 @@ impl OpenOptions {
     /// ```
     pub fn truncate(&mut self, truncate: bool) -> &mut OpenOptions {
         self.std.truncate(truncate);
+
+        #[cfg(all(tokio_unstable, feature = "rt", feature = "fs", target_os = "linux",))]
+        {
+            self.uring.truncate = truncate;
+        }
+
         self
     }
 
@@ -296,6 +322,12 @@ impl OpenOptions {
     /// ```
     pub fn create(&mut self, create: bool) -> &mut OpenOptions {
         self.std.create(create);
+
+        #[cfg(all(tokio_unstable, feature = "rt", feature = "fs", target_os = "linux",))]
+        {
+            self.uring.create = create;
+        }
+
         self
     }
 
@@ -339,6 +371,12 @@ impl OpenOptions {
     /// ```
     pub fn create_new(&mut self, create_new: bool) -> &mut OpenOptions {
         self.std.create_new(create_new);
+
+        #[cfg(all(tokio_unstable, feature = "rt", feature = "fs", target_os = "linux",))]
+        {
+            self.uring.create_new = create_new;
+        }
+
         self
     }
 
@@ -395,20 +433,27 @@ impl OpenOptions {
     /// [`Other`]: std::io::ErrorKind::Other
     /// [`PermissionDenied`]: std::io::ErrorKind::PermissionDenied
     pub async fn open(&self, path: impl AsRef<Path>) -> io::Result<File> {
-        match &self.uring {
-            None => {
-                let path = path.as_ref().to_owned();
-                let opts = self.std.clone();
+        self.open_inner(path).await
+    }
 
-                let std = asyncify(move || opts.open(path)).await?;
-                Ok(File::from_std(std))
-            }
-            Some(_options) => Op::open(path.as_ref(), self)?.await,
+    cfg_uring_fs! {
+        async fn open_inner(&self, path: impl AsRef<Path>) -> io::Result<File> {
+            Op::open(path.as_ref(), self)?.await
+        }
+    }
+
+    cfg_not_uring_fs! {
+        async fn open_inner(&self, path: impl AsRef<Path>) -> io::Result<File> {
+            let path = path.as_ref().to_owned();
+            let opts = self.std.clone();
+
+            let std = asyncify(move || opts.open(path)).await?;
+            Ok(File::from_std(std))
         }
     }
 
     pub(crate) fn access_mode(&self) -> io::Result<libc::c_int> {
-        let uring = self.uring.as_ref().unwrap();
+        let uring = &self.uring;
         match (uring.read, uring.write, uring.append) {
             (true, false, false) => Ok(libc::O_RDONLY),
             (false, true, false) => Ok(libc::O_WRONLY),
@@ -420,7 +465,7 @@ impl OpenOptions {
     }
 
     pub(crate) fn creation_mode(&self) -> io::Result<libc::c_int> {
-        let uring = self.uring.as_ref().unwrap();
+        let uring = &self.uring;
         match (uring.write, uring.append) {
             (true, false) => {}
             (false, false) => {
@@ -448,14 +493,6 @@ impl OpenOptions {
     #[cfg(any(windows, unix))]
     pub(super) fn as_inner_mut(&mut self) -> &mut StdOpenOptions {
         &mut self.std
-    }
-
-    cfg_uring_fs! {
-        /// docs
-        pub fn use_io_uring(&mut self, options: UringOption) -> &mut OpenOptions {
-            self.uring = Some(options);
-            self
-        }
     }
 }
 
@@ -712,7 +749,8 @@ impl From<StdOpenOptions> for OpenOptions {
     fn from(options: StdOpenOptions) -> OpenOptions {
         OpenOptions {
             std: options,
-            uring: None,
+            #[cfg(all(tokio_unstable, feature = "rt", feature = "fs", target_os = "linux",))]
+            uring: UringOptions::new(),
         }
     }
 }
@@ -724,4 +762,3 @@ impl Default for OpenOptions {
 }
 
 pub(super) mod uring;
-pub use uring::UringOption;

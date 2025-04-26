@@ -27,7 +27,7 @@ impl Completable for Open {
 impl Op<Open> {
     /// Submit a request to open a file.
     pub(crate) fn open(path: &Path, options: &OpenOptions) -> io::Result<Op<Open>> {
-        let inner_opt = options.uring.as_ref().unwrap();
+        let inner_opt = &options.uring;
         let path = cstr(path)?;
 
         let custom_flags = inner_opt.custom_flags;

@@ -1,5 +1,5 @@
 use crate::{
-    fs::{open_options::uring::UringOption, OpenOptions},
+    fs::{open_options::uring::UringOptions, OpenOptions},
     io::uring::read::Read,
 };
 
@@ -85,7 +85,6 @@ cfg_uring_fs! {
         let mut buf = vec![0u8; 1024];
         let file = OpenOptions::new()
             .read(true)
-            .use_io_uring(UringOption::new())
             .open(path)
             .await?;
         let read_op = opcode::Read::new(

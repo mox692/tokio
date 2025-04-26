@@ -160,12 +160,7 @@ fn open_read_io_uring(c: &mut Criterion) {
                         set.spawn(async move {
                             let path = format!("/home/mox692/work/tokio/test_file/{i}.txt");
 
-                            let file = OpenOptions::new()
-                                .read(true)
-                                .use_io_uring(UringOption::new())
-                                .open(&path)
-                                .await
-                                .unwrap();
+                            let file = OpenOptions::new().read(true).open(&path).await.unwrap();
                             black_box(file);
 
                             // let res = read3(&path).await.unwrap();
