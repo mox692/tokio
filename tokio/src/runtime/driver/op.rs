@@ -4,6 +4,8 @@
 use io_uring::cqueue;
 use io_uring::squeue::Entry;
 use std::future::Future;
+use std::pin::Pin;
+use std::task::Context;
 use std::task::Poll;
 use std::task::Waker;
 use std::{io, mem};
@@ -89,59 +91,66 @@ pub(crate) trait Completable {
 
 impl<T: Completable> Future for Op<T> {
     type Output = T::Output;
-    fn poll(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Self::Output> {
-        // TODO: safety comment
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        // SAFETY: `Op` is !Unpin, but we never move any of its fields by
+        // projecting `self` into `this` and only mutating through that.
         let this = unsafe { self.get_unchecked_mut() };
+        let waker = cx.waker().clone();
+        let handle = crate::runtime::Handle::current();
+        let driver = &handle.inner.driver().io();
+        const WORKER_ID: u32 = 0;
 
         match &mut this.state {
-            State::Initialize(entry) => {
-                let handle = crate::runtime::Handle::current();
-
-                let index = handle
-                    .inner
-                    .driver()
-                    .io()
-                    .register_op(entry.take().unwrap(), cx.waker().clone());
-
-                this.state = State::EverPolled(index);
-
+            State::Initialize(entry_opt) => {
+                let entry = entry_opt.take().expect("Initialize must hold an entry");
+                let idx = driver.register_op(entry, waker);
+                this.state = State::EverPolled(idx);
                 Poll::Pending
             }
-            State::EverPolled(index) => {
-                let handle = crate::runtime::Handle::current();
-                let mut lock = handle.inner.driver().io().get_uring().lock();
 
-                let ops = &mut lock.ops;
-                let lifecycle = ops.get_mut(*index).unwrap();
+            State::EverPolled(idx) => {
+                let mut uring = driver.get_uring().lock();
+                let lifecycle_slot = &mut uring.ops[*idx];
 
-                let op = match mem::replace(lifecycle, Lifecycle::Submitted) {
+                // Swap out the old lifecycle so we can match on it
+                match mem::replace(lifecycle_slot, Lifecycle::Submitted) {
                     Lifecycle::Submitted => {
-                        *lifecycle = Lifecycle::Waiting(cx.waker().clone());
+                        *lifecycle_slot = Lifecycle::Waiting(waker);
                         Poll::Pending
                     }
-                    Lifecycle::Waiting(waker) if !waker.will_wake(cx.waker()) => {
-                        *lifecycle = Lifecycle::Waiting(cx.waker().clone());
-                        Poll::Pending
-                    }
-                    Lifecycle::Waiting(waker) => {
-                        *lifecycle = Lifecycle::Waiting(waker);
-                        Poll::Pending
-                    }
-                    Lifecycle::Cancelled => unreachable!(),
-                    Lifecycle::Completed(cqe) => {
-                        ops.remove(*index);
 
+                    // Only replace the stored waker if it wouldn't wake the new one
+                    Lifecycle::Waiting(prev) if !prev.will_wake(&waker) => {
+                        *lifecycle_slot = Lifecycle::Waiting(waker);
+                        Poll::Pending
+                    }
+
+                    Lifecycle::Waiting(prev) => {
+                        *lifecycle_slot = Lifecycle::Waiting(prev);
+                        Poll::Pending
+                    }
+
+                    Lifecycle::Completed(cqe) => {
+                        // Clean up and complete the future
+                        uring.ops.remove(*idx);
                         this.state = State::Complete;
 
-                        Poll::Ready(this.take_data().unwrap().complete(cqe.into()))
+                        let data = this
+                            .take_data()
+                            .expect("Data must be present on completion");
+                        Poll::Ready(data.complete(cqe.into()))
                     }
-                };
-                op
+
+                    Lifecycle::Cancelled => {
+                        unreachable!("Cancelled lifecycle should never be seen here");
+                    }
+                }
             }
-            State::Complete => unreachable!("Future is polled after completion."),
+
+            State::Complete => {
+                panic!("Future polled after completion");
+            }
         }
     }
 }
