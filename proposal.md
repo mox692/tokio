@@ -214,49 +214,45 @@ I think this proposal can be achieved incrementally, as follows:
      * `write()`
      * `open()`
      * `statx()`
-     ...
    * At this phase, changes will start to impact user code (behind a cfg gate).
    * Each operation can be added incrementally via *separate* pull requests.
    * Note: Some filesystem APIs depend on others.
      * For example, `read()` depends on `open()`.
-       <details open> <summary> <i>Memo about file api tier </i> </summary> <br>
+      <details> <summary> <i>Memo about file api tier </i> </summary> <br>
 
-       Here is a memo about the order in which we should support the io_uring API.
+      Some file APIs are used internally by others, creating dependencies between them.  
 
-       Some file APIs are used internally by others, creating dependencies between them.  
+      So, the file APIs have been grouped into two tiers, reflecting their implementation priority.
 
-       So, the file APIs have been grouped into two tiers, reflecting their implementation priority.
+      (Note that this is not meant to strictly define the implementation order, but rather to serve as a guideline.)
 
-       (Note that this is not meant to strictly define the implementation order, but rather to serve as a guideline.)
+      **Tier 1: Important APIs that are also used by other APIs, or frequently used**
+      * `OpenOptions::open()`
+        * Internally used by `File::open()` and `File::create()`
+      * `File::open()`, `File::create()`
+        * Internally used by `fs::read()` and `fs::write()`
+      * `statx(2)`
+        * Required for determining buffer size in `fs::read()` and for the `fs::metadata()` API
+      * `fs::write()`
+        * Frequently used API
+        * Can be supported once `open` is implemented
+      * `fs::read()`
+        * Frequently used API
+        * Can be implemented once `open` and `fstat` are supported
+      * APIs for `fs::File` and others
+        * Update the `AsyncWrite` and `AsyncRead` implementations to use io_uring
 
-       **Tier 1: Important APIs that are also used by other APIs**
-       * `OpenOptions::open()`
-         * Internally used by `File::open()` and `File::create()`
-       * `File::open()`, `File::create()`
-         * Internally used by `fs::read()` and `fs::write()`
-       * `statx(2)`
-         * Required for determining buffer size in `fs::read()` and for the `fs::metadata()` API
-       * `fs::write()`
-         * Frequently used API
-         * Can be supported once `open` is implemented
-       * `fs::read()`
-         * Frequently used API
-         * Can be implemented once `open` and `fstat` are supported
-       * APIs for `fs::File` and others
-         * Update the `AsyncWrite` and `AsyncRead` implementations to use io_uring
+      **Tier 2: APIs that depend on Tier 1 APIs or are considered less frequently used**
+      * `fs::copy()`
+      * Directory-related APIs (Unlike files, all directory operations seem to go through `DirBuilder`)
+        * `DirBuilder`
+        * `create_dir()`
+        * `create_dir_all()`
+        * `fs::read_dir()`
+      * `fs::set_permissions()`
+      * ... and other APIs
 
-       **Tier 2: APIs that depend on Tier 1 APIs or are considered less frequently used**
-       * `fs::copy()`
-       * Directory-related APIs (Unlike files, all directory operations seem to go through `DirBuilder`)
-         * `DirBuilder`
-         * `create_dir()`
-         * `create_dir_all()`
-         * `fs::read_dir()`
-       * `fs::set_permissions()`
-
-       ... and other APIs
-
-       </details>
+      </details>
 3. Further improvements, such as:
    * Sharding rings in the multi-threaded runtime (one ring per thread)
    * Smarter batching logic for submission
