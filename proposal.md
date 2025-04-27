@@ -199,28 +199,65 @@ Detailed implementation strategies for sharding rings across threads in a multit
 
 I think this proposal can be achieved incrementally, as follows:
 
-1. Initial Infrastructure Code
+1. Initial infrastructure code
    * Introduce foundational changes to support io_uring operations, including:
-     * Driver (both single-threaded and multi-threaded):
-       * Add (global) ring to the driver
+     * Driver:
+       * Add ring to the driver
        * Implement registration logic for uringfd
        * Wake io_uring tasks after epoll_ctl returns
      * Add a dedicated configuration flag (cfg)
      * Add Op futures for io_uring operations
+     * Allow access to the io driver when uring cfg is enabled
    * These changes should not affect the existing codebase at this stage.
-2. Implementing Actual io_uring Operations
-   * operations are:
+2. Implementing actual io_uring operations
+   * Uring the infrastructure implemented in step 1, we start to support actual io_uring opeartions, e.g.
      * `write()`
      * `open()`
      * `statx()`
      ...
    * At this phase, changes will start to impact user code (behind a cfg gate).
-   * Each operation can be added incrementally via separate pull requests.
+   * Each operation can be added incrementally via *separate* pull requests.
    * Note: Some filesystem APIs depend on others.
-     * For example, read() depends on statx() since we need to know the file size beforehand.
+     * For example, `read()` depends on `open()`.
+       <details open> <summary> <i>Memo about file api tier </i> </summary> <br>
+
+       Here is a memo about the order in which we should support the io_uring API.
+
+       Some file APIs are used internally by others, creating dependencies between them.  
+
+       So, the file APIs have been grouped into two tiers, reflecting their implementation priority.
+
+       (Note that this is not meant to strictly define the implementation order, but rather to serve as a guideline.)
+
+       **Tier 1: Important APIs that are also used by other APIs**
+       * `OpenOptions::open()`
+         * Internally used by `File::open()` and `File::create()`
+       * `File::open()`, `File::create()`
+         * Internally used by `fs::read()` and `fs::write()`
+       * `statx(2)`
+         * Required for determining buffer size in `fs::read()` and for the `fs::metadata()` API
+       * `fs::write()`
+         * Frequently used API
+         * Can be supported once `open` is implemented
+       * `fs::read()`
+         * Frequently used API
+         * Can be implemented once `open` and `fstat` are supported
+       * APIs for `fs::File` and others
+         * Update the `AsyncWrite` and `AsyncRead` implementations to use io_uring
+
+       **Tier 2: APIs that depend on Tier 1 APIs or are considered less frequently used**
+       * `fs::copy()`
+       * Directory-related APIs (Unlike files, all directory operations seem to go through `DirBuilder`)
+         * `DirBuilder`
+         * `create_dir()`
+         * `create_dir_all()`
+         * `fs::read_dir()`
+       * `fs::set_permissions()`
+
+       ... and other APIs
+
+       </details>
 3. Further improvements, such as:
    * Sharding rings in the multi-threaded runtime (one ring per thread)
    * Smarter batching logic for submission
    * Exploring the possibilities of using advanced features, such as registered buffers or registered files
-4. Use io_uring as the default for `File::new`, `fs::read`, `fs::write`, etc.
-5. Stabilize (remove `tokio_unstable`)
