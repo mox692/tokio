@@ -1,3 +1,4 @@
+use crate::runtime::Handle;
 use io_uring::cqueue;
 use io_uring::squeue::Entry;
 use std::future::Future;
@@ -57,15 +58,17 @@ impl<T> Drop for Op<T> {
             State::Complete => (),
             // We have to deregistere Op.
             State::Polled(index) => {
-                let handle = crate::runtime::Handle::current();
+                let handle = Handle::current();
                 handle.inner.driver().io().deregister_op(index);
             }
-            State::Initialize(_) => unreachable!(),
+            // This Op has not been polled yet.
+            // We don't need to do anything here.
+            State::Initialize(_) => (),
         }
     }
 }
 
-/// A single CQE entry
+/// A single CQE result
 pub(crate) struct CqeResult {
     #[allow(dead_code)]
     pub(crate) result: io::Result<u32>,
@@ -97,7 +100,7 @@ impl<T: Completable> Future for Op<T> {
         // projecting `self` into `this` and only mutating through that.
         let this = unsafe { self.get_unchecked_mut() };
         let waker = cx.waker().clone();
-        let handle = crate::runtime::Handle::current();
+        let handle = Handle::current();
         let driver = &handle.inner.driver().io();
 
         match &mut this.state {

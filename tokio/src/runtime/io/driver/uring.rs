@@ -62,6 +62,7 @@ impl Handle {
         Ok(index)
     }
 
+    /// Remove the Op from the slab.
     pub(crate) fn deregister_op(&self, index: usize) {
         let mut guard = self.get_uring().lock();
         let lock = guard.deref_mut();
