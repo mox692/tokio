@@ -12,12 +12,12 @@ use std::{io, mem, ops::DerefMut, task::Waker};
 
 const DEFAULT_RING_SIZE: u32 = 8192;
 
-pub(crate) struct UringHandle {
+pub(crate) struct UringContext {
     pub(crate) uring: io_uring::IoUring,
     pub(crate) ops: slab::Slab<Lifecycle>,
 }
 
-impl UringHandle {
+impl UringContext {
     pub(crate) fn new() -> Self {
         Self {
             ops: Slab::new(),
@@ -38,8 +38,8 @@ impl Handle {
             .register(&mut source, TOKEN_URING, interest.to_mio())
     }
 
-    pub(crate) fn get_uring(&self) -> &Mutex<UringHandle> {
-        &self.uring_handle
+    pub(crate) fn get_uring(&self) -> &Mutex<UringContext> {
+        &self.uring_context
     }
 
     pub(crate) fn register_op(&self, entry: Entry, waker: Waker) -> io::Result<usize> {

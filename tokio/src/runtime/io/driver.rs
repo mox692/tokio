@@ -4,7 +4,7 @@ cfg_signal_internal_and_unix! {
 }
 cfg_tokio_unstable_uring! {
     mod uring;
-    use uring::UringHandle;
+    use uring::UringContext;
     use crate::runtime::driver::op::Lifecycle;
 }
 
@@ -57,7 +57,7 @@ pub(crate) struct Handle {
         feature = "fs",
         target_os = "linux",
     ))]
-    pub(crate) uring_handle: Mutex<UringHandle>,
+    pub(crate) uring_context: Mutex<UringContext>,
 }
 
 #[derive(Debug)]
@@ -134,7 +134,7 @@ impl Driver {
                 feature = "fs",
                 target_os = "linux",
             ))]
-            uring_handle: Mutex::new(UringHandle::new()),
+            uring_context: Mutex::new(UringContext::new()),
         };
 
         #[cfg(all(
