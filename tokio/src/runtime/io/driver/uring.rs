@@ -8,9 +8,9 @@ use crate::{io::Interest, loom::sync::Mutex};
 use super::{Handle, TOKEN_URING};
 
 use std::os::fd::AsRawFd;
-use std::{io, mem, ops::DerefMut, task::Waker};
+use std::{io, mem, task::Waker};
 
-const DEFAULT_RING_SIZE: u32 = 8192;
+const DEFAULT_RING_SIZE: u32 = 512;
 
 pub(crate) struct UringContext {
     pub(crate) uring: io_uring::IoUring,
@@ -28,7 +28,6 @@ impl UringContext {
 }
 
 impl Handle {
-    /// Called when runtime starts.
     #[allow(dead_code)]
     pub(crate) fn add_uring_source(&self, interest: Interest) -> io::Result<()> {
         // setup for io_uring
@@ -44,9 +43,9 @@ impl Handle {
 
     pub(crate) fn register_op(&self, entry: Entry, waker: Waker) -> io::Result<usize> {
         let mut guard = self.get_uring().lock();
-        let lock = guard.deref_mut();
-        let ring = &mut lock.uring;
-        let ops = &mut lock.ops;
+        let ctx = &mut *guard;
+        let ring = &mut ctx.uring;
+        let ops = &mut ctx.ops;
         let index = ops.insert(Lifecycle::Waiting(waker));
         let entry = entry.user_data(index as u64);
 
@@ -55,13 +54,12 @@ impl Handle {
             ring.submit().unwrap();
         }
 
+        // For now, we submit the entry immediately without utilizing batching.
         if let Err(e) = ring.submit() {
             // Submission is failing, remove the entry from the slab and return the error.
             ops.remove(index);
             return Err(e);
         }
-
-        drop(guard);
 
         Ok(index)
     }
@@ -83,7 +81,7 @@ impl Handle {
             prev => panic!("Unexpected state: {:?}", prev),
         };
 
-        // We don't drop the lifecycle here to prevent the same index from being reused.
-        // Rather, we drop it when driver actually receives completion from kernel.
+        // Here, we don't remove the lifecycle from slab to prevent the same index from being reused.
+        // Rather, we remove it when driver actually receives completion from the kernel.
     }
 }
