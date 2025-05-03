@@ -69,7 +69,7 @@ impl Handle {
         let ctx = &mut *guard;
         let ops = &mut ctx.ops;
         let Some(lifecycle) = ops.get_mut(index) else {
-            // The corresponding index doesn't exsit anymore, so this Op is already complete.
+            // The corresponding index doesn't exist anymore, so this Op is already complete.
             return;
         };
 
