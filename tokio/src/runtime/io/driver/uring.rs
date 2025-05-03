@@ -55,7 +55,11 @@ impl Handle {
             ring.submit().unwrap();
         }
 
-        ring.submit()?;
+        if let Err(e) = ring.submit() {
+            // Submission is failing, remove the entry from the slab and return the error.
+            ops.remove(index);
+            return Err(e);
+        }
 
         drop(guard);
 
