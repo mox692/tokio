@@ -59,7 +59,7 @@ impl<T> Drop for Op<T> {
             // We have to deregistere Op.
             State::Polled(index) => {
                 let handle = Handle::current();
-                handle.inner.driver().io().deregister_op(index);
+                handle.inner.driver().io().cancel_op(index);
             }
             // This Op has not been polled yet.
             // We don't need to do anything here.

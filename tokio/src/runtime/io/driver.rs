@@ -222,6 +222,8 @@ impl Driver {
                                 *ops.get_mut(idx).unwrap() = Lifecycle::Completed(cqe);
                             }
                             Some(Lifecycle::Cancelled) => {
+                                // Op future was cancelled, so we discard the result.
+                                // We just remove the entry from the slab.
                                 ops.remove(idx);
                             }
                             Some(other) => {

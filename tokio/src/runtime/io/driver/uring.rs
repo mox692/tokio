@@ -66,22 +66,24 @@ impl Handle {
         Ok(index)
     }
 
-    /// Remove the Op from the slab.
-    pub(crate) fn deregister_op(&self, index: usize) {
+    pub(crate) fn cancel_op(&self, index: usize) {
         let mut guard = self.get_uring().lock();
-        let lock = guard.deref_mut();
-        let ops = &mut lock.ops;
+        let ctx = &mut *guard;
+        let ops = &mut ctx.ops;
         let Some(lifecycle) = ops.get_mut(index) else {
-            // this Op is already done.
+            // The corresponding index doesn't exsit anymore, so this Op is already complete.
             return;
         };
 
-        // this Op will be cancelled.
+        // This Op will be cancelled.
 
         match mem::replace(lifecycle, Lifecycle::Cancelled) {
             Lifecycle::Submitted | Lifecycle::Waiting(_) => (),
             // We should not see a Complete state here.
             prev => panic!("Unexpected state: {:?}", prev),
         };
+
+        // We don't drop the lifecycle here to prevent the same index from being reused.
+        // Rather, we drop it when driver actually receives completion from kernel.
     }
 }
