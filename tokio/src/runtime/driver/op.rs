@@ -54,9 +54,9 @@ impl<T> Op<T> {
 impl<T> Drop for Op<T> {
     fn drop(&mut self) {
         match self.state {
-            // We've already deregistere Op.
+            // We've already deregistered Op.
             State::Complete => (),
-            // We have to deregistere Op.
+            // We have to deregistered Op.
             State::Polled(index) => {
                 let handle = Handle::current();
                 handle.inner.driver().io().cancel_op(index);
