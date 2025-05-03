@@ -1,6 +1,3 @@
-// TODO: remove
-#![allow(dead_code)]
-
 use io_uring::cqueue;
 use io_uring::squeue::Entry;
 use std::future::Future;
@@ -27,6 +24,7 @@ pub(crate) enum Lifecycle {
 }
 
 pub(crate) enum State {
+    #[allow(dead_code)]
     Initialize(Option<Entry>),
     EverPolled(usize), // slab key
     Complete,
@@ -40,6 +38,7 @@ pub(crate) struct Op<T> {
 }
 
 impl<T> Op<T> {
+    #[allow(dead_code)]
     pub(crate) fn new(entry: Entry, data: T) -> Self {
         Self {
             data: Some(data),
@@ -68,6 +67,7 @@ impl<T> Drop for Op<T> {
 
 /// A single CQE entry
 pub(crate) struct CqeResult {
+    #[allow(dead_code)]
     pub(crate) result: io::Result<u32>,
 }
 
