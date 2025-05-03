@@ -1,6 +1,4 @@
-// TODO: remove
-#![allow(dead_code)]
-
+use crate::runtime::Handle;
 use io_uring::cqueue;
 use io_uring::squeue::Entry;
 use std::future::Future;
@@ -27,8 +25,9 @@ pub(crate) enum Lifecycle {
 }
 
 pub(crate) enum State {
+    #[allow(dead_code)]
     Initialize(Option<Entry>),
-    EverPolled(usize), // slab key
+    Polled(usize), // slab key
     Complete,
 }
 
@@ -40,6 +39,7 @@ pub(crate) struct Op<T> {
 }
 
 impl<T> Op<T> {
+    #[allow(dead_code)]
     pub(crate) fn new(entry: Entry, data: T) -> Self {
         Self {
             data: Some(data),
@@ -57,17 +57,20 @@ impl<T> Drop for Op<T> {
             // We've already deregistere Op.
             State::Complete => (),
             // We have to deregistere Op.
-            State::EverPolled(index) => {
-                let handle = crate::runtime::Handle::current();
-                handle.inner.driver().io().deregister_op(index);
+            State::Polled(index) => {
+                let handle = Handle::current();
+                handle.inner.driver().io().cancel_op(index);
             }
-            State::Initialize(_) => unreachable!(),
+            // This Op has not been polled yet.
+            // We don't need to do anything here.
+            State::Initialize(_) => (),
         }
     }
 }
 
-/// A single CQE entry
+/// A single CQE result
 pub(crate) struct CqeResult {
+    #[allow(dead_code)]
     pub(crate) result: io::Result<u32>,
 }
 
@@ -89,38 +92,31 @@ pub(crate) trait Completable {
     fn complete(self, cqe: CqeResult) -> io::Result<Self::Output>;
 }
 
-impl<T: Completable> Future for Op<T> {
+impl<T: Completable + Unpin> Future for Op<T> {
     type Output = io::Result<T::Output>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // SAFETY: `Op` is !Unpin, but we never move any of its fields by
-        // projecting `self` into `this` and only mutating through that.
-        let this = unsafe { self.get_unchecked_mut() };
-        let waker = cx.waker().clone();
-        let handle = crate::runtime::Handle::current();
+        let this = self.get_mut();
+        let handle = Handle::current();
         let driver = &handle.inner.driver().io();
 
         match &mut this.state {
             State::Initialize(entry_opt) => {
-                let entry = entry_opt.take().expect("Initialize must hold an entry");
+                let entry = entry_opt.take().expect("Lifecycle must be present");
+                let waker = cx.waker().clone();
                 let idx = driver.register_op(entry, waker)?;
-                this.state = State::EverPolled(idx);
+                this.state = State::Polled(idx);
                 Poll::Pending
             }
 
-            State::EverPolled(idx) => {
+            State::Polled(idx) => {
                 let mut uring = driver.get_uring().lock();
-                let lifecycle_slot = &mut uring.ops[*idx];
+                let lifecycle_slot = uring.ops.get_mut(*idx).expect("Lifecycle must be present");
 
-                // Swap out the old lifecycle so we can match on it
                 match mem::replace(lifecycle_slot, Lifecycle::Submitted) {
-                    Lifecycle::Submitted => {
-                        *lifecycle_slot = Lifecycle::Waiting(waker);
-                        Poll::Pending
-                    }
-
                     // Only replace the stored waker if it wouldn't wake the new one
-                    Lifecycle::Waiting(prev) if !prev.will_wake(&waker) => {
+                    Lifecycle::Waiting(prev) if !prev.will_wake(cx.waker()) => {
+                        let waker = cx.waker().clone();
                         *lifecycle_slot = Lifecycle::Waiting(waker);
                         Poll::Pending
                     }
@@ -139,6 +135,10 @@ impl<T: Completable> Future for Op<T> {
                             .take_data()
                             .expect("Data must be present on completion");
                         Poll::Ready(data.complete(cqe.into()))
+                    }
+
+                    Lifecycle::Submitted => {
+                        unreachable!("Submitted lifecycle should never be seen here");
                     }
 
                     Lifecycle::Cancelled => {

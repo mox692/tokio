@@ -4,9 +4,8 @@ cfg_signal_internal_and_unix! {
 }
 cfg_tokio_unstable_uring! {
     mod uring;
-    use uring::UringHandle;
+    use uring::UringContext;
     use crate::runtime::driver::op::Lifecycle;
-    use std::ops::DerefMut;
 }
 
 use crate::io::interest::Interest;
@@ -58,7 +57,7 @@ pub(crate) struct Handle {
         feature = "fs",
         target_os = "linux",
     ))]
-    pub(crate) uring_handle: Mutex<UringHandle>,
+    pub(crate) uring_context: Mutex<UringContext>,
 }
 
 #[derive(Debug)]
@@ -135,7 +134,7 @@ impl Driver {
                 feature = "fs",
                 target_os = "linux",
             ))]
-            uring_handle: Mutex::new(UringHandle::new()),
+            uring_context: Mutex::new(UringContext::new()),
         };
 
         #[cfg(all(
@@ -210,26 +209,28 @@ impl Driver {
                     target_os = "linux",
                 ))]
                 TOKEN_URING => {
-                    let mut lock = handle.get_uring().lock();
-                    let ctx = lock.deref_mut();
+                    let mut guard = handle.get_uring().lock();
+                    let ctx = &mut *guard;
                     let ops = &mut ctx.ops;
 
-                    for cqe in unsafe { ctx.uring.completion_shared() } {
-                        let index = cqe.user_data() as usize;
+                    for cqe in ctx.uring.completion() {
+                        let idx = cqe.user_data() as usize;
 
-                        match ops.get_mut(index) {
+                        match ops.get_mut(idx) {
                             Some(Lifecycle::Waiting(waker)) => {
                                 waker.wake_by_ref();
-                                ops[index] = Lifecycle::Completed(cqe);
+                                *ops.get_mut(idx).unwrap() = Lifecycle::Completed(cqe);
                             }
                             Some(Lifecycle::Cancelled) => {
-                                let _ = ops.remove(index);
+                                // Op future was cancelled, so we discard the result.
+                                // We just remove the entry from the slab.
+                                ops.remove(idx);
                             }
                             Some(other) => {
-                                panic!("should not reach here; lifecycle: {:?}", other);
+                                panic!("unexpected lifecycle for slot {}: {:?}", idx, other);
                             }
                             None => {
-                                panic!("Op not found for index {}", index);
+                                panic!("no op at index {}", idx);
                             }
                         }
                     }
