@@ -105,7 +105,7 @@ impl<T: Completable> Future for Op<T> {
 
         match &mut this.state {
             State::Initialize(entry_opt) => {
-                let entry = entry_opt.take().expect("Initialize must hold an entry");
+                let entry = entry_opt.take().expect("Lifecycle must be present");
                 let idx = driver.register_op(entry, waker)?;
                 this.state = State::Polled(idx);
                 Poll::Pending
@@ -113,9 +113,8 @@ impl<T: Completable> Future for Op<T> {
 
             State::Polled(idx) => {
                 let mut uring = driver.get_uring().lock();
-                let lifecycle_slot = &mut uring.ops[*idx];
+                let lifecycle_slot = uring.ops.get_mut(*idx).expect("Lifecycle must be present");
 
-                // Swap out the old lifecycle so we can match on it
                 match mem::replace(lifecycle_slot, Lifecycle::Submitted) {
                     Lifecycle::Submitted => {
                         *lifecycle_slot = Lifecycle::Waiting(waker);
