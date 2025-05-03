@@ -26,7 +26,7 @@ pub(crate) enum Lifecycle {
 pub(crate) enum State {
     #[allow(dead_code)]
     Initialize(Option<Entry>),
-    EverPolled(usize), // slab key
+    Polled(usize), // slab key
     Complete,
 }
 
@@ -56,7 +56,7 @@ impl<T> Drop for Op<T> {
             // We've already deregistere Op.
             State::Complete => (),
             // We have to deregistere Op.
-            State::EverPolled(index) => {
+            State::Polled(index) => {
                 let handle = crate::runtime::Handle::current();
                 handle.inner.driver().io().deregister_op(index);
             }
@@ -104,11 +104,11 @@ impl<T: Completable> Future for Op<T> {
             State::Initialize(entry_opt) => {
                 let entry = entry_opt.take().expect("Initialize must hold an entry");
                 let idx = driver.register_op(entry, waker)?;
-                this.state = State::EverPolled(idx);
+                this.state = State::Polled(idx);
                 Poll::Pending
             }
 
-            State::EverPolled(idx) => {
+            State::Polled(idx) => {
                 let mut uring = driver.get_uring().lock();
                 let lifecycle_slot = &mut uring.ops[*idx];
 
