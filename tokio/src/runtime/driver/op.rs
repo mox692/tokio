@@ -92,20 +92,18 @@ pub(crate) trait Completable {
     fn complete(self, cqe: CqeResult) -> io::Result<Self::Output>;
 }
 
-impl<T: Completable> Future for Op<T> {
+impl<T: Completable + Unpin> Future for Op<T> {
     type Output = io::Result<T::Output>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // SAFETY: `Op` is !Unpin, but we never move any of its fields by
-        // projecting `self` into `this` and only mutating through that.
-        let this = unsafe { self.get_unchecked_mut() };
-        let waker = cx.waker().clone();
+        let this = self.get_mut();
         let handle = Handle::current();
         let driver = &handle.inner.driver().io();
 
         match &mut this.state {
             State::Initialize(entry_opt) => {
                 let entry = entry_opt.take().expect("Lifecycle must be present");
+                let waker = cx.waker().clone();
                 let idx = driver.register_op(entry, waker)?;
                 this.state = State::Polled(idx);
                 Poll::Pending
@@ -116,13 +114,9 @@ impl<T: Completable> Future for Op<T> {
                 let lifecycle_slot = uring.ops.get_mut(*idx).expect("Lifecycle must be present");
 
                 match mem::replace(lifecycle_slot, Lifecycle::Submitted) {
-                    Lifecycle::Submitted => {
-                        *lifecycle_slot = Lifecycle::Waiting(waker);
-                        Poll::Pending
-                    }
-
                     // Only replace the stored waker if it wouldn't wake the new one
-                    Lifecycle::Waiting(prev) if !prev.will_wake(&waker) => {
+                    Lifecycle::Waiting(prev) if !prev.will_wake(cx.waker()) => {
+                        let waker = cx.waker().clone();
                         *lifecycle_slot = Lifecycle::Waiting(waker);
                         Poll::Pending
                     }
@@ -141,6 +135,10 @@ impl<T: Completable> Future for Op<T> {
                             .take_data()
                             .expect("Data must be present on completion");
                         Poll::Ready(data.complete(cqe.into()))
+                    }
+
+                    Lifecycle::Submitted => {
+                        unreachable!("Submitted lifecycle should never be seen here");
                     }
 
                     Lifecycle::Cancelled => {
