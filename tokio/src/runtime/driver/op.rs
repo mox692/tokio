@@ -18,23 +18,11 @@ pub(crate) enum Lifecycle {
 
     /// The submitter no longer has interest in the operation result. The state
     /// must be passed to the driver and held until the operation completes.
-    Cancelled(#[allow(unused)] Cancelled),
+    Cancelled(#[allow(unused)] Box<dyn std::any::Any + Send + 'static>),
 
     /// The operation has completed with a single cqe result
     Completed(io_uring::cqueue::Entry),
 }
-
-#[derive(Debug)]
-pub(crate) struct Cancelled(#[allow(unused)] Box<dyn std::any::Any + 'static>);
-
-impl Cancelled {
-    pub(crate) fn new(data: Box<dyn std::any::Any + 'static>) -> Self {
-        Cancelled(data)
-    }
-}
-
-// TODO: remove this impl
-unsafe impl Send for Cancelled {}
 
 pub(crate) enum State {
     #[allow(dead_code)]
@@ -43,14 +31,14 @@ pub(crate) enum State {
     Complete,
 }
 
-pub(crate) struct Op<T: 'static> {
+pub(crate) struct Op<T: Send + 'static> {
     // State of this Op
     state: State,
     // Per operation data.
     data: Option<T>,
 }
 
-impl<T> Op<T> {
+impl<T: Send + 'static> Op<T> {
     /// # Safety
     ///
     /// Callers must ensure that parameters of the entry (such as buffer) are valid and will
@@ -67,7 +55,7 @@ impl<T> Op<T> {
     }
 }
 
-impl<T> Drop for Op<T> {
+impl<T: Send + 'static> Drop for Op<T> {
     fn drop(&mut self) {
         match self.state {
             // We've already deregistered Op.
