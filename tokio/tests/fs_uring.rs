@@ -5,7 +5,10 @@
     target_os = "linux",
 ))]
 
-use tokio::runtime::{Builder, Runtime};
+use tokio::{
+    io::AsyncReadExt,
+    runtime::{Builder, Runtime},
+};
 
 fn rt(num_workers: usize) -> Runtime {
     Builder::new_multi_thread()
@@ -46,8 +49,16 @@ fn process_many_files() {
                 let _keep_alive = tmp;
 
                 // now the file still exists on disk:
-                let read_back = tokio::fs::read(&path).await.unwrap();
-                assert_eq!(read_back, original);
+                let mut file = tokio::fs::OpenOptions::new()
+                    .read(true)
+                    .open(&path)
+                    .await
+                    .unwrap();
+                let mut buf = vec![0u8; FILE_SIZE];
+
+                file.read_exact(&mut buf).await.unwrap();
+
+                assert_eq!(buf, original);
             }));
         }
 

@@ -1,5 +1,6 @@
 #![cfg(unix)]
 
+use tokio::task::JoinSet;
 use tokio_stream::StreamExt;
 
 use tokio::fs::File;
@@ -10,10 +11,12 @@ use criterion::{criterion_group, criterion_main, Criterion};
 
 use std::fs::File as StdFile;
 use std::io::Read as StdRead;
+use std::time::Instant;
 
 fn rt() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
+        .enable_io()
         .build()
         .unwrap()
 }
@@ -102,11 +105,62 @@ fn sync_read(c: &mut Criterion) {
     });
 }
 
+fn process_many_files(c: &mut Criterion) {
+    let rt = rt();
+    c.bench_function("process_many_files", |b| {
+        b.iter_custom(|iters| {
+            const NUM_FILES: usize = 32;
+            const FILE_SIZE: usize = 64;
+
+            use rand::Rng;
+            use std::io::Write;
+            use tempfile::NamedTempFile;
+
+            let mut files = Vec::with_capacity(NUM_FILES);
+            for _ in 0..NUM_FILES {
+                let mut tmp = NamedTempFile::new().unwrap();
+                let mut data = vec![0u8; FILE_SIZE];
+                rand::thread_rng().fill(&mut data[..]);
+                tmp.write_all(&data).unwrap();
+                let path = tmp.path().to_path_buf();
+                files.push((tmp, data, path));
+            }
+
+            rt.block_on(async move {
+                let mut set = JoinSet::new();
+                let start = Instant::now();
+                for (tmp, original, path) in files {
+                    set.spawn(async move {
+                        let _keep_alive = tmp;
+
+                        for _ in 0..iters {
+                            let mut file = tokio::fs::OpenOptions::new()
+                                .read(true)
+                                .open(&path)
+                                .await
+                                .unwrap();
+                            let mut buf = vec![0u8; FILE_SIZE];
+
+                            file.read_exact(&mut buf).await.unwrap();
+
+                            assert_eq!(buf, original);
+                        }
+                    });
+                }
+                while let Some(Ok(_)) = set.join_next().await {}
+
+                start.elapsed()
+            })
+        })
+    });
+}
+
 criterion_group!(
     file,
     async_read_std_file,
     async_read_buf,
     async_read_codec,
-    sync_read
+    sync_read,
+    process_many_files
 );
 criterion_main!(file);
