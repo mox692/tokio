@@ -6,6 +6,7 @@ use std::path::Path;
 cfg_tokio_unstable_uring! {
     mod uring_open_options;
     use uring_open_options::UringOpenOptions;
+    use crate::runtime::driver::op::Op;
 }
 
 #[cfg(test)]
@@ -446,7 +447,7 @@ impl OpenOptions {
 
     cfg_tokio_unstable_uring! {
         async fn open_inner(&self, path: impl AsRef<Path>) -> io::Result<File> {
-            crate::runtime::driver::op::Op::open(path.as_ref(), self)?.await
+            Op::open(path.as_ref(), self)?.await
         }
 
         /// Returns a mutable reference to the underlying `std::fs::OpenOptions`

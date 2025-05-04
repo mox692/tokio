@@ -39,6 +39,8 @@ impl Op<Open> {
             .mode(inner_opt.0.mode)
             .build();
 
-        Ok(Op::new(open_op, Open { path }))
+        // SAFETY: Parameters are valid for the entire duration of the operation
+        let op = unsafe { Op::new(open_op, Open { path }) };
+        Ok(op)
     }
 }
