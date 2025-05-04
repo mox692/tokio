@@ -10,7 +10,7 @@ use super::{Handle, TOKEN_URING};
 use std::os::fd::AsRawFd;
 use std::{io, mem, task::Waker};
 
-const DEFAULT_RING_SIZE: u32 = 512;
+const DEFAULT_RING_SIZE: u32 = 256;
 
 pub(crate) struct UringContext {
     pub(crate) uring: io_uring::IoUring,
@@ -54,7 +54,7 @@ impl Handle {
         let entry = entry.user_data(index as u64);
 
         let mut submit_or_remove = |ring: &mut IoUring| -> io::Result<()> {
-            if let Err(e) = submit(ring) {
+            if let Err(e) = submit(ring, ops) {
                 // Submission failed, remove the entry from the slab and return the error
                 ops.remove(index);
                 return Err(e);
@@ -93,19 +93,49 @@ impl Handle {
     }
 }
 
-fn submit(ring: &IoUring) -> io::Result<()> {
+fn submit(ring: &mut IoUring, ops: &mut Slab<Lifecycle>) -> io::Result<()> {
     // Handle errors: https://man7.org/linux/man-pages/man2/io_uring_enter.2.html#ERRORS
-    match ring.submit() {
-        Ok(_) => {
-            return Ok(());
+    loop {
+        match ring.submit() {
+            Ok(_) => {
+                return Ok(());
+            }
+            // If the submission queue is full, we dispatch completions and try again.
+            Err(ref e) if e.raw_os_error() == Some(libc::EBUSY) => {
+                dispatch_completions(ring, ops);
+            }
+            // For other errors, we currently return the error as is.
+            Err(e) => {
+                return Err(e);
+            }
         }
-        Err(ref e) if e.raw_os_error() == Some(libc::EBUSY) => {
-            // TODO: trigger a completion flush
-        }
-        Err(e) => {
-            return Err(e);
+    }
+}
+
+pub(crate) fn dispatch_completions(uring: &mut IoUring, ops: &mut Slab<Lifecycle>) {
+    let cq = uring.completion();
+
+    for cqe in cq {
+        let idx = cqe.user_data() as usize;
+
+        match ops.get_mut(idx) {
+            Some(Lifecycle::Waiting(waker)) => {
+                waker.wake_by_ref();
+                *ops.get_mut(idx).unwrap() = Lifecycle::Completed(cqe);
+            }
+            Some(Lifecycle::Cancelled(_)) => {
+                // Op future was cancelled, so we discard the result.
+                // We just remove the entry from the slab.
+                ops.remove(idx);
+            }
+            Some(other) => {
+                panic!("unexpected lifecycle for slot {}: {:?}", idx, other);
+            }
+            None => {
+                panic!("no op at index {}", idx);
+            }
         }
     }
 
-    Ok(())
+    // `cq`'s drop gets called here, updating the latest head pointer
 }
