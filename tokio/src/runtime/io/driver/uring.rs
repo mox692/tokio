@@ -25,6 +25,43 @@ impl UringContext {
             uring: IoUring::new(DEFAULT_RING_SIZE).unwrap(),
         }
     }
+
+/// Drop the driver, cancelling any in-progress ops and waiting for them to terminate.
+impl Drop for UringContext {
+    fn drop(&mut self) {
+        // Make sure we flush the submission queue before dropping the driver.
+        while !self.uring.submission().is_empty() {
+            submit(&mut self.uring, &mut self.ops).expect("Internal error when dropping driver");
+        }
+
+        let mut cancel_ops = Slab::new();
+        let mut keys_to_move = Vec::new();
+
+        for (key, lifecycle) in self.ops.iter() {
+            match lifecycle {
+                Lifecycle::Waiting(_) | Lifecycle::Submitted | Lifecycle::Cancelled(_) => {
+                    // these should be cancelled
+                    keys_to_move.push(key);
+                }
+                // We don't wait for completed ops.
+                Lifecycle::Completed(_) => {}
+            }
+        }
+
+        for key in keys_to_move {
+            let lifecycle = self.ops.remove(key);
+            cancel_ops.insert(lifecycle);
+        }
+
+        while !cancel_ops.is_empty() {
+            // Wait until at least one completion is available.
+            self.uring
+                .submit_and_wait(1)
+                .expect("Internal error when dropping driver");
+
+            dispatch_completions(&mut self.uring, &mut cancel_ops);
+        }
+    }
 }
 
 impl Handle {
