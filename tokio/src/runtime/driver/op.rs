@@ -18,7 +18,7 @@ pub(crate) enum Lifecycle {
 
     /// The submitter no longer has interest in the operation result. The state
     /// must be passed to the driver and held until the operation completes.
-    Cancelled,
+    Cancelled(#[allow(unused)] Box<dyn std::any::Any + Send + 'static>),
 
     /// The operation has completed with a single cqe result
     Completed(io_uring::cqueue::Entry),
@@ -31,16 +31,20 @@ pub(crate) enum State {
     Complete,
 }
 
-pub(crate) struct Op<T> {
+pub(crate) struct Op<T: Send + 'static> {
     // State of this Op
     state: State,
     // Per operation data.
     data: Option<T>,
 }
 
-impl<T> Op<T> {
+impl<T: Send + 'static> Op<T> {
+    /// # Safety
+    ///
+    /// Callers must ensure that parameters of the entry (such as buffer) are valid and will
+    /// be valid for the entire duration of the operation, otherwise it may cause memory problems.
     #[allow(dead_code)]
-    pub(crate) fn new(entry: Entry, data: T) -> Self {
+    pub(crate) unsafe fn new(entry: Entry, data: T) -> Self {
         Self {
             data: Some(data),
             state: State::Initialize(Some(entry)),
@@ -51,15 +55,15 @@ impl<T> Op<T> {
     }
 }
 
-impl<T> Drop for Op<T> {
+impl<T: Send + 'static> Drop for Op<T> {
     fn drop(&mut self) {
         match self.state {
-            // We've already deregistere Op.
+            // We've already deregistered Op.
             State::Complete => (),
-            // We have to deregistere Op.
+            // We will cancel this Op.
             State::Polled(index) => {
                 let handle = Handle::current();
-                handle.inner.driver().io().cancel_op(index);
+                handle.inner.driver().io().cancel_op(self, index);
             }
             // This Op has not been polled yet.
             // We don't need to do anything here.
@@ -92,7 +96,7 @@ pub(crate) trait Completable {
     fn complete(self, cqe: CqeResult) -> io::Result<Self::Output>;
 }
 
-impl<T: Completable + Unpin> Future for Op<T> {
+impl<T: Completable + Unpin + Send> Future for Op<T> {
     type Output = io::Result<T::Output>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -102,9 +106,10 @@ impl<T: Completable + Unpin> Future for Op<T> {
 
         match &mut this.state {
             State::Initialize(entry_opt) => {
-                let entry = entry_opt.take().expect("Lifecycle must be present");
+                let entry = entry_opt.take().expect("Entry must be present");
                 let waker = cx.waker().clone();
-                let idx = driver.register_op(entry, waker)?;
+                // SAFETY: entry is valid for the entire duration of the operation
+                let idx = unsafe { driver.register_op(entry, waker)? };
                 this.state = State::Polled(idx);
                 Poll::Pending
             }
@@ -141,7 +146,7 @@ impl<T: Completable + Unpin> Future for Op<T> {
                         unreachable!("Submitted lifecycle should never be seen here");
                     }
 
-                    Lifecycle::Cancelled => {
+                    Lifecycle::Cancelled(_) => {
                         unreachable!("Cancelled lifecycle should never be seen here");
                     }
                 }

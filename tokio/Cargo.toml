@@ -105,9 +105,9 @@ tracing = { version = "0.1.29", default-features = false, features = ["std"], op
 
 [target.'cfg(all(tokio_unstable_uring, target_os = "linux"))'.dependencies]
 io-uring = { version = "0.7.6", default-features = false }
-slab = "0.4.9"
 libc = { version = "0.2.168" }
 mio = { version = "1.0.1", default-features = false, features = ["os-poll", "os-ext"] }
+slab = "0.4.9"
 
 # Currently unstable. The API exposed by these features may be broken at any time.
 # Requires `--cfg tokio_unstable` to enable.
