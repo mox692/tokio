@@ -49,17 +49,22 @@ impl Handle {
         let index = ops.insert(Lifecycle::Waiting(waker));
         let entry = entry.user_data(index as u64);
 
+        let mut submit_or_remove = |ring: &mut IoUring| -> io::Result<()> {
+            if let Err(e) = submit(ring) {
+                // Submission failed, remove the entry from the slab and return the error
+                ops.remove(index);
+                return Err(e);
+            }
+            Ok(())
+        };
+
         while unsafe { ring.submission().push(&entry).is_err() } {
             // If the submission queue is full, flush it to the kernel
-            ring.submit().unwrap();
+            submit_or_remove(ring)?;
         }
 
         // For now, we submit the entry immediately without utilizing batching.
-        if let Err(e) = ring.submit() {
-            // Submission is failing, remove the entry from the slab and return the error.
-            ops.remove(index);
-            return Err(e);
-        }
+        submit_or_remove(ring)?;
 
         Ok(index)
     }
@@ -84,4 +89,21 @@ impl Handle {
         // Here, we don't remove the lifecycle from slab to prevent the same index from being reused.
         // Rather, we remove it when driver actually receives completion from the kernel.
     }
+}
+
+fn submit(ring: &IoUring) -> io::Result<()> {
+    // Handle errors: https://man7.org/linux/man-pages/man2/io_uring_enter.2.html#ERRORS
+    match ring.submit() {
+        Ok(_) => {
+            return Ok(());
+        }
+        Err(ref e) if e.raw_os_error() == Some(libc::EBUSY) => {
+            // TODO: trigger a completion flush
+        }
+        Err(e) => {
+            return Err(e);
+        }
+    }
+
+    Ok(())
 }
