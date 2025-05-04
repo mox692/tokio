@@ -2,7 +2,7 @@ use io_uring::{squeue::Entry, IoUring};
 use mio::unix::SourceFd;
 use slab::Slab;
 
-use crate::runtime::driver::op::Lifecycle;
+use crate::runtime::driver::op::{Cancelled, Lifecycle, Op};
 use crate::{io::Interest, loom::sync::Mutex};
 
 use super::{Handle, TOKEN_URING};
@@ -41,7 +41,9 @@ impl Handle {
         &self.uring_context
     }
 
-    /// SAFETY: Callers must ensure that parameters of the entry (such as buffer) are valid and will
+    /// # Safety
+    ///
+    /// Callers must ensure that parameters of the entry (such as buffer) are valid and will
     /// be valid for the entire duration of the operation, otherwise it may cause memory problems.
     pub(crate) unsafe fn register_op(&self, entry: Entry, waker: Waker) -> io::Result<usize> {
         let mut guard = self.get_uring().lock();
@@ -72,7 +74,7 @@ impl Handle {
         Ok(index)
     }
 
-    pub(crate) fn cancel_op(&self, index: usize) {
+    pub(crate) fn cancel_op<T>(&self, op: &mut Op<T>, index: usize) {
         let mut guard = self.get_uring().lock();
         let ctx = &mut *guard;
         let ops = &mut ctx.ops;
@@ -81,16 +83,16 @@ impl Handle {
             return;
         };
 
-        // This Op will be cancelled.
+        // This Op will be cancelled. Here, we don't remove the lifecycle from the slab to keep
+        // uring data alive until the operation completes.
 
-        match mem::replace(lifecycle, Lifecycle::Cancelled) {
+        match mem::replace(
+            lifecycle,
+            Lifecycle::Cancelled(Cancelled::new(Box::new(op.take_data()))),
+        ) {
             Lifecycle::Submitted | Lifecycle::Waiting(_) => (),
-            // We should not see a Complete state here.
             prev => panic!("Unexpected state: {:?}", prev),
         };
-
-        // Here, we don't remove the lifecycle from slab to prevent the same index from being reused.
-        // Rather, we remove it when driver actually receives completion from the kernel.
     }
 }
 

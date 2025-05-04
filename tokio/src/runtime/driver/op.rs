@@ -18,11 +18,23 @@ pub(crate) enum Lifecycle {
 
     /// The submitter no longer has interest in the operation result. The state
     /// must be passed to the driver and held until the operation completes.
-    Cancelled,
+    Cancelled(#[allow(unused)] Cancelled),
 
     /// The operation has completed with a single cqe result
     Completed(io_uring::cqueue::Entry),
 }
+
+#[derive(Debug)]
+pub(crate) struct Cancelled(#[allow(unused)] Box<dyn std::any::Any + 'static>);
+
+impl Cancelled {
+    pub(crate) fn new(data: Box<dyn std::any::Any + 'static>) -> Self {
+        Cancelled(data)
+    }
+}
+
+// TODO: remove this impl
+unsafe impl Send for Cancelled {}
 
 pub(crate) enum State {
     #[allow(dead_code)]
@@ -31,7 +43,7 @@ pub(crate) enum State {
     Complete,
 }
 
-pub(crate) struct Op<T> {
+pub(crate) struct Op<T: 'static> {
     // State of this Op
     state: State,
     // Per operation data.
@@ -39,9 +51,11 @@ pub(crate) struct Op<T> {
 }
 
 impl<T> Op<T> {
-    #[allow(dead_code)]
-    /// SAFETY: Callers must ensure that parameters of the entry (such as buffer) are valid and will
+    /// # Safety
+    ///
+    /// Callers must ensure that parameters of the entry (such as buffer) are valid and will
     /// be valid for the entire duration of the operation, otherwise it may cause memory problems.
+    #[allow(dead_code)]
     pub(crate) unsafe fn new(entry: Entry, data: T) -> Self {
         Self {
             data: Some(data),
@@ -58,10 +72,10 @@ impl<T> Drop for Op<T> {
         match self.state {
             // We've already deregistered Op.
             State::Complete => (),
-            // We have to deregistered Op.
+            // We will cancel this Op.
             State::Polled(index) => {
                 let handle = Handle::current();
-                handle.inner.driver().io().cancel_op(index);
+                handle.inner.driver().io().cancel_op(self, index);
             }
             // This Op has not been polled yet.
             // We don't need to do anything here.
@@ -94,7 +108,7 @@ pub(crate) trait Completable {
     fn complete(self, cqe: CqeResult) -> io::Result<Self::Output>;
 }
 
-impl<T: Completable + Unpin> Future for Op<T> {
+impl<T: Completable + Unpin + Send> Future for Op<T> {
     type Output = io::Result<T::Output>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -144,7 +158,7 @@ impl<T: Completable + Unpin> Future for Op<T> {
                         unreachable!("Submitted lifecycle should never be seen here");
                     }
 
-                    Lifecycle::Cancelled => {
+                    Lifecycle::Cancelled(_) => {
                         unreachable!("Cancelled lifecycle should never be seen here");
                     }
                 }

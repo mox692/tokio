@@ -223,7 +223,7 @@ impl Driver {
                                 waker.wake_by_ref();
                                 *ops.get_mut(idx).unwrap() = Lifecycle::Completed(cqe);
                             }
-                            Some(Lifecycle::Cancelled) => {
+                            Some(Lifecycle::Cancelled(_)) => {
                                 // Op future was cancelled, so we discard the result.
                                 // We just remove the entry from the slab.
                                 ops.remove(idx);
