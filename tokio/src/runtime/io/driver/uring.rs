@@ -26,6 +26,8 @@ impl UringContext {
         }
     }
 
+}
+
 /// Drop the driver, cancelling any in-progress ops and waiting for them to terminate.
 impl Drop for UringContext {
     fn drop(&mut self) {
