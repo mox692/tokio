@@ -5,6 +5,7 @@ cfg_signal_internal_and_unix! {
 cfg_tokio_unstable_uring! {
     mod uring;
     use uring::UringContext;
+    use uring::dispatch_completions;
 }
 
 use crate::io::interest::Interest;
@@ -19,7 +20,6 @@ use std::fmt;
 use std::io;
 use std::sync::Arc;
 use std::time::Duration;
-use uring::dispatch_completions;
 
 /// I/O driver, backed by Mio.
 pub(crate) struct Driver {
