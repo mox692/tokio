@@ -213,7 +213,9 @@ impl Driver {
                     let ctx = &mut *guard;
                     let ops = &mut ctx.ops;
 
-                    for cqe in ctx.uring.completion() {
+                    let cq = ctx.uring.completion();
+
+                    for cqe in cq {
                         let idx = cqe.user_data() as usize;
 
                         match ops.get_mut(idx) {
@@ -234,6 +236,8 @@ impl Driver {
                             }
                         }
                     }
+
+                    // `cq`'s drop gets called here, updating the latest head pointer
                 }
                 _ => {
                     let ready = Ready::from_mio(event);

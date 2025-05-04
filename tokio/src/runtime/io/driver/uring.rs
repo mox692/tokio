@@ -41,7 +41,9 @@ impl Handle {
         &self.uring_context
     }
 
-    pub(crate) fn register_op(&self, entry: Entry, waker: Waker) -> io::Result<usize> {
+    /// SAFETY: Callers must ensure that parameters of the entry (such as buffer) are valid and will
+    /// be valid for the entire duration of the operation, otherwise it may cause memory problems.
+    pub(crate) unsafe fn register_op(&self, entry: Entry, waker: Waker) -> io::Result<usize> {
         let mut guard = self.get_uring().lock();
         let ctx = &mut *guard;
         let ring = &mut ctx.uring;
@@ -58,6 +60,7 @@ impl Handle {
             Ok(())
         };
 
+        // SAFETY: entry is valid for the entire duration of the operation
         while unsafe { ring.submission().push(&entry).is_err() } {
             // If the submission queue is full, flush it to the kernel
             submit_or_remove(ring)?;
