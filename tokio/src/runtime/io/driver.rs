@@ -5,7 +5,6 @@ cfg_signal_internal_and_unix! {
 cfg_tokio_unstable_uring! {
     mod uring;
     use uring::UringContext;
-    use crate::runtime::driver::op::Lifecycle;
 }
 
 use crate::io::interest::Interest;
@@ -211,33 +210,7 @@ impl Driver {
                 TOKEN_URING => {
                     let mut guard = handle.get_uring().lock();
                     let ctx = &mut *guard;
-                    let ops = &mut ctx.ops;
-
-                    let cq = ctx.uring.completion();
-
-                    for cqe in cq {
-                        let idx = cqe.user_data() as usize;
-
-                        match ops.get_mut(idx) {
-                            Some(Lifecycle::Waiting(waker)) => {
-                                waker.wake_by_ref();
-                                *ops.get_mut(idx).unwrap() = Lifecycle::Completed(cqe);
-                            }
-                            Some(Lifecycle::Cancelled(_)) => {
-                                // Op future was cancelled, so we discard the result.
-                                // We just remove the entry from the slab.
-                                ops.remove(idx);
-                            }
-                            Some(other) => {
-                                panic!("unexpected lifecycle for slot {}: {:?}", idx, other);
-                            }
-                            None => {
-                                panic!("no op at index {}", idx);
-                            }
-                        }
-                    }
-
-                    // `cq`'s drop gets called here, updating the latest head pointer
+                    ctx.dispatch_completions();
                 }
                 _ => {
                     let ready = Ready::from_mio(event);
