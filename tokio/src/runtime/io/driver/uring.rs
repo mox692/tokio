@@ -5,7 +5,7 @@ use slab::Slab;
 use crate::runtime::driver::op::{Lifecycle, Op};
 use crate::{io::Interest, loom::sync::Mutex};
 
-use super::{Handle, TOKEN_URING};
+use super::Handle;
 
 use std::os::fd::AsRawFd;
 use std::{io, mem, task::Waker};
@@ -15,6 +15,18 @@ const DEFAULT_RING_SIZE: u32 = 256;
 pub(crate) struct UringContext {
     pub(crate) uring: io_uring::IoUring,
     pub(crate) ops: slab::Slab<Lifecycle>,
+}
+
+pub(super) fn is_uring_token(token: mio::Token) -> bool {
+    token.0 & (1 << 63) != 0
+}
+
+pub(super) fn get_shard_id(token: mio::Token) -> usize {
+    (token.0 & 0x7FFF_FFFF_FFFF_FFFF) as usize
+}
+
+fn uring_token(index: usize) -> mio::Token {
+    mio::Token(index | (1 << 63))
 }
 
 impl UringContext {
@@ -116,26 +128,34 @@ impl Drop for UringContext {
 
 impl Handle {
     #[allow(dead_code)]
-    pub(crate) fn add_uring_source(&self, interest: Interest) -> io::Result<()> {
+    pub(crate) fn add_uring_source(&self, shard_id: usize, interest: Interest) -> io::Result<()> {
         // setup for io_uring
-        let uringfd = self.get_uring().lock().uring.as_raw_fd();
+        let mut guard = self.get_uring(shard_id).lock();
+        let ctx = &mut *guard;
+        let uringfd = ctx.uring.as_raw_fd();
         let mut source = SourceFd(&uringfd);
         self.registry
-            .register(&mut source, TOKEN_URING, interest.to_mio())
+            .register(&mut source, uring_token(shard_id), interest.to_mio())
     }
 
-    pub(crate) fn get_uring(&self) -> &Mutex<UringContext> {
-        &self.uring_context
+    pub(crate) fn get_uring(&self, shard_id: usize) -> &Mutex<UringContext> {
+        &self.uring_context[shard_id % 8]
     }
 
     /// # Safety
     ///
     /// Callers must ensure that parameters of the entry (such as buffer) are valid and will
     /// be valid for the entire duration of the operation, otherwise it may cause memory problems.
-    pub(crate) unsafe fn register_op(&self, entry: Entry, waker: Waker) -> io::Result<usize> {
-        let mut guard = self.get_uring().lock();
+    pub(crate) unsafe fn register_op(
+        &self,
+        entry: Entry,
+        waker: Waker,
+        shard_id: usize,
+    ) -> io::Result<usize> {
+        let mut guard = self.get_uring(shard_id).lock();
         let ctx = &mut *guard;
         let index = ctx.ops.insert(Lifecycle::Waiting(waker));
+        // TODO: embed specific pointer to the data that has a index of the shard id.
         let entry = entry.user_data(index as u64);
 
         let submit_or_remove = |ctx: &mut UringContext| -> io::Result<()> {
@@ -160,7 +180,7 @@ impl Handle {
     }
 
     pub(crate) fn cancel_op<T: Send + 'static>(&self, op: &mut Op<T>, index: usize) {
-        let mut guard = self.get_uring().lock();
+        let mut guard = self.get_uring(op.shard_id).lock();
         let ctx = &mut *guard;
         let ops = &mut ctx.ops;
         let Some(lifecycle) = ops.get_mut(index) else {
