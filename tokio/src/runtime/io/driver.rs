@@ -5,7 +5,6 @@ cfg_signal_internal_and_unix! {
 cfg_tokio_unstable_uring! {
     mod uring;
     use uring::UringContext;
-    use uring::dispatch_completions;
 }
 
 use crate::io::interest::Interest;
@@ -211,8 +210,7 @@ impl Driver {
                 TOKEN_URING => {
                     let mut guard = handle.get_uring().lock();
                     let ctx = &mut *guard;
-
-                    dispatch_completions(&mut ctx.uring, &mut ctx.ops);
+                    ctx.dispatch_completions();
                 }
                 _ => {
                     let ready = Ready::from_mio(event);

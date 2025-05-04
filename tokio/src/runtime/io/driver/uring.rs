@@ -26,6 +26,54 @@ impl UringContext {
         }
     }
 
+    pub(crate) fn dispatch_completions(&mut self) {
+        let ops = &mut self.ops;
+        let cq = self.uring.completion();
+
+        for cqe in cq {
+            let idx = cqe.user_data() as usize;
+
+            match ops.get_mut(idx) {
+                Some(Lifecycle::Waiting(waker)) => {
+                    waker.wake_by_ref();
+                    *ops.get_mut(idx).unwrap() = Lifecycle::Completed(cqe);
+                }
+                Some(Lifecycle::Cancelled(_)) => {
+                    // Op future was cancelled, so we discard the result.
+                    // We just remove the entry from the slab.
+                    ops.remove(idx);
+                }
+                Some(other) => {
+                    panic!("unexpected lifecycle for slot {}: {:?}", idx, other);
+                }
+                None => {
+                    panic!("no op at index {}", idx);
+                }
+            }
+        }
+
+        // `cq`'s drop gets called here, updating the latest head pointer
+    }
+
+    pub(crate) fn submit(&mut self) -> io::Result<()> {
+        loop {
+            // Errors from io_uring_enter: https://man7.org/linux/man-pages/man2/io_uring_enter.2.html#ERRORS
+            match self.uring.submit() {
+                Ok(_) => {
+                    return Ok(());
+                }
+
+                // If the submission queue is full, we dispatch completions and try again.
+                Err(ref e) if e.raw_os_error() == Some(libc::EBUSY) => {
+                    self.dispatch_completions();
+                }
+                // For other errors, we currently return the error as is.
+                Err(e) => {
+                    return Err(e);
+                }
+            }
+        }
+    }
 }
 
 /// Drop the driver, cancelling any in-progress ops and waiting for them to terminate.
@@ -33,7 +81,7 @@ impl Drop for UringContext {
     fn drop(&mut self) {
         // Make sure we flush the submission queue before dropping the driver.
         while !self.uring.submission().is_empty() {
-            submit(&mut self.uring, &mut self.ops).expect("Internal error when dropping driver");
+            self.submit().expect("Internal error when dropping driver");
         }
 
         let mut cancel_ops = Slab::new();
@@ -61,7 +109,7 @@ impl Drop for UringContext {
                 .submit_and_wait(1)
                 .expect("Internal error when dropping driver");
 
-            dispatch_completions(&mut self.uring, &mut cancel_ops);
+            self.dispatch_completions();
         }
     }
 }
@@ -87,28 +135,26 @@ impl Handle {
     pub(crate) unsafe fn register_op(&self, entry: Entry, waker: Waker) -> io::Result<usize> {
         let mut guard = self.get_uring().lock();
         let ctx = &mut *guard;
-        let ring = &mut ctx.uring;
-        let ops = &mut ctx.ops;
-        let index = ops.insert(Lifecycle::Waiting(waker));
+        let index = ctx.ops.insert(Lifecycle::Waiting(waker));
         let entry = entry.user_data(index as u64);
 
-        let mut submit_or_remove = |ring: &mut IoUring| -> io::Result<()> {
-            if let Err(e) = submit(ring, ops) {
+        let submit_or_remove = |ctx: &mut UringContext| -> io::Result<()> {
+            if let Err(e) = ctx.submit() {
                 // Submission failed, remove the entry from the slab and return the error
-                ops.remove(index);
+                ctx.ops.remove(index);
                 return Err(e);
             }
             Ok(())
         };
 
         // SAFETY: entry is valid for the entire duration of the operation
-        while unsafe { ring.submission().push(&entry).is_err() } {
+        while unsafe { ctx.uring.submission().push(&entry).is_err() } {
             // If the submission queue is full, flush it to the kernel
-            submit_or_remove(ring)?;
+            submit_or_remove(ctx)?;
         }
 
-        // For now, we submit the entry immediately without utilizing batching.
-        submit_or_remove(ring)?;
+        // Note: For now, we submit the entry immediately without utilizing batching.
+        submit_or_remove(ctx)?;
 
         Ok(index)
     }
@@ -130,51 +176,4 @@ impl Handle {
             prev => panic!("Unexpected state: {:?}", prev),
         };
     }
-}
-
-fn submit(ring: &mut IoUring, ops: &mut Slab<Lifecycle>) -> io::Result<()> {
-    // Handle errors: https://man7.org/linux/man-pages/man2/io_uring_enter.2.html#ERRORS
-    loop {
-        match ring.submit() {
-            Ok(_) => {
-                return Ok(());
-            }
-            // If the submission queue is full, we dispatch completions and try again.
-            Err(ref e) if e.raw_os_error() == Some(libc::EBUSY) => {
-                dispatch_completions(ring, ops);
-            }
-            // For other errors, we currently return the error as is.
-            Err(e) => {
-                return Err(e);
-            }
-        }
-    }
-}
-
-pub(crate) fn dispatch_completions(uring: &mut IoUring, ops: &mut Slab<Lifecycle>) {
-    let cq = uring.completion();
-
-    for cqe in cq {
-        let idx = cqe.user_data() as usize;
-
-        match ops.get_mut(idx) {
-            Some(Lifecycle::Waiting(waker)) => {
-                waker.wake_by_ref();
-                *ops.get_mut(idx).unwrap() = Lifecycle::Completed(cqe);
-            }
-            Some(Lifecycle::Cancelled(_)) => {
-                // Op future was cancelled, so we discard the result.
-                // We just remove the entry from the slab.
-                ops.remove(idx);
-            }
-            Some(other) => {
-                panic!("unexpected lifecycle for slot {}: {:?}", idx, other);
-            }
-            None => {
-                panic!("no op at index {}", idx);
-            }
-        }
-    }
-
-    // `cq`'s drop gets called here, updating the latest head pointer
 }
