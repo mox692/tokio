@@ -90,9 +90,9 @@ impl From<cqueue::Entry> for CqeResult {
     }
 }
 
+/// A trait that converts a CQE result into a usable value for each operation.
 pub(crate) trait Completable {
     type Output;
-    /// `complete` will be called for cqe's do not have the `more` flag set
     fn complete(self, cqe: CqeResult) -> io::Result<Self::Output>;
 }
 
