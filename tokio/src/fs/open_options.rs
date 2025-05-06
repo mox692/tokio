@@ -718,8 +718,10 @@ cfg_not_tokio_unstable_uring! {
 cfg_tokio_unstable_uring! {
     impl From<StdOpenOptions> for OpenOptions {
         fn from(_options: StdOpenOptions) -> OpenOptions {
-            // * https://github.com/rust-lang/rust/issues/76801
+            // It's not straitforward to convert from std's OpenOptions to io_uring's one.
             // * https://github.com/rust-lang/rust/issues/74943
+            // * https://github.com/rust-lang/rust/issues/76801
+
             panic!("Conversion from std's OpenOptions to io_uring's one is not supported")
         }
     }

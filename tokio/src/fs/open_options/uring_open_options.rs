@@ -13,7 +13,6 @@ pub(crate) struct UringOpenOptions {
 }
 
 impl UringOpenOptions {
-    /// docs
     pub(crate) fn new() -> Self {
         Self {
             read: false,

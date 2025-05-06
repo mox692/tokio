@@ -28,7 +28,7 @@ pub(crate) enum Lifecycle {
 pub(crate) enum State {
     #[allow(dead_code)]
     Initialize(Option<Entry>),
-    Polled(usize), // slab key
+    Polled(usize),
     Complete,
 }
 
@@ -63,7 +63,7 @@ impl<T: Send + 'static> Op<T> {
 impl<T: Send + 'static> Drop for Op<T> {
     fn drop(&mut self) {
         match self.state {
-            // We've already deregistered Op.
+            // We've already dropped this Op.
             State::Complete => (),
             // We will cancel this Op.
             State::Polled(index) => {
@@ -95,9 +95,9 @@ impl From<cqueue::Entry> for CqeResult {
     }
 }
 
+/// A trait that converts a CQE result into a usable value for each operation.
 pub(crate) trait Completable {
     type Output;
-    /// `complete` will be called for cqe's do not have the `more` flag set
     fn complete(self, cqe: CqeResult) -> io::Result<Self::Output>;
 }
 
@@ -121,25 +121,26 @@ impl<T: Completable + Unpin + Send> Future for Op<T> {
 
             State::Polled(idx) => {
                 // TODO: get a shard id from the op.
-                let mut uring = driver.get_uring(this.shard_id).lock();
-                let lifecycle_slot = uring.ops.get_mut(*idx).expect("Lifecycle must be present");
+                let mut ctx = driver.get_uring(this.shard_id).lock();
+                let lifecycle = ctx.ops.get_mut(*idx).expect("Lifecycle must be present");
 
-                match mem::replace(lifecycle_slot, Lifecycle::Submitted) {
+                match mem::replace(lifecycle, Lifecycle::Submitted) {
                     // Only replace the stored waker if it wouldn't wake the new one
                     Lifecycle::Waiting(prev) if !prev.will_wake(cx.waker()) => {
                         let waker = cx.waker().clone();
-                        *lifecycle_slot = Lifecycle::Waiting(waker);
+                        *lifecycle = Lifecycle::Waiting(waker);
                         Poll::Pending
                     }
 
                     Lifecycle::Waiting(prev) => {
-                        *lifecycle_slot = Lifecycle::Waiting(prev);
+                        *lifecycle = Lifecycle::Waiting(prev);
                         Poll::Pending
                     }
 
                     Lifecycle::Completed(cqe) => {
                         // Clean up and complete the future
-                        uring.ops.remove(*idx);
+                        ctx.remove_op(*idx);
+
                         this.state = State::Complete;
 
                         let data = this
