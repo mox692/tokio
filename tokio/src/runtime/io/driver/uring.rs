@@ -113,7 +113,10 @@ impl Drop for UringContext {
                 .submit_and_wait(1)
                 .expect("Internal error when dropping driver");
 
-            self.dispatch_completions();
+            for cqe in self.uring.completion() {
+                let idx = cqe.user_data() as usize;
+                cancel_ops.remove(idx);
+            }
         }
     }
 }
