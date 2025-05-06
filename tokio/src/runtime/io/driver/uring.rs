@@ -74,6 +74,10 @@ impl UringContext {
             }
         }
     }
+
+    pub(crate) fn remove_op(&mut self, index: usize) -> Lifecycle {
+        self.ops.remove(index)
+    }
 }
 
 /// Drop the driver, cancelling any in-progress ops and waiting for them to terminate.
@@ -99,7 +103,7 @@ impl Drop for UringContext {
         }
 
         for key in keys_to_move {
-            let lifecycle = self.ops.remove(key);
+            let lifecycle = self.remove_op(key);
             cancel_ops.insert(lifecycle);
         }
 
@@ -141,7 +145,7 @@ impl Handle {
         let submit_or_remove = |ctx: &mut UringContext| -> io::Result<()> {
             if let Err(e) = ctx.submit() {
                 // Submission failed, remove the entry from the slab and return the error
-                ctx.ops.remove(index);
+                ctx.remove_op(index);
                 return Err(e);
             }
             Ok(())
