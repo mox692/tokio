@@ -11,8 +11,6 @@ pub(crate) struct Open {
     path: CString,
 }
 
-impl Op<Open> {}
-
 impl Completable for Open {
     type Output = crate::fs::File;
     fn complete(self, cqe: CqeResult) -> io::Result<Self::Output> {
