@@ -180,6 +180,8 @@ impl Handle {
 
         match mem::replace(lifecycle, Lifecycle::Cancelled(Box::new(op.take_data()))) {
             Lifecycle::Submitted | Lifecycle::Waiting(_) => (),
+            // The driver saw the completion, but it was never polled.
+            Lifecycle::Completed(_) => (),
             prev => panic!("Unexpected state: {:?}", prev),
         };
     }
