@@ -1,6 +1,6 @@
-use crate::fs::asyncify;
+use crate::{fs::OpenOptions, io::uring::read::Read};
 
-use std::{io, path::Path};
+use std::{io, os::fd::AsRawFd, path::Path};
 
 /// Reads the entire contents of a file into a bytes vector.
 ///
@@ -44,6 +44,55 @@ use std::{io, path::Path};
 /// }
 /// ```
 pub async fn read(path: impl AsRef<Path>) -> io::Result<Vec<u8>> {
-    let path = path.as_ref().to_owned();
-    asyncify(move || std::fs::read(path)).await
+    read_inner(path).await
+}
+
+cfg_not_uring_fs! {
+    async fn read_inner(path: impl AsRef<Path>) -> io::Result<Vec<u8>> {
+        let path = path.as_ref().to_owned();
+        crate::fs::asyncify(move || std::fs::read(path)).await
+    }
+}
+
+cfg_uring_fs! {
+    async fn read_inner(path: impl AsRef<Path>) -> io::Result<Vec<u8>> {
+        use io_uring::{opcode, types};
+
+        // In the future, code would be something like this. (once we implement statx)
+        // By usign metadata, we can get a file size and pre-allocate the buffer.
+
+        // let file = crate::fs::File::open(path.as_ref()).await?;
+        // let metadata = Op::metadata(path.as_ref())?.await?;
+
+        // let len = metadata.len();
+        // let mut buf = vec![0u8; len as usize];
+
+        // let read_op = opcode::Read::new(
+        //     types::Fd(file.as_raw_fd()),
+        //     buf.as_mut_ptr(),
+        //     buf.len() as u32,
+        // )
+        // .build();
+
+        // Op::new(read_op, Read {}).await?;
+
+        // Ok(buf)
+
+
+        let mut buf = vec![0u8; 1024];
+        let file = OpenOptions::new()
+            .read(true)
+            .open(path)
+            .await?;
+        let read_op = opcode::Read::new(
+            types::Fd(file.as_raw_fd()),
+            buf.as_mut_ptr(),
+            buf.len() as u32,
+        )
+        .build();
+
+        let _ = crate::runtime::driver::op::Op::new(read_op, Read {}).await?;
+
+        Ok(buf)
+    }
 }

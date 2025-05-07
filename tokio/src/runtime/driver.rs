@@ -12,6 +12,10 @@ use crate::runtime::park::{ParkThread, UnparkThread};
 use std::io;
 use std::time::Duration;
 
+cfg_uring_fs! {
+    pub(crate) mod op;
+}
+
 #[derive(Debug)]
 pub(crate) struct Driver {
     inner: TimeDriver,
@@ -44,7 +48,8 @@ pub(crate) struct Cfg {
 
 impl Driver {
     pub(crate) fn new(cfg: Cfg) -> io::Result<(Self, Handle)> {
-        let (io_stack, io_handle, signal_handle) = create_io_stack(cfg.enable_io, cfg.nevents)?;
+        let (io_stack, io_handle, signal_handle) =
+            create_io_stack(cfg.enable_io, cfg.nevents, cfg.workers)?;
 
         let clock = create_clock(cfg.enable_pause_time, cfg.start_paused);
 
@@ -136,12 +141,12 @@ cfg_io_driver! {
         Disabled(UnparkThread),
     }
 
-    fn create_io_stack(enabled: bool, nevents: usize) -> io::Result<(IoStack, IoHandle, SignalHandle)> {
+    fn create_io_stack(enabled: bool, nevents: usize, num_worker: usize) -> io::Result<(IoStack, IoHandle, SignalHandle)> {
         #[cfg(loom)]
         assert!(!enabled);
 
         let ret = if enabled {
-            let (io_driver, io_handle) = crate::runtime::io::Driver::new(nevents)?;
+            let (io_driver, io_handle) = crate::runtime::io::Driver::new(nevents, num_worker)?;
 
             let (signal_driver, signal_handle) = create_signal_driver(io_driver, &io_handle)?;
             let process_driver = create_process_driver(signal_driver);

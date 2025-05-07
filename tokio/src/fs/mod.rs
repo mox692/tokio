@@ -228,6 +228,7 @@ pub use self::dir_builder::DirBuilder;
 
 mod file;
 pub use self::file::File;
+pub(crate) use self::file::{uring::Uring, Kind};
 
 mod hard_link;
 pub use self::hard_link::hard_link;
@@ -236,7 +237,7 @@ mod metadata;
 pub use self::metadata::metadata;
 
 mod open_options;
-pub use self::open_options::OpenOptions;
+pub use self::open_options::{uring::UringOptions, OpenOptions};
 
 mod read;
 pub use self::read::read;
@@ -278,7 +279,7 @@ mod try_exists;
 pub use self::try_exists::try_exists;
 
 #[cfg(test)]
-mod mocks;
+pub(crate) mod mocks;
 
 feature! {
     #![unix]

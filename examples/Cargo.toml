@@ -100,5 +100,17 @@ path = "named-pipe-multi-client.rs"
 name = "dump"
 path = "dump.rs"
 
+[[example]]
+name = "uring_fs"
+path = "uring_fs.rs"
+
+[[example]]
+name = "fs_bench_spawn_blocking"
+path = "fs_bench_spawn_blocking.rs"
+
+[[example]]
+name = "fs_bench_io_uring"
+path = "fs_bench_io_uring.rs"
+
 [lints]
 workspace = true
