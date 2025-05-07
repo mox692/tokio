@@ -4,7 +4,7 @@ cfg_signal_internal_and_unix! {
 }
 cfg_tokio_unstable_uring! {
     mod uring;
-    use uring::UringContext;
+    use uring::{UringContext, get_shard_id, is_uring_token};
 }
 
 use crate::io::interest::Interest;
@@ -56,7 +56,7 @@ pub(crate) struct Handle {
         feature = "fs",
         target_os = "linux",
     ))]
-    pub(crate) uring_context: Mutex<UringContext>,
+    pub(crate) uring_context: Box<[Mutex<UringContext>]>,
 }
 
 #[derive(Debug)]
@@ -91,9 +91,6 @@ pub(super) enum Tick {
 
 const TOKEN_WAKEUP: mio::Token = mio::Token(0);
 const TOKEN_SIGNAL: mio::Token = mio::Token(1);
-cfg_tokio_unstable_uring! {
-    pub(crate) const TOKEN_URING: mio::Token = mio::Token(2);
-}
 
 fn _assert_kinds() {
     fn _assert<T: Send + Sync>() {}
@@ -133,7 +130,10 @@ impl Driver {
                 feature = "fs",
                 target_os = "linux",
             ))]
-            uring_context: Mutex::new(UringContext::new()),
+            uring_context: (0..8)
+                .map(|_| Mutex::new(UringContext::new()))
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
         };
 
         #[cfg(all(
@@ -143,7 +143,9 @@ impl Driver {
             target_os = "linux",
         ))]
         {
-            handle.add_uring_source(Interest::READABLE)?;
+            for shard_id in 0..8 {
+                handle.add_uring_source(shard_id, Interest::READABLE)?;
+            }
         }
 
         Ok((driver, handle))
@@ -207,8 +209,11 @@ impl Driver {
                     feature = "fs",
                     target_os = "linux",
                 ))]
-                TOKEN_URING => {
-                    let mut guard = handle.get_uring().lock();
+                token if is_uring_token(token) => {
+                    // TODO: get a shard id from the token? Or type assersion?
+                    let shard_id = get_shard_id(token);
+
+                    let mut guard = handle.get_uring(shard_id).lock();
                     let ctx = &mut *guard;
                     ctx.dispatch_completions();
                 }
