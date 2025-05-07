@@ -779,6 +779,7 @@ impl Builder {
     /// # }
     /// ```
     #[cfg(tokio_unstable)]
+    #[cfg_attr(docsrs, doc(cfg(tokio_unstable)))]
     pub fn on_before_task_poll<F>(&mut self, f: F) -> &mut Self
     where
         F: Fn(&TaskMeta<'_>) + Send + Sync + 'static,
@@ -822,6 +823,7 @@ impl Builder {
     /// # }
     /// ```
     #[cfg(tokio_unstable)]
+    #[cfg_attr(docsrs, doc(cfg(tokio_unstable)))]
     pub fn on_after_task_poll<F>(&mut self, f: F) -> &mut Self
     where
         F: Fn(&TaskMeta<'_>) + Send + Sync + 'static,
@@ -933,7 +935,7 @@ impl Builder {
         }
     }
 
-    fn get_cfg(&self, workers: usize) -> driver::Cfg {
+    fn get_cfg(&self) -> driver::Cfg {
         driver::Cfg {
             enable_pause_time: match self.kind {
                 Kind::CurrentThread => true,
@@ -944,7 +946,6 @@ impl Builder {
             enable_time: self.enable_time,
             start_paused: self.start_paused,
             nevents: self.nevents,
-            workers,
         }
     }
 
@@ -1462,7 +1463,7 @@ impl Builder {
         use crate::runtime::scheduler;
         use crate::runtime::Config;
 
-        let (driver, driver_handle) = driver::Driver::new(self.get_cfg(1))?;
+        let (driver, driver_handle) = driver::Driver::new(self.get_cfg())?;
 
         // Blocking pool
         let blocking_pool = blocking::create_blocking_pool(self, self.max_blocking_threads);
@@ -1641,7 +1642,7 @@ cfg_rt_multi_thread! {
 
             let worker_threads = self.worker_threads.unwrap_or_else(num_cpus);
 
-            let (driver, driver_handle) = driver::Driver::new(self.get_cfg(worker_threads))?;
+            let (driver, driver_handle) = driver::Driver::new(self.get_cfg())?;
 
             // Create the blocking pool
             let blocking_pool =
