@@ -31,7 +31,7 @@ fn current_rt() -> Box<dyn Fn() -> Runtime> {
 
 #[test]
 fn all_tests() {
-    let rt_conbination = vec![current_rt(), multi_rt(1), multi_rt(8)];
+    let rt_conbination = vec![current_rt(), multi_rt(1), multi_rt(8), multi_rt(16)];
 
     for rt in rt_conbination {
         shutdown_runtime_while_performing_io_uring_ops(rt());
