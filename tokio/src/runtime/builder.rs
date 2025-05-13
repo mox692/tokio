@@ -1454,7 +1454,7 @@ impl Builder {
         use crate::runtime::scheduler;
         use crate::runtime::Config;
 
-        let (driver, driver_handle) = driver::Driver::new(self.get_cfg())?;
+        let (driver, driver_handle) = driver::Driver::new(self.get_cfg(), 1)?;
 
         // Blocking pool
         let blocking_pool = blocking::create_blocking_pool(self, self.max_blocking_threads);
@@ -1609,7 +1609,7 @@ cfg_rt_multi_thread! {
 
             let worker_threads = self.worker_threads.unwrap_or_else(num_cpus);
 
-            let (driver, driver_handle) = driver::Driver::new(self.get_cfg())?;
+            let (driver, driver_handle) = driver::Driver::new(self.get_cfg(), worker_threads)?;
 
             // Create the blocking pool
             let blocking_pool =
