@@ -56,7 +56,7 @@ pub(crate) struct Handle {
         feature = "fs",
         target_os = "linux",
     ))]
-    pub(crate) uring_context: Mutex<UringContext>,
+    pub(crate) uring_context: Box<[Mutex<UringContext>]>,
 }
 
 #[derive(Debug)]
@@ -92,7 +92,33 @@ pub(super) enum Tick {
 const TOKEN_WAKEUP: mio::Token = mio::Token(0);
 const TOKEN_SIGNAL: mio::Token = mio::Token(1);
 cfg_tokio_unstable_uring! {
-    pub(crate) const TOKEN_URING: mio::Token = mio::Token(2);
+    // `ScheduledIo` has at least 16-byte alignment (`repr(align(16))`),
+    // so its pointers will have the lowest 4 bits set to 0, allowing us to
+    // safely use those 4 bits to store extra information.
+    //
+    // Bit pattern usage:
+    // 0b00000             => TOKEN_WAKEUP
+    // 0b00001             => TOKEN_SIGNAL
+    // 0b00010 to 0b01111  => URING_TOKEN
+    // 0b10000 and above   => actual raw pointers to ScheduledIo
+    const URING_TOKEN_START: usize = 0b10;
+    const URING_TOKEN_END: usize = 0b1111;
+    const MAX_SHARD_SIZE: usize = URING_TOKEN_END - URING_TOKEN_START;
+
+    pub(super) fn is_uring_token(token: mio::Token) -> bool {
+        URING_TOKEN_START <= token.0 && token.0 <= URING_TOKEN_END
+    }
+
+    pub(super) fn get_shard_id(token: mio::Token) -> usize {
+        debug_assert!(is_uring_token(token), "token {token:?} is not a uring token");
+        token.0.saturating_sub(URING_TOKEN_START)
+    }
+
+    pub(super) fn as_uring_token(n: usize) -> mio::Token {
+        let token = mio::Token(n.saturating_add(URING_TOKEN_START));
+        debug_assert!(is_uring_token(token), "token {token:?} is not a uring token");
+        token
+    }
 }
 
 fn _assert_kinds() {
@@ -106,7 +132,10 @@ fn _assert_kinds() {
 impl Driver {
     /// Creates a new event loop, returning any error that happened during the
     /// creation.
-    pub(crate) fn new(nevents: usize) -> io::Result<(Driver, Handle)> {
+    pub(crate) fn new(
+        nevents: usize,
+        #[allow(unused)] num_workers: usize,
+    ) -> io::Result<(Driver, Handle)> {
         let poll = mio::Poll::new()?;
         #[cfg(not(target_os = "wasi"))]
         let waker = mio::Waker::new(poll.registry(), TOKEN_WAKEUP)?;
@@ -133,7 +162,10 @@ impl Driver {
                 feature = "fs",
                 target_os = "linux",
             ))]
-            uring_context: Mutex::new(UringContext::new()),
+            uring_context: (0..num_workers.min(MAX_SHARD_SIZE))
+                .map(|_| Mutex::new(UringContext::new()))
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
         };
 
         #[cfg(all(
@@ -143,7 +175,9 @@ impl Driver {
             target_os = "linux",
         ))]
         {
-            handle.add_uring_source(Interest::READABLE)?;
+            for shard_id in 0..num_workers {
+                handle.add_uring_source(shard_id, Interest::READABLE)?;
+            }
         }
 
         Ok((driver, handle))
@@ -207,8 +241,10 @@ impl Driver {
                     feature = "fs",
                     target_os = "linux",
                 ))]
-                TOKEN_URING => {
-                    let mut guard = handle.get_uring().lock();
+                token if is_uring_token(token) => {
+                    let shard_id = get_shard_id(token);
+
+                    let mut guard = handle.get_uring(shard_id).lock();
                     let ctx = &mut *guard;
                     ctx.dispatch_completions();
                 }
