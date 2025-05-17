@@ -56,6 +56,7 @@
 //! the inject queue indefinitely. This would be a ref-count cycle and a memory
 //! leak.
 
+use crate::io::Interest;
 use crate::loom::sync::{Arc, Mutex};
 use crate::runtime;
 use crate::runtime::scheduler::multi_thread::{
@@ -491,6 +492,12 @@ fn run(worker: Arc<Worker>) {
 
     let handle = scheduler::Handle::MultiThread(worker.handle.clone());
 
+    handle
+        .driver()
+        .io()
+        .add_uring_source(worker.index + 1, Interest::READABLE)
+        .unwrap();
+
     crate::runtime::context::enter_runtime(&handle, true, |_| {
         // Set the worker context.
         let cx = scheduler::Context::MultiThread(Context {
@@ -721,6 +728,16 @@ impl Context {
     /// Also, we rely on the workstealing algorithm to spread the tasks amongst workers
     /// after all the IOs get dispatched
     fn park(&self, mut core: Box<Core>) -> Box<Core> {
+        // TODO: update details
+        let handle = crate::runtime::Handle::current();
+        let driver = handle.inner.driver().io();
+        for context in driver.uring_contexts.iter() {
+            let Some(lock) = context.try_lock() else {
+                continue;
+            };
+            lock.uring.submit().unwrap();
+        }
+
         if let Some(f) = &self.worker.handle.shared.config.before_park {
             f();
         }

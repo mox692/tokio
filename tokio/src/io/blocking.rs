@@ -234,6 +234,10 @@ impl Buf {
         &self.buf[self.pos..]
     }
 
+    pub(crate) fn bytes_mut(&mut self) -> &mut [u8] {
+        &mut self.buf[self.pos..]
+    }
+
     /// # Safety
     ///
     /// `rd` must not read from the buffer `read` is borrowing and must correctly

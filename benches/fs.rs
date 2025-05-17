@@ -1,19 +1,30 @@
+#![allow(
+    unused_imports,
+    dead_code,
+    unreachable_code,
+    unreachable_pub,
+    unused_variables
+)]
 #![cfg(unix)]
 
+use tokio::task::JoinSet;
 use tokio_stream::StreamExt;
 
-use tokio::fs::File;
+use tokio::fs::{read, File, OpenOptions, UringOption};
 use tokio::io::AsyncReadExt;
 use tokio_util::codec::{BytesCodec, FramedRead /*FramedWrite*/};
 
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use std::fs::File as StdFile;
+use std::hint::black_box;
 use std::io::Read as StdRead;
+use std::time::{Duration, Instant};
 
 fn rt() -> tokio::runtime::Runtime {
     tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)
+        .enable_all()
+        .worker_threads(8)
         .build()
         .unwrap()
 }
@@ -102,11 +113,79 @@ fn sync_read(c: &mut Criterion) {
     });
 }
 
+fn open_read_spawn_blocking(c: &mut Criterion) {
+    let rt = rt();
+    let num_files = 100;
+
+    c.bench_function("open_read_spawn_blocking", |b| {
+        b.iter_custom(|iters| {
+            let mut dur = None;
+            rt.block_on(async {
+                let start = Instant::now();
+                let mut set = JoinSet::new();
+                for _ in 0..iters {
+                    for i in 1..=num_files {
+                        set.spawn(async move {
+                            let path = format!("/home/mox692/work/tokio/test_file/{i}.txt");
+
+                            let file = OpenOptions::new().read(true).open(&path).await.unwrap();
+                            black_box(file);
+
+                            // let res = read(&path).await.unwrap();
+                            // black_box(res);
+                        });
+                    }
+                }
+
+                while let Some(Ok(_)) = set.join_next().await {}
+
+                dur = Some(start.elapsed())
+            });
+
+            dur.unwrap()
+        })
+    });
+}
+fn open_read_io_uring(c: &mut Criterion) {
+    let rt = rt();
+    let num_files = 100;
+    c.bench_function("open_read_io_uring", |b| {
+        b.iter_custom(|iters| {
+            let mut dur = None;
+            rt.block_on(async {
+                let start = Instant::now();
+                let mut set = JoinSet::new();
+                for _ in 0..iters {
+                    for i in 1..=num_files {
+                        set.spawn(async move {
+                            let path = format!("/home/mox692/work/tokio/test_file/{i}.txt");
+
+                            let file = OpenOptions::new().read(true).open(&path).await.unwrap();
+                            black_box(file);
+
+                            // let res = read3(&path).await.unwrap();
+                            // black_box(res);
+                        });
+                    }
+                }
+
+                while let Some(Ok(_)) = set.join_next().await {}
+
+                dur = Some(start.elapsed())
+            });
+
+            dur.unwrap()
+        })
+    });
+}
+
 criterion_group!(
     file,
-    async_read_std_file,
-    async_read_buf,
-    async_read_codec,
-    sync_read
+    // async_read_std_file,
+    // async_read_buf,
+    // async_read_codec,
+    // sync_read
+    open_read_io_uring,
+    open_read_spawn_blocking,
 );
 criterion_main!(file);

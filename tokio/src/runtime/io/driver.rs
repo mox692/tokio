@@ -3,18 +3,23 @@ cfg_signal_internal_and_unix! {
     mod signal;
 }
 
+mod uring;
+
 use crate::io::interest::Interest;
 use crate::io::ready::Ready;
 use crate::loom::sync::Mutex;
 use crate::runtime::driver;
+use crate::runtime::driver::op::Lifecycle;
 use crate::runtime::io::registration_set;
 use crate::runtime::io::{IoDriverMetrics, RegistrationSet, ScheduledIo};
 
 use mio::event::Source;
 use std::fmt;
 use std::io;
+use std::ops::DerefMut;
 use std::sync::Arc;
 use std::time::Duration;
+use uring::{get_worker_index, is_uring_token, UringContext};
 
 /// I/O driver, backed by Mio.
 pub(crate) struct Driver {
@@ -45,6 +50,9 @@ pub(crate) struct Handle {
     waker: mio::Waker,
 
     pub(crate) metrics: IoDriverMetrics,
+
+    // TODO: Can we avoid Mutex?
+    pub(crate) uring_contexts: Box<[Mutex<UringContext>]>,
 }
 
 #[derive(Debug)]
@@ -91,7 +99,7 @@ fn _assert_kinds() {
 impl Driver {
     /// Creates a new event loop, returning any error that happened during the
     /// creation.
-    pub(crate) fn new(nevents: usize) -> io::Result<(Driver, Handle)> {
+    pub(crate) fn new(nevents: usize, num_worker: usize) -> io::Result<(Driver, Handle)> {
         let poll = mio::Poll::new()?;
         #[cfg(not(target_os = "wasi"))]
         let waker = mio::Waker::new(poll.registry(), TOKEN_WAKEUP)?;
@@ -103,6 +111,11 @@ impl Driver {
             poll,
         };
 
+        let uring_contexts = (0..num_worker + 1) // including main thread
+            .map(|_| Mutex::new(UringContext::new()))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+
         let (registrations, synced) = RegistrationSet::new();
 
         let handle = Handle {
@@ -112,6 +125,7 @@ impl Driver {
             #[cfg(not(target_os = "wasi"))]
             waker,
             metrics: IoDriverMetrics::default(),
+            uring_contexts,
         };
 
         Ok((driver, handle))
@@ -166,6 +180,36 @@ impl Driver {
                 // Nothing to do, the event is used to unblock the I/O driver
             } else if token == TOKEN_SIGNAL {
                 self.signal_ready = true;
+            }
+            // TODO: cfg gate
+            else if is_uring_token(token) {
+                let worker_index = get_worker_index(token);
+                let mut lock = handle.get_uring(worker_index).lock();
+                let ctx = lock.deref_mut();
+                let ops = &mut ctx.ops;
+
+                for cqe in unsafe { ctx.uring.completion_shared() } {
+                    let index = cqe.user_data() as usize;
+
+                    match ops.get_mut(index) {
+                        Some(Lifecycle::Waiting(waker)) => {
+                            waker.wake_by_ref();
+                            ops[index] = Lifecycle::Completed(cqe);
+                        }
+                        Some(Lifecycle::Cancelled) => {
+                            let _ = ops.remove(index);
+                        }
+                        Some(other) => {
+                            panic!("should not reach here; lifecycle: {:?}", other);
+                        }
+                        None => {
+                            panic!(
+                                "Op not found for index {} (worker_index: {})",
+                                index, worker_index
+                            );
+                        }
+                    }
+                }
             } else {
                 let ready = Ready::from_mio(event);
                 let ptr = super::EXPOSE_IO.from_exposed_addr(token.0);
@@ -181,6 +225,8 @@ impl Driver {
 
                 ready_count += 1;
             }
+
+            // TODO: potentially we want to iterate cq here.
         }
 
         handle.metrics.incr_ready_count_by(ready_count);
