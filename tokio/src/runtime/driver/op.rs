@@ -1,4 +1,5 @@
 use crate::runtime::Handle;
+use crate::runtime::OpId;
 use io_uring::cqueue;
 use io_uring::squeue::Entry;
 use std::future::Future;
@@ -36,6 +37,8 @@ pub(crate) struct Op<T: Send + 'static> {
     state: State,
     // Per operation data.
     data: Option<T>,
+
+    pub(crate) shard_id: usize,
 }
 
 impl<T: Send + 'static> Op<T> {
@@ -48,6 +51,7 @@ impl<T: Send + 'static> Op<T> {
         Self {
             data: Some(data),
             state: State::Initialize(Some(entry)),
+            shard_id: OpId::next().as_u64() as usize,
         }
     }
     pub(crate) fn take_data(&mut self) -> Option<T> {
@@ -109,13 +113,13 @@ impl<T: Completable + Unpin + Send> Future for Op<T> {
                 let entry = entry_opt.take().expect("Entry must be present");
                 let waker = cx.waker().clone();
                 // SAFETY: entry is valid for the entire duration of the operation
-                let idx = unsafe { driver.register_op(entry, waker)? };
+                let idx = unsafe { driver.register_op(entry, waker, this.shard_id)? };
                 this.state = State::Polled(idx);
                 Poll::Pending
             }
 
             State::Polled(idx) => {
-                let mut ctx = driver.get_uring().lock();
+                let mut ctx = driver.get_uring(this.shard_id).lock();
                 let lifecycle = ctx.ops.get_mut(*idx).expect("Lifecycle must be present");
 
                 match mem::replace(lifecycle, Lifecycle::Submitted) {
