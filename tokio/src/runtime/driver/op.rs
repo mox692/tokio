@@ -1,4 +1,5 @@
 use crate::runtime::Handle;
+use crate::runtime::OpId;
 use io_uring::cqueue;
 use io_uring::squeue::Entry;
 use std::future::Future;
@@ -41,6 +42,8 @@ pub(crate) struct Op<T: Cancellable> {
     state: State,
     // Per operation data.
     data: Option<T>,
+
+    pub(crate) shard_id: usize,
 }
 
 impl<T: Cancellable> Op<T> {
@@ -51,10 +54,12 @@ impl<T: Cancellable> Op<T> {
     #[allow(dead_code)]
     pub(crate) unsafe fn new(entry: Entry, data: T) -> Self {
         let handle = Handle::current();
+        let shard_size = handle.inner.driver().io().uring_context.len();
         Self {
             handle,
             data: Some(data),
             state: State::Initialize(Some(entry)),
+            shard_id: OpId::next().as_u64() as usize % shard_size,
         }
     }
     pub(crate) fn take_data(&mut self) -> Option<T> {
@@ -71,7 +76,11 @@ impl<T: Cancellable> Drop for Op<T> {
             State::Polled(index) => {
                 let data = self.take_data();
                 let handle = &mut self.handle;
-                handle.inner.driver().io().cancel_op(index, data);
+                handle
+                    .inner
+                    .driver()
+                    .io()
+                    .cancel_op(self.shard_id, data, index);
             }
             // This Op has not been polled yet.
             // We don't need to do anything here.
@@ -124,13 +133,13 @@ impl<T: Cancellable + Completable + Send> Future for Op<T> {
                 let entry = entry_opt.take().expect("Entry must be present");
                 let waker = cx.waker().clone();
                 // SAFETY: entry is valid for the entire duration of the operation
-                let idx = unsafe { driver.register_op(entry, waker)? };
+                let idx = unsafe { driver.register_op(entry, waker, this.shard_id)? };
                 this.state = State::Polled(idx);
                 Poll::Pending
             }
 
             State::Polled(idx) => {
-                let mut ctx = driver.get_uring().lock();
+                let mut ctx = driver.get_uring(this.shard_id).lock();
                 let lifecycle = ctx.ops.get_mut(*idx).expect("Lifecycle must be present");
 
                 match mem::replace(lifecycle, Lifecycle::Submitted) {
