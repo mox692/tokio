@@ -28,7 +28,11 @@ impl Cancellable for Open {
 
 impl Op<Open> {
     /// Submit a request to open a file.
-    pub(crate) fn open(path: &Path, options: &UringOpenOptions) -> io::Result<Op<Open>> {
+    pub(crate) fn open(
+        shard_id: usize,
+        path: &Path,
+        options: &UringOpenOptions,
+    ) -> io::Result<Op<Open>> {
         let inner_opt = options;
         let path = cstr(path)?;
 
@@ -44,7 +48,7 @@ impl Op<Open> {
             .build();
 
         // SAFETY: Parameters are valid for the entire duration of the operation
-        let op = unsafe { Op::new(open_op, Open { path }) };
+        let op = unsafe { Op::new(shard_id, open_op, Open { path }) };
         Ok(op)
     }
 }

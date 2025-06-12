@@ -52,10 +52,10 @@ pub(crate) struct Handle {
     pub(crate) metrics: IoDriverMetrics,
 
     #[cfg(all(tokio_uring, feature = "rt", feature = "fs", target_os = "linux",))]
-    pub(crate) uring_context: Mutex<UringContext>,
+    pub(crate) uring_context: Box<[Mutex<UringContext>]>,
 
     #[cfg(all(tokio_uring, feature = "rt", feature = "fs", target_os = "linux",))]
-    pub(crate) uring_state: AtomicUsize,
+    pub(crate) uring_state: Box<[AtomicUsize]>,
 }
 
 #[derive(Debug)]
@@ -102,7 +102,10 @@ fn _assert_kinds() {
 impl Driver {
     /// Creates a new event loop, returning any error that happened during the
     /// creation.
-    pub(crate) fn new(nevents: usize) -> io::Result<(Driver, Handle)> {
+    pub(crate) fn new(
+        nevents: usize,
+        #[allow(unused)] num_workers: usize,
+    ) -> io::Result<(Driver, Handle)> {
         let poll = mio::Poll::new()?;
         #[cfg(not(target_os = "wasi"))]
         let waker = mio::Waker::new(poll.registry(), TOKEN_WAKEUP)?;
@@ -124,9 +127,15 @@ impl Driver {
             waker,
             metrics: IoDriverMetrics::default(),
             #[cfg(all(tokio_uring, feature = "rt", feature = "fs", target_os = "linux",))]
-            uring_context: Mutex::new(UringContext::new()),
+            uring_context: (0..num_workers)
+                .map(|_| Mutex::new(UringContext::new()))
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
             #[cfg(all(tokio_uring, feature = "rt", feature = "fs", target_os = "linux",))]
-            uring_state: AtomicUsize::new(0),
+            uring_state: (0..num_workers)
+                .map(|_| AtomicUsize::new(0))
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
         };
 
         Ok((driver, handle))
@@ -200,9 +209,13 @@ impl Driver {
 
         #[cfg(all(tokio_uring, feature = "rt", feature = "fs", target_os = "linux",))]
         {
-            let mut guard = handle.get_uring().lock();
-            let ctx = &mut *guard;
-            ctx.dispatch_completions();
+            let shard_size = handle.uring_context.len();
+
+            for shard_id in 0..shard_size {
+                let mut guard = handle.get_uring(shard_id).lock();
+                let ctx = &mut *guard;
+                ctx.dispatch_completions();
+            }
         }
 
         handle.metrics.incr_ready_count_by(ready_count);
