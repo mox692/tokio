@@ -1,3 +1,4 @@
+use crate::io::uring::open::OpenCancelData;
 use crate::runtime::Handle;
 use crate::runtime::OpId;
 use io_uring::cqueue;
@@ -10,7 +11,9 @@ use std::task::Waker;
 use std::{io, mem};
 
 #[derive(Debug)]
-pub(crate) enum CancelData {}
+pub(crate) enum CancelData {
+    Open(OpenCancelData),
+}
 
 #[derive(Debug)]
 pub(crate) enum Lifecycle {

@@ -11,6 +11,11 @@ pub(crate) struct Open {
     path: CString,
 }
 
+#[derive(Debug)]
+pub(crate) struct OpenCancelData {
+    pub(crate) _path: CString,
+}
+
 impl Completable for Open {
     type Output = crate::fs::File;
     fn complete(self, cqe: CqeResult) -> io::Result<Self::Output> {
@@ -22,7 +27,8 @@ impl Completable for Open {
 
 impl Cancellable for Open {
     fn cancel(self) -> CancelData {
-        todo!()
+        let data = OpenCancelData { _path: self.path };
+        CancelData::Open(data)
     }
 }
 

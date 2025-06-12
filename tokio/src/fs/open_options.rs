@@ -458,10 +458,13 @@ impl OpenOptions {
             Kind::Std(opts) => Self::std_open(opts, path).await,
             #[cfg(all(tokio_uring, feature = "rt", feature = "fs", target_os = "linux"))]
             Kind::Uring(opts) => {
+                use crate::runtime::OpId;
+
                 let handle = crate::runtime::Handle::current();
                 let driver_handle = handle.inner.driver().io();
+                let shard_id = OpId::next().as_u64() as usize % driver_handle.uring_context.len();
 
-                if driver_handle.check_and_init()? {
+                if driver_handle.check_and_init(shard_id)? {
                     Op::open(path.as_ref(), opts)?.await
                 } else {
                     let opts = opts.clone().into();
