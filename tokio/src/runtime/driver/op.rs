@@ -52,14 +52,14 @@ impl<T: Cancellable> Op<T> {
     /// Callers must ensure that parameters of the entry (such as buffer) are valid and will
     /// be valid for the entire duration of the operation, otherwise it may cause memory problems.
     #[allow(dead_code)]
-    pub(crate) unsafe fn new(entry: Entry, data: T) -> Self {
+    pub(crate) unsafe fn new(shard_id: usize, entry: Entry, data: T) -> Self {
         let handle = Handle::current();
         let shard_size = handle.inner.driver().io().uring_context.len();
         Self {
             handle,
             data: Some(data),
             state: State::Initialize(Some(entry)),
-            shard_id: OpId::next().as_u64() as usize % shard_size,
+            shard_id: shard_id % shard_size,
         }
     }
     pub(crate) fn take_data(&mut self) -> Option<T> {
