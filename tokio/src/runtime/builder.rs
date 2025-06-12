@@ -944,6 +944,13 @@ impl Builder {
             enable_time: self.enable_time,
             start_paused: self.start_paused,
             nevents: self.nevents,
+            num_workers: match self.kind {
+                Kind::CurrentThread => 1,
+                #[cfg(feature = "rt-multi-thread")]
+                Kind::MultiThread => self
+                    .worker_threads
+                    .unwrap_or_else(crate::loom::sys::num_cpus),
+            },
         }
     }
 
