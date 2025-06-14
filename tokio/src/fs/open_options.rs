@@ -434,6 +434,12 @@ impl OpenOptions {
     ///   open files, too long filename, too many symbolic links in the
     ///   specified path (Unix-like systems only), etc.
     ///
+    /// # io_uring support
+    ///
+    /// On Linux, you can also use `io_uring` for executing system calls.
+    /// To enable `io_uring`, you need to specify the `--cfg tokio_uring` flag
+    /// at compile time and set the `Builder::enable_io_uring` runtime option.
+    ///
     /// # Examples
     ///
     /// ```no_run

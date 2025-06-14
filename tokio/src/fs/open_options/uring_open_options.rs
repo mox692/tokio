@@ -71,6 +71,7 @@ impl UringOpenOptions {
         self
     }
 
+    // Equivalent to https://github.com/rust-lang/rust/blob/64c81fd10509924ca4da5d93d6052a65b75418a5/library/std/src/sys/fs/unix.rs#L1118-L1127
     pub(crate) fn access_mode(&self) -> io::Result<libc::c_int> {
         match (self.read, self.write, self.append) {
             (true, false, false) => Ok(libc::O_RDONLY),
@@ -82,6 +83,7 @@ impl UringOpenOptions {
         }
     }
 
+    // Equivalent to https://github.com/rust-lang/rust/blob/64c81fd10509924ca4da5d93d6052a65b75418a5/library/std/src/sys/fs/unix.rs#L1129-L1151
     pub(crate) fn creation_mode(&self) -> io::Result<libc::c_int> {
         match (self.write, self.append) {
             (true, false) => {}
