@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, os::unix::fs::OpenOptionsExt};
 
 #[cfg(test)]
 use super::mock_open_options::MockOpenOptions as StdOpenOptions;
@@ -111,11 +111,15 @@ impl From<UringOpenOptions> for StdOpenOptions {
     fn from(value: UringOpenOptions) -> Self {
         let mut std = StdOpenOptions::new();
 
-        std.read(value.read);
-        std.write(value.write);
         std.append(value.append);
         std.create(value.create);
         std.create_new(value.create_new);
+        std.read(value.read);
+        std.truncate(value.truncate);
+        std.write(value.write);
+
+        std.mode(value.mode);
+        std.custom_flags(value.custom_flags);
 
         std
     }
