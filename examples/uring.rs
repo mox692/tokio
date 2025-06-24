@@ -1,6 +1,14 @@
 //! deadlock reproducer.
 //!
 //! $ cargo build --package examples --example uring &&  strace -f -e trace=all -s 256 -o strace.log ./target/debug/examples/uring
+//!
+//!
+//! ### Notes
+//!
+//! * Cで再現しないやつとの差分を減らす
+//!     * liburingの io_uring_peek_cqe()が, overflowからcqeに戻すみたいなことをやってるかも
+//!
+//!
 
 use std::path::PathBuf;
 use tempfile::NamedTempFile;
@@ -62,7 +70,13 @@ fn process_many_files2() {
                             let _file = OpenOptions::new().read(true).open(path).await.unwrap();
                         });
                     }
-                    while let Some(Ok(_)) = set.join_next().await {}
+                    let mut i = 0;
+                    while let Some(Ok(_)) = set.join_next().await {
+                        i += 1;
+                        // if i % 100 == 0 {
+                        println!("Completed {} tasks", i);
+                        // }
+                    }
                 })
                 .await
                 .unwrap();
