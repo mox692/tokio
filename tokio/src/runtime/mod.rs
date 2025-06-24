@@ -421,8 +421,3 @@ cfg_rt! {
     /// After thread starts / before thread stops
     type Callback = std::sync::Arc<dyn Fn() + Send + Sync>;
 }
-
-cfg_tokio_uring! {
-    pub(crate) mod op_id;
-    pub(crate) use op_id::OpId;
-}
