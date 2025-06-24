@@ -11,7 +11,7 @@ use super::{Handle, TOKEN_WAKEUP};
 use std::os::fd::{AsRawFd, RawFd};
 use std::{io, mem, task::Waker};
 
-const DEFAULT_RING_SIZE: u32 = 256;
+const DEFAULT_RING_SIZE: u32 = 2;
 
 #[repr(usize)]
 #[derive(Debug, PartialEq, Eq)]
