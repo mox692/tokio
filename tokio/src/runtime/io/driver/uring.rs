@@ -110,6 +110,13 @@ impl UringContext {
     }
 
     pub(crate) fn submit(&mut self) -> io::Result<()> {
+        let is_cq_full = self.ring_mut().completion().is_full();
+        let len = self.ring_mut().submission().len();
+        let cap = self.ring_mut().submission().capacity();
+        println!(
+            "submit: is_cq_full={}, len={}, cap={}",
+            is_cq_full, len, cap
+        );
         loop {
             // Errors from io_uring_enter: https://man7.org/linux/man-pages/man2/io_uring_enter.2.html#ERRORS
             match self.ring().submit() {
