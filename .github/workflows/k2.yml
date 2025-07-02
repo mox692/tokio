@@ -1,0 +1,84 @@
+name: linux-kernel-qemu-ci
+
+on:
+  # push:
+  #   branches: [main]
+  pull_request:
+
+jobs:
+  build-kernel-and-test:
+    runs-on: ubuntu-latest
+
+    env:
+      APP_BIN: run_tests
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # install packege
+    - name: Install build deps for kernel & QEMU
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential bc bison flex libssl-dev libelf-dev \
+          libncurses-dev xz-utils curl jq \
+          qemu-system-x86 qemu-utils \
+          python3 python3-pip busybox
+        sudo pip3 install --upgrade virtme
+
+    - name: Fetch latest stable kernel version
+      id: kernel
+      run: |
+        # LATEST=$(curl -s https://www.kernel.org/releases.json | \
+        #          jq -r '.releases[] | select(.is_mainline==false and .is_stable==true) | .version' | head -n1)
+
+        LATEST=$(curl -s https://www.kernel.org/releases.json | jq -r '.latest_stable.version')
+        echo "KVER=$LATEST" >>"$GITHUB_OUTPUT"
+        echo "Using kernel $LATEST"
+
+    - name: Download kernel source
+      run: |
+        MAJOR=$(echo "${{ steps.kernel.outputs.KVER }}" | cut -d. -f1)
+        wget https://cdn.kernel.org/pub/linux/kernel/v${MAJOR}.x/linux-${{ steps.kernel.outputs.KVER }}.tar.xz
+        tar -xf linux-${{ steps.kernel.outputs.KVER }}.tar.xz
+
+    #------------------------------------
+    # 3) Kernel ビルド（QEMU 用に最小構成）
+    #------------------------------------
+    - name: Configure and build kernel
+      working-directory: linux-${{ steps.kernel.outputs.KVER }}
+      run: |
+        # defconfig で雛形を作り、QEMU/guest 向けオプションを追加
+        make defconfig
+        make kvm_guest.config        # make kvmconfig でも可 :contentReference[oaicite:0]{index=0}
+        # ビルド
+        make -j"$(nproc)"
+        echo "KERNEL_IMG=$(pwd)/arch/x86/boot/bzImage" >>"$GITHUB_ENV"
+
+    #------------------------------------
+    # 4) Rust プロジェクトを Release ビルド
+    #------------------------------------
+    - name: Set up Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        override: true
+
+    - name: Cargo build
+      run: cargo build -p tokio --bin run_tests
+
+    #------------------------------------
+    # 5) QEMU (virtme-run) で kernel をブートし Rust バイナリを実行
+    #------------------------------------
+    - name: Run integration test on fresh kernel
+      run: |
+        virtme-run \
+          -a x86_64 \
+          --kdir linux-${{ steps.kernel.outputs.KVER }} \
+          --mods=auto \
+          --memory 1024M \
+          --pwd="$PWD" \
+          --script-sh "./target/debug/${APP_BIN} && echo 'TEST-OK'" \
+          --qemu-arg -nographic
