@@ -1,8 +1,9 @@
-name: linux-kernel-qemu-ci
+name: K2CI
 
 on:
-  # push:
-  #   branches: [main]
+  push:
+    branches:
+      - master
   pull_request:
 
 jobs:
