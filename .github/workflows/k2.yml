@@ -34,9 +34,10 @@ jobs:
         # LATEST=$(curl -s https://www.kernel.org/releases.json | \
         #          jq -r '.releases[] | select(.is_mainline==false and .is_stable==true) | .version' | head -n1)
 
-        LATEST=$(curl -s https://www.kernel.org/releases.json | jq -r '.latest_stable.version')
-        echo "KVER=$LATEST" >>"$GITHUB_OUTPUT"
-        echo "Using kernel $LATEST"
+        ver=$(curl -s https://www.kernel.org/releases.json | jq -r '.latest_stable.version')
+
+        echo "KVER=$ver"           >> "$GITHUB_OUTPUT"
+        echo "KERNEL_DIR=linux-$ver" >> "$GITHUB_OUTPUT"
 
     - name: Download kernel source
       run: |
@@ -44,21 +45,47 @@ jobs:
         wget https://cdn.kernel.org/pub/linux/kernel/v${MAJOR}.x/linux-${{ steps.kernel.outputs.KVER }}.tar.xz
         tar -xf linux-${{ steps.kernel.outputs.KVER }}.tar.xz
 
-    #------------------------------------
-    # 3) Kernel ビルド（QEMU 用に最小構成）
-    #------------------------------------
-    - name: Configure and build kernel
-      working-directory: linux-${{ steps.kernel.outputs.KVER }}
+    # ------------------------------------
+    # 3) kernel ソース & ビルド成果物キャッシュ
+    # ------------------------------------
+    - name: Restore kernel build from cache (if any)
+      id: cache-kernel
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.kernel.outputs.KERNEL_DIR }}
+        key: linux-${{ steps.kernel.outputs.KVER }}-${{ runner.os }}-kvmguest
+
+    # ------------------------------------
+    # 4) ダウンロード & 展開 (キャッシュ miss 時のみ)
+    # ------------------------------------
+    - name: Download kernel source
+      if: steps.cache-kernel.outputs.cache-hit != 'true'
       run: |
-        # defconfig で雛形を作り、QEMU/guest 向けオプションを追加
+        maj=$(echo "${{ steps.kernel.outputs.KVER }}" | cut -d. -f1)
+        wget -q https://cdn.kernel.org/pub/linux/kernel/v${maj}.x/linux-${{ steps.kernel.outputs.KVER }}.tar.xz
+        tar -xf linux-${{ steps.kernel.outputs.KVER }}.tar.xz
+
+    # ------------------------------------
+    # 5) コンフィグ＋ビルド (miss 時のみ)
+    # ------------------------------------
+    - name: Configure and build kernel
+      if: steps.cache-kernel.outputs.cache-hit != 'true'
+      working-directory: ${{ steps.kernel.outputs.KERNEL_DIR }}
+      run: |
         make defconfig
-        make kvm_guest.config        # make kvmconfig でも可 :contentReference[oaicite:0]{index=0}
-        # ビルド
+        make kvm_guest.config      # kvmconfig でも可
         make -j"$(nproc)"
-        echo "KERNEL_IMG=$(pwd)/arch/x86/boot/bzImage" >>"$GITHUB_ENV"
+
+    # ------------------------------------
+    # 6) bzImage パスを環境変数へ
+    #    (hit/miss どちらでも必要)
+    # ------------------------------------
+    - name: Export KERNEL_IMG path
+      run: |
+        echo "KERNEL_IMG=${{ github.workspace }}/${{ steps.kernel.outputs.KERNEL_DIR }}/arch/x86/boot/bzImage" >> "$GITHUB_ENV"
 
     #------------------------------------
-    # 4) Rust プロジェクトを Release ビルド
+    # 7) Rust プロジェクトを Release ビルド
     #------------------------------------
     - name: Set up Rust toolchain
       uses: actions-rs/toolchain@v1
@@ -71,7 +98,7 @@ jobs:
       run: cargo build -p tokio --bin run_tests
 
     #------------------------------------
-    # 5) QEMU (virtme-run) で kernel をブートし Rust バイナリを実行
+    # 8) QEMU (virtme-run) で kernel をブートし Rust バイナリを実行
     #------------------------------------
     - name: Run integration test on fresh kernel
       run: |
