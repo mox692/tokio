@@ -74,12 +74,16 @@ jobs:
 
       - name: Create initramfs
         run: |
-          mkdir -p initramfs/bin
-          cp target/debug/run_tests initramfs/bin/run_tests   # ← バイナリ名を合わせてください
-          cat > initramfs/init << 'EOF'
-          #!/bin/sh
-          exec /bin/run_tests
-          EOF
+          # mkdir -p initramfs/bin
+          # cp target/debug/run_tests initramfs/bin/run_tests   # ← バイナリ名を合わせてください
+          # cat > initramfs/init << 'EOF'
+          # #!/bin/sh
+          # exec /bin/run_tests
+          # EOF
+          # chmod +x initramfs/init
+
+          mkdir -p initramfs
+          cp target/debug/run_tests initramfs/init   # バイナリを直接 /init に
           chmod +x initramfs/init
           (cd initramfs && find . | cpio -H newc -o) > initramfs.cpio
 
