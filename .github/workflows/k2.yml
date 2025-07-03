@@ -18,6 +18,16 @@ jobs:
       uses: actions/checkout@v4
 
     # install packege
+    # - name: Install build deps for kernel & QEMU
+    #   run: |
+    #     sudo apt-get update
+    #     sudo apt-get install -y \
+    #       build-essential bc bison flex libssl-dev libelf-dev \
+    #       libncurses-dev xz-utils curl jq \
+    #       qemu-system-x86 qemu-utils \
+    #       python3 python3-pip busybox
+    #     sudo pip3 install --upgrade virtme
+            
     - name: Install build deps for kernel & QEMU
       run: |
         sudo apt-get update
@@ -25,8 +35,13 @@ jobs:
           build-essential bc bison flex libssl-dev libelf-dev \
           libncurses-dev xz-utils curl jq \
           qemu-system-x86 qemu-utils \
-          python3 python3-pip busybox
-        sudo pip3 install --upgrade virtme
+          python3 python3-pip busybox git
+
+    # ---- virtme (最新) を Git から入れる ----
+    - name: Install latest virtme (with --kdir support)
+      run: |
+        sudo pip3 install -U --no-binary ':all:' \
+            git+https://github.com/amluto/virtme.git
 
     - name: Fetch latest stable kernel version
       id: kernel
@@ -100,13 +115,23 @@ jobs:
     #------------------------------------
     # 8) QEMU (virtme-run) で kernel をブートし Rust バイナリを実行
     #------------------------------------
+    # - name: Run integration test on fresh kernel
+    #   run: |
+    #     virtme-run \
+    #       -a x86_64 \
+    #       --kdir linux-${{ steps.kernel.outputs.KVER }} \
+    #       --mods=auto \
+    #       --memory 1024M \
+    #       --pwd="$PWD" \
+    #       --script-sh "./target/debug/${APP_BIN} && echo 'TEST-OK'" \
+    #       --qemu-arg -nographic
+
     - name: Run integration test on fresh kernel
       run: |
         virtme-run \
-          -a x86_64 \
           --kdir linux-${{ steps.kernel.outputs.KVER }} \
           --mods=auto \
           --memory 1024M \
           --pwd="$PWD" \
-          --script-sh "./target/debug/${APP_BIN} && echo 'TEST-OK'" \
-          --qemu-arg -nographic
+          --script-sh "./target/release/${APP_BIN} && echo TEST‑OK" \
+          -q -nographic
