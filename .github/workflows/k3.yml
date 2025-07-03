@@ -35,7 +35,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: linux-${{ env.KERNEL_VERSION }}
-          key: ${{ runner.os }}-kernel-${{ env.KERNEL_VERSION }}
+          key: ${{ env.KERNEL_VERSION }}
           # The cache key is OS-specific and uses kernel version
 
       # 5. Download and extract kernel source if cache missed
@@ -60,9 +60,12 @@ jobs:
       # 7. Build the Rust user-space application (release mode)
       - name: Build Rust project
         run: |
-          echo "Building Rust user-space application..."
-          cargo build -p tokio --bin run_tests
-          echo "Rust build complete."
+          rustup target add x86_64-unknown-linux-musl
+          cargo build -p tokio --target x86_64-unknown-linux-musl --bin run_tests
+
+          # echo "Building Rust user-space application..."
+          # cargo build -p tokio --bin run_tests
+          # echo "Rust build complete."
 
       # 8. Create an initramfs with the Rust binary and an init script
       - name: Prepare initramfs with user application
@@ -71,7 +74,7 @@ jobs:
           # Create directories for a minimal filesystem
           mkdir -p initramfs/{bin,sbin,proc,sys}
           # Copy the Rust binary into /bin (adjust path/name as needed)
-          cp target/debug/run_tests initramfs/bin/myapp
+          cp target/x86_64-unknown-linux-musl/debug/run_tests initramfs/bin/myapp
           # Add BusyBox for shell and utilities
           cp /usr/bin/busybox initramfs/bin/busybox
           ln -s busybox initramfs/bin/sh        # /bin/sh -> busybox (shell):contentReference[oaicite:8]{index=8}
