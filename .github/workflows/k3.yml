@@ -1,0 +1,105 @@
+name: Kernel CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    # branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Checkout the repository
+      - uses: actions/checkout@v4
+
+      # 2. Install required build tools and dependencies
+      - name: Set up build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential libncurses-dev bison flex libssl-dev libelf-dev dwarves \
+            qemu-system-x86 busybox-static cpio xz-utils curl
+
+      # 3. Get latest stable Linux kernel version from kernel.org
+      - name: Get latest kernel version
+        id: get-kernel
+        run: |
+          KERNEL_VERSION=$(curl -s https://www.kernel.org/releases.json | jq -r '.latest_stable.version')
+          echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_ENV
+        # The KERNEL_VERSION env var (e.g., "6.15.4") is now available to later steps
+
+      # 4. Restore kernel build from cache if available
+      - name: Cache built kernel
+        id: kernel-cache
+        uses: actions/cache@v4
+        with:
+          path: linux-${{ env.KERNEL_VERSION }}
+          key: ${{ runner.os }}-kernel-${{ env.KERNEL_VERSION }}
+          # The cache key is OS-specific and uses kernel version
+
+      # 5. Download and extract kernel source if cache missed
+      - name: Download Linux kernel source
+        if: steps.kernel-cache.outputs.cache-hit != 'true'
+        run: |
+          echo "Downloading Linux kernel $KERNEL_VERSION..."
+          # Determine major version for download URL (e.g., 6.x for 6.y.z)
+          major=${{ env.KERNEL_VERSION%%.* }}
+          curl -L "https://cdn.kernel.org/pub/linux/kernel/v${major}.x/linux-${{ env.KERNEL_VERSION }}.tar.xz" -o linux.tar.xz
+          tar -xf linux.tar.xz
+
+      # 6. Build the kernel with default configuration (defconfig) if not cached
+      - name: Build Linux kernel
+        if: steps.kernel-cache.outputs.cache-hit != 'true'
+        run: |
+          echo "Building Linux kernel $KERNEL_VERSION..."
+          cd linux-${{ env.KERNEL_VERSION }}
+          # Use default config for x86_64 and build kernel
+          make defconfig  # Load default kernel config:contentReference[oaicite:6]{index=6}
+          make -j$(nproc) # Compile the kernel (bzImage, modules, etc.):contentReference[oaicite:7]{index=7}
+          echo "Kernel build complete."
+
+      # 7. Build the Rust user-space application (release mode)
+      - name: Build Rust project
+        run: |
+          echo "Building Rust user-space application..."
+          cargo build -p tokio --bin run_tests
+          echo "Rust build complete."
+
+      # 8. Create an initramfs with the Rust binary and an init script
+      - name: Prepare initramfs with user application
+        run: |
+          echo "Preparing initramfs..."
+          # Create directories for a minimal filesystem
+          mkdir -p initramfs/{bin,sbin,proc,sys}
+          # Copy the Rust binary into /bin (adjust path/name as needed)
+          cp target/release/myapp initramfs/bin/myapp
+          # Add BusyBox for shell and utilities
+          cp /usr/bin/busybox initramfs/bin/busybox
+          ln -s busybox initramfs/bin/sh        # /bin/sh -> busybox (shell):contentReference[oaicite:8]{index=8}
+          ln -s busybox initramfs/bin/mount     # /bin/mount -> busybox
+          ln -s ../bin/busybox initramfs/sbin/poweroff  # /sbin/poweroff -> busybox
+          # Create /init script to run the app then power off
+          cat > initramfs/init << 'EOL'
+          #!/bin/sh
+          mount -t proc proc /proc
+          mount -t sysfs sysfs /sys
+          echo "Launching Rust application..."
+          /bin/myapp
+          echo "Application exited, powering off..."
+          /sbin/poweroff -f
+          EOL
+          chmod +x initramfs/init
+          # Pack the initramfs into a compressed CPIO archive:contentReference[oaicite:9]{index=9}
+          (cd initramfs && find . -print0 | cpio --null -ov --format=newc | gzip -9 > ../initramfs.cpio.gz)
+          echo "Initramfs prepared."
+
+      # 9. Boot the kernel in QEMU and run the Rust application
+      - name: Run QEMU with kernel and initramfs
+        run: |
+          echo "Booting QEMU with Linux $KERNEL_VERSION..."
+          # Use QEMU to boot the kernel with the initramfs:contentReference[oaicite:10]{index=10}
+          qemu-system-x86_64 -kernel linux-${{ env.KERNEL_VERSION }}/arch/x86/boot/bzImage \
+                             -initrd initramfs.cpio.gz \
+                             -append "console=ttyS0" -nographic -no-reboot -m 512
+          echo "QEMU run completed."
