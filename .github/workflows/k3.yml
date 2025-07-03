@@ -1,10 +1,10 @@
-name: Kernel CI
+name: Kernel CIs
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - master
   pull_request:
-    # branches: [ main ]
 
 jobs:
   build:
@@ -42,11 +42,9 @@ jobs:
       - name: Download Linux kernel source
         if: steps.kernel-cache.outputs.cache-hit != 'true'
         run: |
-          echo "Downloading Linux kernel $KERNEL_VERSION..."
-          # Determine major version for download URL (e.g., 6.x for 6.y.z)
-          major=${{ env.KERNEL_VERSION%%.* }}
-          curl -L "https://cdn.kernel.org/pub/linux/kernel/v${major}.x/linux-${{ env.KERNEL_VERSION }}.tar.xz" -o linux.tar.xz
-          tar -xf linux.tar.xz
+          MAJOR=$(echo "${{ env.KERNEL_VERSION }}" | cut -d. -f1)
+          wget https://cdn.kernel.org/pub/linux/kernel/v${MAJOR}.x/linux-${{ env.KERNEL_VERSION }}.tar.xz
+          tar -xf linux-${{ env.KERNEL_VERSION }}.tar.xz
 
       # 6. Build the kernel with default configuration (defconfig) if not cached
       - name: Build Linux kernel
@@ -73,7 +71,7 @@ jobs:
           # Create directories for a minimal filesystem
           mkdir -p initramfs/{bin,sbin,proc,sys}
           # Copy the Rust binary into /bin (adjust path/name as needed)
-          cp target/release/myapp initramfs/bin/myapp
+          cp target/debug/run_tests initramfs/bin/myapp
           # Add BusyBox for shell and utilities
           cp /usr/bin/busybox initramfs/bin/busybox
           ln -s busybox initramfs/bin/sh        # /bin/sh -> busybox (shell):contentReference[oaicite:8]{index=8}
