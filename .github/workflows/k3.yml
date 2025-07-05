@@ -99,7 +99,7 @@ jobs:
           mount -t sysfs sysfs /sys
           echo "Launching Rust application..."
 
-          for f in /bin/tests/*; do "$f"; done
+          for f in /bin/tests/*; do RUST_BACKTRACE=1 "$f"; done
 
           echo "Application exited, powering off..."
           /sbin/poweroff -f
