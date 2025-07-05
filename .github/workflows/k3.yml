@@ -77,7 +77,8 @@ jobs:
         run: |
           echo "Preparing initramfs..."
           # Create directories for a minimal filesystem
-          mkdir -p initramfs/{bin,sbin,proc,sys,tmp}
+          mkdir -p initramfs/{bin,sbin,proc,sys}
+          mkdir -m 1777 initramfs/tmp
           mkdir -p initramfs/bin/tests  # Directory for Rust test binaries
           # Copy the Rust binary into /bin (adjust path/name as needed)
           # cp target/x86_64-unknown-linux-musl/debug/run_tests initramfs/bin/myapp
@@ -97,6 +98,12 @@ jobs:
           #!/bin/sh
           mount -t proc proc /proc
           mount -t sysfs sysfs /sys
+
+
+          # ensure /tmp exists and is writable+sticky
+          mkdir -p /tmp
+          mount -t tmpfs -o mode=1777 tmpfs /tmp
+
           echo "Launching Rust application..."
 
           for f in /bin/tests/*; do RUST_BACKTRACE=1 "$f"; done
