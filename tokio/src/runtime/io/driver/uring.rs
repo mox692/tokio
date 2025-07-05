@@ -188,25 +188,26 @@ impl Handle {
             .register(&mut source, TOKEN_WAKEUP, Interest::READABLE.to_mio())
     }
 
-    pub(crate) fn get_uring(&self) -> &Mutex<UringContext> {
-        &self.uring_context
+    pub(crate) fn get_uring(&self, shard_id: usize) -> &Mutex<UringContext> {
+        let shard_id = shard_id % self.uring_context.len();
+        &self.uring_context[shard_id]
     }
 
-    fn set_uring_state(&self, state: State) {
-        self.uring_state.store(state.as_usize(), Ordering::Release);
+    fn set_uring_state(&self, shard_id: usize, state: State) {
+        self.uring_state[shard_id].store(state.as_usize(), Ordering::Release);
     }
 
     /// Check if the io_uring context is initialized. If not, it will try to initialize it.
-    pub(crate) fn check_and_init(&self) -> io::Result<bool> {
-        match State::from_usize(self.uring_state.load(Ordering::Acquire)) {
-            State::Uninitialized => match self.try_init() {
+    pub(crate) fn check_and_init(&self, shard_id: usize) -> io::Result<bool> {
+        match State::from_usize(self.uring_state[shard_id].load(Ordering::Acquire)) {
+            State::Uninitialized => match self.try_init(shard_id) {
                 Ok(()) => {
-                    self.set_uring_state(State::Initialized);
+                    self.set_uring_state(shard_id, State::Initialized);
                     Ok(true)
                 }
                 // If the system doesn't support io_uring, we set the state to Unsupported.
                 Err(e) if e.raw_os_error() == Some(libc::ENOSYS) => {
-                    self.set_uring_state(State::Unsupported);
+                    self.set_uring_state(shard_id, State::Unsupported);
                     Ok(false)
                 }
                 // For other system errors, we just return it.
@@ -218,8 +219,8 @@ impl Handle {
     }
 
     /// Initialize the io_uring context if it hasn't been initialized yet.
-    fn try_init(&self) -> io::Result<()> {
-        let mut guard = self.get_uring().lock();
+    fn try_init(&self, shard_id: usize) -> io::Result<()> {
+        let mut guard = self.get_uring(shard_id).lock();
         if guard.try_init()? {
             self.add_uring_source(guard.ring().as_raw_fd())?;
         }
@@ -237,15 +238,20 @@ impl Handle {
     ///
     /// Callers must ensure that parameters of the entry (such as buffer) are valid and will
     /// be valid for the entire duration of the operation, otherwise it may cause memory problems.
-    pub(crate) unsafe fn register_op(&self, entry: Entry, waker: Waker) -> io::Result<usize> {
+    pub(crate) unsafe fn register_op(
+        &self,
+        shard_id: usize,
+        entry: Entry,
+        waker: Waker,
+    ) -> io::Result<usize> {
         // Note: Maybe this check can be removed if upstream callers consistently use `check_and_init`.
-        if !self.check_and_init()? {
+        if !self.check_and_init(shard_id)? {
             return Err(io::Error::from_raw_os_error(libc::ENOSYS));
         }
 
         // Uring is initialized.
 
-        let mut guard = self.get_uring().lock();
+        let mut guard = self.get_uring(shard_id).lock();
         let ctx = &mut *guard;
         let index = ctx.ops.insert(Lifecycle::Waiting(waker));
         let entry = entry.user_data(index as u64);
@@ -273,8 +279,8 @@ impl Handle {
 
     // TODO: Remove this annotation when operations are actually supported
     #[allow(unused_variables, unreachable_code)]
-    pub(crate) fn cancel_op<T: Cancellable>(&self, index: usize, data: Option<T>) {
-        let mut guard = self.get_uring().lock();
+    pub(crate) fn cancel_op<T: Cancellable>(&self, shard_id: usize, index: usize, data: Option<T>) {
+        let mut guard = self.get_uring(shard_id).lock();
         let ctx = &mut *guard;
         let ops = &mut ctx.ops;
         let Some(lifecycle) = ops.get_mut(index) else {
