@@ -116,5 +116,5 @@ jobs:
           # Use QEMU to boot the kernel with the initramfs:contentReference[oaicite:10]{index=10}
           qemu-system-x86_64 -kernel linux-${{ env.KERNEL_VERSION }}/arch/x86/boot/bzImage \
                              -initrd initramfs.cpio.gz \
-                             -append "console=ttyS0" -nographic -no-reboot -m 1024
+                             -append "console=ttyS0 rootfstype=ramfs" -nographic -no-reboot -m 1024
           echo "QEMU run completed."
