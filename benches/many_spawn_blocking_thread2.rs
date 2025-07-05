@@ -144,26 +144,6 @@ fn many_spawn_blocking_thread(c: &mut Criterion) {
     });
 }
 
-fn many_spawn_blocking_thread2(c: &mut Criterion) {
-    let rt = rt();
-
-    c.bench_function("many_spawn_blocking_thread2", |b| {
-        b.iter(|| {
-            rt.block_on(async {
-                let mut v = vec![];
-                for _ in 0..5000 {
-                    let res = spawn_blocking(|| for _ in 0..10 {});
-                    v.push(res);
-                }
-
-                for j in v {
-                    j.await.unwrap();
-                }
-            })
-        });
-    });
-}
-
 fn async_read_std_file(c: &mut Criterion) {
     let rt = rt();
 
@@ -201,14 +181,46 @@ fn sync_read(c: &mut Criterion) {
     });
 }
 
-criterion_group!(
-    file,
-    // async_read_std_file,
-    // async_read_buf,
-    // many_spawn_blocking_thread,
-    many_spawn_blocking_thread2,
-    // async_read_codec,
-    // sync_read,
-    // spawn_blocking_many
-);
-criterion_main!(file);
+// criterion_group!(
+//     file,
+//     // async_read_std_file,
+//     // async_read_buf,
+//     // many_spawn_blocking_thread,
+//     many_spawn_blocking_thread2,
+//     // async_read_codec,
+//     // sync_read,
+//     // spawn_blocking_many
+// );
+// criterion_main!(file);
+
+use std::hint::black_box;
+use tango_bench::{benchmark_fn, tango_benchmarks, tango_main, IntoBenchmarks};
+
+pub fn many_spawn_blocking_thread2() {
+    let rt = rt();
+
+    // c.bench_function("many_spawn_blocking_thread2", |b| {
+    //     b.iter(|| {
+    rt.block_on(async {
+        let mut v = vec![];
+        for _ in 0..5000 {
+            let res = spawn_blocking(|| for _ in 0..10 {});
+            v.push(res);
+        }
+
+        for j in v {
+            j.await.unwrap();
+        }
+    })
+    //     });
+    // });
+}
+
+fn factorial_benchmarks() -> impl IntoBenchmarks {
+    [benchmark_fn("many_spawn_blocking_thread2", |b| {
+        b.iter(|| many_spawn_blocking_thread2())
+    })]
+}
+
+tango_benchmarks!(factorial_benchmarks());
+tango_main!();
