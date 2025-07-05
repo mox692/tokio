@@ -57,11 +57,16 @@ jobs:
           make -j$(nproc) # Compile the kernel (bzImage, modules, etc.):contentReference[oaicite:7]{index=7}
           echo "Kernel build complete."
 
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-hack
+
       # 7. Build the Rust user-space application (release mode)
       - name: Build Rust project
         run: |
           rustup target add x86_64-unknown-linux-musl
-          cargo build -p tokio --target x86_64-unknown-linux-musl --bin run_tests
+          RUSTFLAGS="--cfg tokio_uring" cargo hack test -p tokio --features full --target x86_64-unknown-linux-musl --test 'fs*'
 
           # echo "Building Rust user-space application..."
           # cargo build -p tokio --bin run_tests
@@ -73,8 +78,15 @@ jobs:
           echo "Preparing initramfs..."
           # Create directories for a minimal filesystem
           mkdir -p initramfs/{bin,sbin,proc,sys}
+          mkdir -p initramfs/bin/tests  # Directory for Rust test binaries
           # Copy the Rust binary into /bin (adjust path/name as needed)
-          cp target/x86_64-unknown-linux-musl/debug/run_tests initramfs/bin/myapp
+          # cp target/x86_64-unknown-linux-musl/debug/run_tests initramfs/bin/myapp
+          ls target/x86_64-unknown-linux-musl/debug/deps/ \
+            | grep -Ev '\.(o|d)$' \
+            | grep '^fs_.*' \
+            | sed 's|^|target/x86_64-unknown-linux-musl/debug/deps/|' \
+            | xargs -I{} cp {} initramfs/bin/tests
+
           # Add BusyBox for shell and utilities
           cp /usr/bin/busybox initramfs/bin/busybox
           ln -s busybox initramfs/bin/sh        # /bin/sh -> busybox (shell):contentReference[oaicite:8]{index=8}
@@ -86,7 +98,9 @@ jobs:
           mount -t proc proc /proc
           mount -t sysfs sysfs /sys
           echo "Launching Rust application..."
-          /bin/myapp
+
+          for f in /bin/tests/*; do "$f"; done
+
           echo "Application exited, powering off..."
           /sbin/poweroff -f
           EOL
