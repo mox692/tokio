@@ -183,3 +183,7 @@ allowed_external_types = [
 
 [lints]
 workspace = true
+
+[[bin]]
+name = "run_tests"
+path = "src/bin/run_tests.rs"
