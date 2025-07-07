@@ -27,12 +27,6 @@ jobs:
             build-essential libncurses-dev bison flex libssl-dev libelf-dev dwarves \
             qemu-system-x86 busybox-static cpio xz-utils curl
 
-      # - name: Get latest kernel version
-      #   id: get-kernel
-      #   run: |
-      #     KERNEL_VERSION=$(curl -s https://www.kernel.org/releases.json | jq -r '.latest_stable.version')
-      #     echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_ENV
-
       - name: Cache built kernel
         id: kernel-cache
         uses: actions/cache@v4
