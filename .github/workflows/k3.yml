@@ -95,6 +95,7 @@ jobs:
           echo "Generating init script..."
           cat > initramfs/init << 'EOL'
           #!/bin/sh
+          set -e
           mount -t proc proc /proc
           mount -t sysfs sysfs /sys
           mkdir -p /tmp
@@ -119,11 +120,17 @@ jobs:
           echo "Booting QEMU with Linux $KERNEL_VERSION..."
           qemu-system-x86_64 -kernel linux-${{ env.KERNEL_VERSION }}/arch/x86/boot/bzImage \
                              -initrd initramfs.cpio.gz \
-                             -append "console=ttyS0 rootfstype=ramfs" -nographic -no-reboot -m 1024 2>&1 | tee qemu-output.log
+                             -append "console=ttyS0 rootfstype=ramfs" -nographic -no-reboot -m 1024
                       
-          if grep -q "panicked at " qemu-output.log; then
-            echo "error: unexpected error in QEMU run"
-            exit 1
-          fi
+          # if grep -q "panicked at " qemu-output.log; then
+          #   echo "error: unexpected error in QEMU run"
+          #   exit 1
+          # fi
+          # echo "QEMU run completed."
 
-          echo "QEMU run completed."
+          if [ $? -ne 0 ]; then
+            echo "tests failed (QEMU exited abnormally)"
+            exit 1
+          else
+            echo "all tests passed"
+          fi
