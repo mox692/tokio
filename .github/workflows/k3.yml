@@ -120,7 +120,7 @@ jobs:
           echo "Booting QEMU with Linux $KERNEL_VERSION..."
           qemu-system-x86_64 -kernel linux-${{ env.KERNEL_VERSION }}/arch/x86/boot/bzImage \
                              -initrd initramfs.cpio.gz \
-                             -append "console=ttyS0 rootfstype=ramfs" -nographic -no-reboot -m 1024
+                             -append "console=ttyS0 rootfstype=ramfs panic=1" -nographic -no-reboot -m 1024
                       
           # if grep -q "panicked at " qemu-output.log; then
           #   echo "error: unexpected error in QEMU run"
