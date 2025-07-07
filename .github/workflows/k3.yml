@@ -58,51 +58,57 @@ jobs:
           rustup target add x86_64-unknown-linux-musl
           RUSTFLAGS="--cfg tokio_uring" cargo hack test -p tokio --features full --target x86_64-unknown-linux-musl --test 'fs*'
 
-      - name: Prepare initramfs with user application
+      - name: Create initramfs directory structure
         run: |
-          echo "Preparing initramfs..."
-          # Create directories for a minimal filesystem
+          echo "Creating initramfs directories..."
           mkdir -p initramfs/{bin,sbin,proc,sys}
           mkdir -m 1777 initramfs/tmp
-          mkdir -p initramfs/bin/tests  # Directory for Rust test binaries
+          mkdir -p initramfs/bin/tests
+
+      - name: Copy Rust test binaries into initramfs
+        run: |
+          echo "Copying Rust test binaries..."
           ls target/x86_64-unknown-linux-musl/debug/deps/ \
             | grep -Ev '\.(o|d)$' \
             | grep '^fs_.*' \
             | sed 's|^|target/x86_64-unknown-linux-musl/debug/deps/|' \
             | xargs -I{} cp {} initramfs/bin/tests
 
-          # Add BusyBox for shell and utilities
+      - name: Add BusyBox and create symlinks
+        run: |
+          echo "Adding BusyBox and symlinks..."
           cp /usr/bin/busybox initramfs/bin/busybox
-          ln -s busybox initramfs/bin/sh        # /bin/sh -> busybox (shell):contentReference[oaicite:8]{index=8}
-          ln -s busybox initramfs/bin/mount     # /bin/mount -> busybox
-          ln -s ../bin/busybox initramfs/sbin/poweroff  # /sbin/poweroff -> busybox
-          # Create /init script to run the app then power off
+          ln -s busybox initramfs/bin/sh
+          ln -s busybox initramfs/bin/mount
+          ln -s ../bin/busybox initramfs/sbin/poweroff
+
+      - name: Generate init script
+        run: |
+          echo "Generating init script..."
           cat > initramfs/init << 'EOL'
           #!/bin/sh
           mount -t proc proc /proc
           mount -t sysfs sysfs /sys
-
-
-          # ensure /tmp exists and is writable+sticky
           mkdir -p /tmp
           mount -t tmpfs -o mode=1777 tmpfs /tmp
 
           echo "Launching Rust application..."
-
           for f in /bin/tests/*; do RUST_BACKTRACE=1 "$f"; done
 
           echo "Application exited, powering off..."
           /sbin/poweroff -f
           EOL
           chmod +x initramfs/init
-          # Pack the initramfs into a compressed CPIO archive:contentReference[oaicite:9]{index=9}
+
+      - name: Pack initramfs into CPIO archive
+        run: |
+          echo "Packing initramfs..."
           (cd initramfs && find . -print0 | cpio --null -ov --format=newc | gzip -9 > ../initramfs.cpio.gz)
           echo "Initramfs prepared."
 
       - name: Run QEMU with kernel and initramfs
         run: |
           echo "Booting QEMU with Linux $KERNEL_VERSION..."
-          # Use QEMU to boot the kernel with the initramfs:contentReference[oaicite:10]{index=10}
           qemu-system-x86_64 -kernel linux-${{ env.KERNEL_VERSION }}/arch/x86/boot/bzImage \
                              -initrd initramfs.cpio.gz \
                              -append "console=ttyS0 rootfstype=ramfs" -nographic -no-reboot -m 1024
