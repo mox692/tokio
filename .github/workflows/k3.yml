@@ -4,11 +4,20 @@ on:
   push:
     branches:
       - master
-  pull_request:
+  # pull_request:
+  workflow_call:
+    inputs:
+      kernel_version:
+        description: 'Version of the Linux kernel to build'
+        required: true
+        type: string
+
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      KERNEL_VERSION: ${{ inputs.kernel_version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -19,11 +28,11 @@ jobs:
             build-essential libncurses-dev bison flex libssl-dev libelf-dev dwarves \
             qemu-system-x86 busybox-static cpio xz-utils curl
 
-      - name: Get latest kernel version
-        id: get-kernel
-        run: |
-          KERNEL_VERSION=$(curl -s https://www.kernel.org/releases.json | jq -r '.latest_stable.version')
-          echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_ENV
+      # - name: Get latest kernel version
+      #   id: get-kernel
+      #   run: |
+      #     KERNEL_VERSION=$(curl -s https://www.kernel.org/releases.json | jq -r '.latest_stable.version')
+      #     echo "KERNEL_VERSION=$KERNEL_VERSION" >> $GITHUB_ENV
 
       - name: Cache built kernel
         id: kernel-cache
