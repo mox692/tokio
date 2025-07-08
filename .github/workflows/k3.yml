@@ -50,6 +50,10 @@ jobs:
             cargo hack test -p tokio --features full \
             --target x86_64-unknown-linux-musl --test 'fs*'
 
+          RUSTFLAGS="--cfg tokio_uring" \
+            cargo hack test -p tokio --features full \
+            --target x86_64-unknown-linux-musl --lib
+
       - name: Prepare initramfs + tests
         run: |
           set -e
@@ -63,8 +67,14 @@ jobs:
           # done
 
           # copy only executable test binaries, skip *.d files
-          for bin in target/x86_64-unknown-linux-musl/debug/deps/fs_*; do
-            if [[ ! "$bin" =~ \.d$ ]]; then
+          # for bin in target/x86_64-unknown-linux-musl/debug/deps/fs_*; do
+          #   if [[ ! "$bin" =~ \.d$ ]]; then
+          #     cp "$bin" initramfs/bin/tests
+          #   fi
+          # done
+
+          for bin in target/x86_64-unknown-linux-musl/debug/deps/{fs_*,tokio-*}; do
+            if [ -f "$bin" ] && [ -x "$bin" ]; then
               cp "$bin" initramfs/bin/tests
             fi
           done
