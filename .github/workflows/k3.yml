@@ -20,8 +20,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            build-essential libncurses-dev bison flex libssl-dev libelf-dev dwarves \
-            qemu-system-x86 busybox-static cpio xz-utils curl wget
+            build-essential bison flex libssl-dev libelf-dev \
+            qemu-system-x86 busybox-static cpio xz-utils wget
 
       - name: Cache Linux source
         id: cache-kernel
@@ -55,7 +55,7 @@ jobs:
           set -e
           rm -rf initramfs
           mkdir -p initramfs/{bin,bin/tests,sbin,proc,sys,tmp}
-          chmod 1777 initramfs/tmp
+          # chmod 1777 initramfs/tmp
 
           # copy Rust test binaries
           # for bin in target/x86_64-unknown-linux-musl/debug/deps/fs_*; do
