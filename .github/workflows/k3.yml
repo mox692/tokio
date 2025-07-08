@@ -81,13 +81,15 @@ jobs:
 
           # add BusyBox & symlinks
           cp /usr/bin/busybox initramfs/bin/
-          for cmd in sh mount; do ln -sf busybox initramfs/bin/$cmd; done
+          for cmd in sh mount uname true sleep; do ln -sf busybox initramfs/bin/$cmd; done
           ln -sf ../bin/busybox initramfs/sbin/poweroff
 
           # generate init script
           cat > initramfs/init << 'EOF'
           #!/bin/sh
           set -e
+          export PATH=/bin:/sbin:/bin/tests
+
           mkdir -p /dev && mknod /dev/port c 1 4
           mount -t proc proc /proc
           mount -t sysfs sysfs /sys
