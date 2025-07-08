@@ -90,7 +90,14 @@ jobs:
           set -e
           export PATH=/bin:/sbin:/bin/tests
 
-          mkdir -p /dev && mknod /dev/port c 1 4
+          mkdir -p /dev
+
+          # TODO: we don't need this
+          mknod /dev/port c 1 4
+
+          mknod /dev/null c 1 3
+          mknod /dev/zero c 1 5
+          mknod /dev/tty c 5 0
           mount -t proc proc /proc
           mount -t sysfs sysfs /sys
           mkdir -p /tmp && mount -t tmpfs -o mode=1777 tmpfs /tmp
