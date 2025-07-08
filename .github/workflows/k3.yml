@@ -64,7 +64,7 @@ jobs:
 
           # copy only executable test binaries, skip *.d files
           for bin in target/x86_64-unknown-linux-musl/debug/deps/fs_*; do
-            if [[ -f "$bin" && ! "$bin" =~ \.d$ && -x "$bin" ]]; then
+            if [[ ! "$bin" =~ \.d$ ]]; then
               cp "$bin" initramfs/bin/tests
             fi
           done
