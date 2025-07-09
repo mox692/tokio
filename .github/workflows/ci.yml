@@ -1243,7 +1243,7 @@ jobs:
           KERNEL_VERSION=$(curl -s https://www.kernel.org/releases.json | jq -r '.latest_stable.version')
           echo "kernel_version=$KERNEL_VERSION" >> $GITHUB_OUTPUT
 
-  test-io-uring:
+  test-io-uring-on-specific-kernel-versions:
     name: Test io_uring on Linux ${{ matrix.kernel_version }}
     needs: [get-latest-kernel-version, basics]
     strategy:
@@ -1253,6 +1253,6 @@ jobs:
           - ${{ needs.get-latest-kernel-version.outputs.kernel_version }}
           # A kernel version that doesn't support io_uring
           - '4.19.325'
-    uses: ./.github/workflows/k3.yml
+    uses: ./.github/workflows/kernel-version-test.yml
     with:
       kernel_version: ${{ matrix.kernel_version }}
