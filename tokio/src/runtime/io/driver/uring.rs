@@ -15,7 +15,7 @@ const DEFAULT_RING_SIZE: u32 = 256;
 
 #[repr(usize)]
 #[derive(Debug, PartialEq, Eq)]
-enum State {
+pub(crate) enum State {
     Uninitialized = 0,
     Initialized = 1,
     Unsupported = 2,
@@ -265,6 +265,11 @@ impl Handle {
             submit_or_remove(ctx)?;
         }
 
+        // Ensure that the completion queue is not full before submitting the entry.
+        while ctx.ring_mut().completion().is_full() {
+            ctx.dispatch_completions();
+        }
+
         // Note: For now, we submit the entry immediately without utilizing batching.
         submit_or_remove(ctx)?;
 
@@ -289,7 +294,10 @@ impl Handle {
         match mem::replace(lifecycle, Lifecycle::Cancelled(cancel_data)) {
             Lifecycle::Submitted | Lifecycle::Waiting(_) => (),
             // The driver saw the completion, but it was never polled.
-            Lifecycle::Completed(_) => (),
+            Lifecycle::Completed(_) => {
+                // We can safely remove the entry from the slab, as it has already been completed.
+                ops.remove(index);
+            }
             prev => panic!("Unexpected state: {:?}", prev),
         };
     }
