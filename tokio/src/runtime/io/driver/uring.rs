@@ -89,8 +89,6 @@ impl UringContext {
                 Some(Lifecycle::Waiting(waker)) => {
                     waker.wake_by_ref();
                     *ops.get_mut(idx).unwrap() = Lifecycle::Completed(cqe);
-
-                    panic!("p");
                 }
                 Some(Lifecycle::Cancelled(_)) => {
                     // Op future was cancelled, so we discard the result.

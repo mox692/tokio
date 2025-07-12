@@ -471,6 +471,7 @@ impl OpenOptions {
                 let driver_handle = handle.inner.driver().io();
 
                 if driver_handle.check_and_init()? {
+                    eprintln!("uring!!!!!!!!!!!");
                     Op::open(path.as_ref(), opts)?.await
                 } else {
                     let opts = opts.clone().into();
@@ -484,6 +485,7 @@ impl OpenOptions {
         let path = path.as_ref().to_owned();
         let opts = opts.clone();
 
+        eprintln!("std!!!!!!!!!!!");
         let std = asyncify(move || opts.open(path)).await?;
         Ok(File::from_std(std))
     }
