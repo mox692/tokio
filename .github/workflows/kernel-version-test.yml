@@ -1,4 +1,4 @@
-name: Kernel CIs
+name: Kernel Version Test
 
 on:
   workflow_call:
@@ -52,11 +52,6 @@ jobs:
             cargo hack test -p tokio --features full \
             --target x86_64-unknown-linux-musl --test 'fs*' --lib
 
-          # # Build a library test binary
-          # RUSTFLAGS="--cfg tokio_uring" \
-          #   cargo hack test -p tokio --features full \
-          #   --target x86_64-unknown-linux-musl --lib
-
       - name: Prepare initramfs + tests binaries
         run: |
           set -e
@@ -105,6 +100,7 @@ jobs:
             -append "console=ttyS0 rootfstype=ramfs panic=1" \
             -nographic -no-reboot -m 1024 -action panic=exit-failure 2>&1 | tee qemu-output.log
 
+          # Check the output for test results
           if grep -q "test result: FAILED" qemu-output.log; then
             echo "tests failed (QEMU exited abnormally)"
             exit 1
