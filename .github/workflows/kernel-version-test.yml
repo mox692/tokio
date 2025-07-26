@@ -50,12 +50,12 @@ jobs:
           # Build test binaries in the `tokio/tests` directory
           RUSTFLAGS="--cfg tokio_uring" \
             cargo hack test -p tokio --features full \
-            --target x86_64-unknown-linux-musl --test 'fs*'
+            --target x86_64-unknown-linux-musl --test 'fs*' --lib
 
-          # Build a library test binary
-          RUSTFLAGS="--cfg tokio_uring" \
-            cargo hack test -p tokio --features full \
-            --target x86_64-unknown-linux-musl --lib
+          # # Build a library test binary
+          # RUSTFLAGS="--cfg tokio_uring" \
+          #   cargo hack test -p tokio --features full \
+          #   --target x86_64-unknown-linux-musl --lib
 
       - name: Prepare initramfs + tests binaries
         run: |
