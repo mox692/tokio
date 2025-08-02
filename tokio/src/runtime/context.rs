@@ -124,7 +124,13 @@ tokio_thread_local! {
 #[cfg(any(feature = "macros", all(feature = "sync", feature = "rt")))]
 pub(crate) fn thread_rng_n(n: u32) -> u32 {
     CONTEXT.with(|ctx| {
-        let mut rng = ctx.rng.get().unwrap_or_else(FastRand::new);
+        let mut rng = ctx.rng.get().unwrap_or_else(|| {
+            println!(
+                "[context.rs] thread_rng_n: RNG not initialized for thread {:?}!",
+                std::thread::current().id()
+            );
+            FastRand::new()
+        });
         let ret = rng.fastrand_n(n);
         ctx.rng.set(Some(rng));
         ret

@@ -654,28 +654,68 @@ mod unstable {
     #[test]
     #[cfg(all(feature = "rt-multi-thread", not(target_os = "wasi")))]
     fn deterministic_select_multi_thread() {
+        println!("");
+        let (tx, rx) = std::sync::mpsc::channel();
+
         let seed = b"bytes used to generate seed";
         let rt1 = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(1)
+            .on_thread_park(move || tx.send(()).unwrap())
             .rng_seed(RngSeed::from_bytes(seed))
             .build()
             .unwrap();
+        println!("[test] Starting RT1 block_on");
+        rx.recv().unwrap();
         let rt1_values = rt1.block_on(async {
-            tokio::spawn(async { (select_0_to_9().await, select_0_to_9().await) })
-                .await
-                .unwrap()
+            println!(
+                "[test] RT1: In block_on, thread {:?}",
+                std::thread::current().id()
+            );
+            tokio::spawn(async {
+                println!(
+                    "[test] RT1: In spawn, thread {:?}",
+                    std::thread::current().id()
+                );
+                let v1 = select_0_to_9().await;
+                println!("[test] RT1: First select returned {}", v1);
+                let v2 = select_0_to_9().await;
+                println!("[test] RT1: Second select returned {}", v2);
+                (v1, v2)
+            })
+            .await
+            .unwrap()
         });
+        println!("[test] RT1 values: {:?}", rt1_values);
 
+        let (tx, rx) = std::sync::mpsc::channel();
         let rt2 = tokio::runtime::Builder::new_multi_thread()
             .worker_threads(1)
+            .on_thread_park(move || tx.send(()).unwrap())
             .rng_seed(RngSeed::from_bytes(seed))
             .build()
             .unwrap();
+        println!("[test] Starting RT2 block_on");
+        rx.recv().unwrap();
         let rt2_values = rt2.block_on(async {
-            tokio::spawn(async { (select_0_to_9().await, select_0_to_9().await) })
-                .await
-                .unwrap()
+            println!(
+                "[test] RT2: In block_on, thread {:?}",
+                std::thread::current().id()
+            );
+            tokio::spawn(async {
+                println!(
+                    "[test] RT2: In spawn, thread {:?}",
+                    std::thread::current().id()
+                );
+                let v1 = select_0_to_9().await;
+                println!("[test] RT2: First select returned {}", v1);
+                let v2 = select_0_to_9().await;
+                println!("[test] RT2: Second select returned {}", v2);
+                (v1, v2)
+            })
+            .await
+            .unwrap()
         });
+        println!("[test] RT2 values: {:?}", rt2_values);
 
         assert_eq!(rt1_values, rt2_values);
     }
