@@ -39,6 +39,22 @@ jobs:
         run: cargo test --lib --release --features full -- --nocapture sync::tests
         working-directory: tokio
 
+  loom-util-sync:
+    name: loom tokio-util::sync
+    # base_ref is null when it's not a pull request
+    if: github.repository_owner == 'tokio-rs' && (contains(github.event.pull_request.labels.*.name, 'R-loom-sync') || (github.base_ref == null))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust ${{ env.rust_stable }}
+        uses: dtolnay/rust-toolchain@master
+        with:
+            toolchain: ${{ env.rust_stable }}
+      - uses: Swatinem/rust-cache@v2
+      - name: run tests
+        run: cargo test --lib --release --features default -- --nocapture sync::tests
+        working-directory: tokio-util
+
   loom-time-driver:
     name: loom time driver
     # base_ref is null when it's not a pull request
