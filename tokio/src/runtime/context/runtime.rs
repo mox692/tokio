@@ -47,10 +47,17 @@ where
 
             // Generate a new seed
             let rng_seed = handle.seed_generator().next_seed();
+            let (s, r) = rng_seed.debug_values();
+            println!(
+                "[runtime.rs] Generated seed for thread {:?}: s={}, r={}",
+                std::thread::current().id(),
+                s,
+                r
+            );
 
             // Swap the RNG seed
             let mut rng = c.rng.get().unwrap_or_else(FastRand::new);
-            let old_seed = rng.replace_seed(rng_seed);
+            let old_seed = rng.replace_seed(rng_seed.clone());
             c.rng.set(Some(rng));
 
             Some(EnterRuntimeGuard {

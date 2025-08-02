@@ -35,7 +35,10 @@ impl RngSeedGenerator {
         let s = rng.fastrand();
         let r = rng.fastrand();
 
-        RngSeed::from_pair(s, r)
+        let seed = RngSeed::from_pair(s, r);
+        println!("[rt.rs] RngSeedGenerator::next_seed() called from thread {:?}, generated seed: s={}, r={}", 
+                 std::thread::current().id(), s, r);
+        seed
     }
 
     /// Directly creates a generator using the next seed.

@@ -37,6 +37,11 @@ impl RngSeed {
         Self::from_u64(crate::loom::rand::seed())
     }
 
+    /// Debug helper to get internal values
+    pub(crate) fn debug_values(&self) -> (u32, u32) {
+        (self.s, self.r)
+    }
+
     fn from_u64(seed: u64) -> Self {
         let one = (seed >> 32) as u32;
         let mut two = seed as u32;
