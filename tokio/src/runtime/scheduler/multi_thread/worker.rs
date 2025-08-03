@@ -804,11 +804,14 @@ impl Context {
     fn park_internal(&self, mut core: Box<Core>, duration: Option<Duration>) -> Box<Core> {
         self.assert_lifo_enabled_is_correct(&core);
 
+        // MEMO: new added, read!
         #[cfg(feature = "time")]
         let (duration, maybe_advance_duration) = {
             let handle = &self.worker.handle;
 
             util::time::remove_cancelled_timers(&mut core.wheel, &core.timer_cancel_rx);
+            // MEMO: injection queueにあるtimerをlocal wheelに登録する
+            // cancelは別のスレッドから受信されうるので、tx(cancelをこのworkerにt伝えるもの)と一緒に保存しておく
             let should_yield = util::time::insert_inject_timers(
                 &mut core.wheel,
                 core.timer_cancel_tx.clone(),
@@ -839,7 +842,11 @@ impl Context {
         *self.core.borrow_mut() = Some(core);
 
         // Park thread
+        // MEMO: previously, we only used `None` or Some(Duration::ZERO) here, but now we
+        // consider the local wheel for the timeout.
         if let Some(timeout) = duration {
+            // MEMO: note that, even if we're utilizing the local wheel, we still
+            // need to call time driver for fetching the io-events.
             park.park_timeout(&self.worker.handle.driver, timeout);
         } else {
             park.park(&self.worker.handle.driver);
@@ -850,6 +857,7 @@ impl Context {
         // Remove `core` from context
         core = self.core.borrow_mut().take().expect("core missing");
 
+        // MEMO: new added, read!
         #[cfg(feature = "time")]
         {
             let handle = &self.worker.handle;
@@ -1250,7 +1258,9 @@ impl Handle {
         }
 
         pub(crate) fn take_remote_timers(&self) -> Vec<EntryHandle> {
+            // MEMO: can we avoid the lock aquiring here?
             let mut synced = self.shared.synced.lock();
+            // MEMO: review comment: nit: can we avoid allocations here?
             std::mem::take(&mut synced.inject_timers)
         }
     }

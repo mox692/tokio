@@ -3,6 +3,7 @@ cfg_rt_and_time! {
         use crate::runtime::{scheduler::driver};
         use crate::runtime::time::{EntryHandle, Wheel};
         use std::time::Duration;
+        // MEMO: review comment: can we use loom's mpsc?
         use std::sync::mpsc;
 
         pub(crate) fn insert_inject_timers(
@@ -29,10 +30,14 @@ cfg_rt_and_time! {
             wheel: &mut Wheel,
             rx: &mpsc::Receiver<EntryHandle>,
         ) {
+            // MEMO: review comment: what's the implication of getting Err here?
+            // is it ok to ignore the disconnected channel?
             while let Ok(hdl) = rx.try_recv() {
+                // MEMO: review comment: unsafe comment is required
                 unsafe {
                     let is_registered = hdl.is_registered();
                     let is_pending = hdl.is_pending();
+                    // MEMO: review comment: question: why is !is_pending?
                     if is_registered && !is_pending {
                         wheel.remove(hdl);
                     }

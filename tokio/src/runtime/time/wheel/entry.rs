@@ -96,6 +96,9 @@ impl RawHandle {
     }
 }
 
+/// MEMO: shared handle to the entry in the timer wheel.
+/// this could be accessed from multiple threads, e.g., original worker threads
+/// mainly for waking up the timer, and threads that cancel the entry, etc.
 #[derive(Debug, Clone)]
 pub(crate) struct Handle {
     /// A pointer to the entry in the timer wheel.
@@ -206,6 +209,8 @@ impl Handle {
                 tx.send(self.clone())
                     .expect("cancel sender should not be closed");
             }
+
+            // MEMO: review comment: is it ok not to update the inner state?
         }
     }
 

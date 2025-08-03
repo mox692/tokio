@@ -53,9 +53,11 @@ impl Timer {
         self.entry.as_ref().is_some_and(|entry| entry.is_woken_up())
     }
 
+    // MEMO: insert the timer into the wheel.
     fn register(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
         let this = self.get_mut();
 
+        // MEMO: use thread local storage
         with_current_wheel(&this.sched_handle, |maybe_wheel| {
             let deadline = deadline_to_tick(&this.sched_handle, this.deadline);
             let hdl = EntryHandle::new(deadline, cx.waker());
@@ -67,6 +69,7 @@ impl Timer {
                     Poll::Ready(())
                 }
             } else {
+                // MEMO: if we don't get a core (i,e, outside the workers), then call push_from_remote.
                 this.entry = Some(hdl.clone());
                 push_from_remote(&this.sched_handle, hdl);
                 Poll::Pending
@@ -81,6 +84,7 @@ impl Timer {
                 entry.register_waker(cx.waker());
                 Poll::Pending
             }
+            // MEMO: init at first poll
             None => self.register(cx),
         }
     }
