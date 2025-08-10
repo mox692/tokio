@@ -157,7 +157,9 @@ wasm-bindgen-test = "0.3.0"
 mio-aio = { version = "1", features = ["tokio"] }
 
 [target.'cfg(loom)'.dev-dependencies]
-loom = { version = "0.7", features = ["futures", "checkpoint"] }
+# loom = { version = "0.7", features = ["futures", "checkpoint"] }
+loom = { git = "https://github.com/ShoyuVanilla/loom.git", branch = "try-lock-no-block", features = ["futures", "checkpoint"] }
+
 
 [target.'cfg(all(tokio_unstable, target_has_atomic = "64"))'.dev-dependencies]
 tracing-mock = "= 0.1.0-beta.1"
