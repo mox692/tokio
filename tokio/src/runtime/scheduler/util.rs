@@ -1,25 +1,25 @@
 cfg_rt_and_time! {
     pub(crate) mod time {
         use crate::runtime::{scheduler::driver};
-        use crate::runtime::time::{EntryHandle, Wheel};
+        use crate::runtime::time::{EntryHandle, Wheel, cancellation_queue::{Sender, Receiver}};
         use std::time::Duration;
-        // MEMO: review comment: can we use loom's mpsc?
-        use std::sync::mpsc;
 
         pub(crate) fn insert_inject_timers(
             wheel: &mut Wheel,
-            tx: mpsc::Sender<EntryHandle>,
+            tx: &Sender,
             inject: Vec<EntryHandle>,
         ) -> bool {
+            use crate::runtime::time::Insert;
             let mut fired = false;
             // process injected timers
             for hdl in inject {
-                unsafe {
-                    if !wheel.insert(hdl.clone(), tx.clone()) {
-                        // timer is already elapsed, wake it up
+                match unsafe { wheel.insert(hdl.clone(), tx.clone()) } {
+                    Insert::Success => {}
+                    Insert::Elapsed => {
                         hdl.wake_unregistered();
                         fired = true;
                     }
+                    Insert::Cancelling => {}
                 }
             }
 
@@ -28,12 +28,11 @@ cfg_rt_and_time! {
 
         pub(crate) fn remove_cancelled_timers(
             wheel: &mut Wheel,
-            rx: &mpsc::Receiver<EntryHandle>,
+            rx: &mut Receiver,
         ) {
-            // MEMO: review comment: what's the implication of getting Err here?
-            // is it ok to ignore the disconnected channel?
-            while let Ok(hdl) = rx.try_recv() {
-                // MEMO: review comment: unsafe comment is required
+            let iter = unsafe { rx.recv_all() };
+            for hdl in iter {
+                // MEMO: review comment: unsafe comment required
                 unsafe {
                     let is_registered = hdl.is_registered();
                     let is_pending = hdl.is_pending();
@@ -148,8 +147,8 @@ cfg_rt_and_time! {
 
         pub(crate) fn shutdown_local_timers(
             wheel: &mut Wheel,
-            tx: mpsc::Sender<EntryHandle>,
-            rx: &mpsc::Receiver<EntryHandle>,
+            tx: &Sender,
+            rx: &mut Receiver,
             inject: Vec<EntryHandle>,
             drv_hdl: &driver::Handle,
         ) {

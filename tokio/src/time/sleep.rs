@@ -349,13 +349,8 @@ impl Sleep {
     ///
     /// [`Pin::as_mut`]: fn@std::pin::Pin::as_mut
     pub fn reset(self: Pin<&mut Self>, deadline: Instant) {
-        self.reset_inner(deadline);
-    }
-
-    fn reset_inner(self: Pin<&mut Self>, deadline: Instant) {
         use crate::runtime::scheduler;
         let mut me = self.project();
-        me.entry.as_mut().cancel();
         me.entry
             .set(Timer::new(scheduler::Handle::current(), deadline));
 
