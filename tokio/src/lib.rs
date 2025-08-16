@@ -462,6 +462,7 @@ compile_error! {
 
 #[cfg(all(
     not(tokio_unstable),
+    not(doc),
     target_family = "wasm",
     any(
         feature = "fs",
