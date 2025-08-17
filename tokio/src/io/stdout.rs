@@ -23,7 +23,7 @@ cfg_io_std! {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```ignore-wasm
     /// use tokio::io::{self, AsyncWriteExt};
     ///
     /// #[tokio::main]
@@ -36,7 +36,7 @@ cfg_io_std! {
     ///
     /// The following is an example of using `stdio` with loop.
     ///
-    /// ```
+    /// ```ignore-wasm
     /// use tokio::io::{self, AsyncWriteExt};
     ///
     /// #[tokio::main]
@@ -79,7 +79,7 @@ cfg_io_std! {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```ignore-wasm
     /// use tokio::io::{self, AsyncWriteExt};
     ///
     /// #[tokio::main]
@@ -92,7 +92,7 @@ cfg_io_std! {
     ///
     /// The following is an example of using `stdio` with loop.
     ///
-    /// ```
+    /// ```ignore-wasm
     /// use tokio::io::{self, AsyncWriteExt};
     ///
     /// #[tokio::main]

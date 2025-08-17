@@ -39,7 +39,7 @@ cfg_net! {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::net::TcpStream;
     /// use tokio::io::AsyncWriteExt;
     /// use std::error::Error;
@@ -219,7 +219,7 @@ impl TcpStream {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```ignore-wasm
     /// use std::error::Error;
     /// use std::io::Read;
     /// use tokio::net::TcpListener;
@@ -284,7 +284,7 @@ impl TcpStream {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::net::TcpStream;
     ///
     /// # async fn dox() -> Result<(), Box<dyn std::error::Error>> {
@@ -307,7 +307,7 @@ impl TcpStream {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::net::TcpStream;
     ///
     /// # async fn dox() -> Result<(), Box<dyn std::error::Error>> {
@@ -344,7 +344,7 @@ impl TcpStream {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::io::{self, ReadBuf};
     /// use tokio::net::TcpStream;
     ///
@@ -413,7 +413,7 @@ impl TcpStream {
     /// Concurrently read and write to the stream on the same task without
     /// splitting.
     ///
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::io::Interest;
     /// use tokio::net::TcpStream;
     /// use std::error::Error;
@@ -481,7 +481,7 @@ impl TcpStream {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::net::TcpStream;
     /// use std::error::Error;
     /// use std::io;
@@ -581,7 +581,7 @@ impl TcpStream {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::net::TcpStream;
     /// use std::error::Error;
     /// use std::io;
@@ -654,7 +654,7 @@ impl TcpStream {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::net::TcpStream;
     /// use std::error::Error;
     /// use std::io::{self, IoSliceMut};
@@ -727,7 +727,7 @@ impl TcpStream {
         ///
         /// # Examples
         ///
-        /// ```no_run
+        /// ```no_run,ignore-wasm
         /// use tokio::net::TcpStream;
         /// use std::error::Error;
         /// use std::io;
@@ -797,7 +797,7 @@ impl TcpStream {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::net::TcpStream;
     /// use std::error::Error;
     /// use std::io;
@@ -883,7 +883,7 @@ impl TcpStream {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::net::TcpStream;
     /// use std::error::Error;
     /// use std::io;
@@ -943,7 +943,7 @@ impl TcpStream {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::net::TcpStream;
     /// use std::error::Error;
     /// use std::io;
@@ -1072,7 +1072,7 @@ impl TcpStream {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::net::TcpStream;
     /// use tokio::io::AsyncReadExt;
     /// use std::error::Error;
@@ -1132,7 +1132,7 @@ impl TcpStream {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::net::TcpStream;
     ///
     /// # async fn dox() -> Result<(), Box<dyn std::error::Error>> {
@@ -1156,7 +1156,7 @@ impl TcpStream {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::net::TcpStream;
     ///
     /// # async fn dox() -> Result<(), Box<dyn std::error::Error>> {
@@ -1303,7 +1303,7 @@ impl TcpStream {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::net::TcpStream;
     ///
     /// # async fn dox() -> Result<(), Box<dyn std::error::Error>> {
@@ -1324,7 +1324,7 @@ impl TcpStream {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::net::TcpStream;
     ///
     /// # async fn dox() -> Result<(), Box<dyn std::error::Error>> {

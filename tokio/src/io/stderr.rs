@@ -24,7 +24,7 @@ cfg_io_std! {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```ignore-wasm
     /// use tokio::io::{self, AsyncWriteExt};
     ///
     /// #[tokio::main]
@@ -55,7 +55,7 @@ cfg_io_std! {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```ignore-wasm
     /// use tokio::io::{self, AsyncWriteExt};
     ///
     /// #[tokio::main]

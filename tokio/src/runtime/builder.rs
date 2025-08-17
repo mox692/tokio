@@ -1525,7 +1525,7 @@ cfg_io_driver! {
         ///
         /// # Examples
         ///
-        /// ```
+        /// ```ignore-wasm
         /// use tokio::runtime;
         ///
         /// let rt = runtime::Builder::new_multi_thread()
