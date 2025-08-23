@@ -554,7 +554,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --workspace --all-features --target ${{ matrix.target }}
         env:
-          RUSTFLAGS: --cfg tokio_unstable -Dwarnings
+          RUSTFLAGS: --cfg tokio_unstable -Dwarnings --cfg=io_uring_skip_arch_check
 
   cross-check-tier3:
     name: cross-check-tier3
@@ -626,7 +626,7 @@ jobs:
           cargo test --doc -p tokio --all-features --target ${{ matrix.target }}
         env:
           RUST_TEST_THREADS: 1
-          RUSTFLAGS: --cfg tokio_unstable -Dwarnings --cfg tokio_no_tuning_tests ${{ matrix.rustflags }}
+          RUSTFLAGS: --cfg tokio_unstable -Dwarnings --cfg tokio_no_tuning_tests ${{ matrix.rustflags }} --cfg=io_uring_skip_arch_check
 
   cross-test-without-parking_lot:
     needs: basics
@@ -708,7 +708,7 @@ jobs:
           cargo test --doc -Zbuild-std --target target-specs/i686-unknown-linux-gnu.json -p tokio --all-features
         env:
           RUST_TEST_THREADS: 1
-          RUSTFLAGS: --cfg tokio_unstable --cfg tokio_taskdump -Dwarnings --cfg tokio_no_tuning_tests
+          RUSTFLAGS: --cfg tokio_unstable --cfg tokio_taskdump -Dwarnings --cfg tokio_no_tuning_tests --cfg=io_uring_skip_arch_check
 
   no-atomic-u64-check:
     name: Check tokio --feature-powerset --depth 2 on i686-unknown-linux-gnu without AtomicU64
@@ -733,7 +733,7 @@ jobs:
       - name: Check
         run: cargo hack check -Zbuild-std --target target-specs/i686-unknown-linux-gnu.json -p tokio --feature-powerset --depth 2 --keep-going
         env:
-          RUSTFLAGS: --cfg tokio_unstable --cfg tokio_taskdump -Dwarnings
+          RUSTFLAGS: --cfg tokio_unstable --cfg tokio_taskdump -Dwarnings --cfg=io_uring_skip_arch_check
 
   features:
     name: features ${{ matrix.name }}
