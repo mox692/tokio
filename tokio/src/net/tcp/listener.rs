@@ -34,7 +34,7 @@ cfg_net! {
     /// # Examples
     ///
     /// Using `accept`:
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::net::TcpListener;
     ///
     /// use std::io;
@@ -85,7 +85,7 @@ impl TcpListener {
         ///
         /// # Examples
         ///
-        /// ```no_run
+        /// ```no_run,ignore-wasm
         /// use tokio::net::TcpListener;
         /// use std::io;
         ///
@@ -143,7 +143,7 @@ impl TcpListener {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::net::TcpListener;
     ///
     /// use std::io;
@@ -219,7 +219,7 @@ impl TcpListener {
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust,no_run,ignore-wasm
     /// use std::error::Error;
     /// use tokio::net::TcpListener;
     ///
@@ -256,7 +256,7 @@ impl TcpListener {
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust,no_run,ignore-wasm
     /// use std::error::Error;
     ///
     /// #[tokio::main]
@@ -314,7 +314,7 @@ impl TcpListener {
     ///
     /// # Examples
     ///
-    /// ```rust,no_run
+    /// ```rust,no_run,ignore-wasm
     /// use tokio::net::TcpListener;
     ///
     /// use std::io;
@@ -342,7 +342,7 @@ impl TcpListener {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::net::TcpListener;
     ///
     /// use std::io;
@@ -368,7 +368,7 @@ impl TcpListener {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::net::TcpListener;
     ///
     /// use std::io;

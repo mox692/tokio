@@ -120,7 +120,7 @@ impl OwnedReadHalf {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::io::{self, ReadBuf};
     /// use tokio::net::TcpStream;
     ///
@@ -160,7 +160,7 @@ impl OwnedReadHalf {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::net::TcpStream;
     /// use tokio::io::AsyncReadExt;
     /// use std::error::Error;
