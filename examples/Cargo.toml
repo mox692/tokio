@@ -12,6 +12,9 @@ tokio = { version = "1.0.0", path = "../tokio", features = ["full", "tracing"] }
 tokio-util = { version = "0.7.0", path = "../tokio-util", features = ["full"] }
 tokio-stream = { version = "0.1", path = "../tokio-stream" }
 
+axum = { version = "0.8" }
+hyper = { version = "1", features = ["server", "http1", "http2"] }
+
 tracing = "0.1"
 tracing-subscriber = { version = "0.3.1", default-features = false, features = ["fmt", "ansi", "env-filter", "tracing-log"] }
 bytes = "1.0.0"
@@ -98,6 +101,10 @@ path = "named-pipe-multi-client.rs"
 [[example]]
 name = "dump"
 path = "dump.rs"
+
+[[example]]
+name = "timer_bench"
+path = "timer_bench.rs"
 
 [lints]
 workspace = true

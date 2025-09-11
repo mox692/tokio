@@ -32,3 +32,8 @@ unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(tokio_uring)',
   'cfg(target_os, values("cygwin"))',
 ] }
+
+[patch.crates-io]
+tokio = { path = "tokio" }
+tokio-util = { path = "tokio-util" }
+tokio-stream = { path = "tokio-stream" }
