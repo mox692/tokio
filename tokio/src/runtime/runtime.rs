@@ -154,7 +154,7 @@ impl Runtime {
     ///
     /// Creating a new `Runtime` with default configuration values.
     ///
-    /// ```
+    /// ```ignore-wasm
     /// use tokio::runtime::Runtime;
     ///
     /// let rt = Runtime::new()
@@ -183,7 +183,7 @@ impl Runtime {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run,ignore-wasm
     /// use tokio::runtime::Runtime;
     ///
     /// let rt = Runtime::new()
@@ -213,7 +213,7 @@ impl Runtime {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run,ignore-wasm
     /// use tokio::runtime::Runtime;
     ///
     /// # fn dox() {
@@ -246,7 +246,7 @@ impl Runtime {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run,ignore-wasm
     /// use tokio::runtime::Runtime;
     ///
     /// # fn dox() {
@@ -308,7 +308,7 @@ impl Runtime {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore-wasm
     /// use tokio::runtime::Runtime;
     ///
     /// // Create the runtime
@@ -371,7 +371,7 @@ impl Runtime {
     ///
     /// # Example
     ///
-    /// ```
+    /// ```no_run,ignore-wasm
     /// use tokio::runtime::Runtime;
     /// use tokio::task::JoinHandle;
     ///
@@ -406,7 +406,7 @@ impl Runtime {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run,ignore-wasm
     /// use tokio::runtime::Runtime;
     /// use tokio::task;
     ///
@@ -447,7 +447,7 @@ impl Runtime {
     ///
     /// This function is equivalent to calling `shutdown_timeout(Duration::from_nanos(0))`.
     ///
-    /// ```
+    /// ```no_run,ignore-wasm
     /// use tokio::runtime::Runtime;
     ///
     /// fn main() {
