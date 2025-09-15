@@ -7,7 +7,7 @@ cfg_io_util! {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```ignore-wasm
     /// use std::io::{self, Cursor, SeekFrom};
     /// use tokio::io::{AsyncSeekExt, AsyncReadExt};
     ///
