@@ -69,3 +69,9 @@ macro_rules! cfg_time {
         )*
     }
 }
+
+macro_rules! cfg_loom {
+    ($($item:item)*) => {
+        $( #[cfg(loom)] $item )*
+    }
+}
