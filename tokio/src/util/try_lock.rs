@@ -1,6 +1,6 @@
+use crate::loom::cell::UnsafeCell;
 use crate::loom::sync::atomic::AtomicBool;
 
-use std::cell::UnsafeCell;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::Ordering::SeqCst;
@@ -63,13 +63,13 @@ impl<T> Deref for LockGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &T {
-        unsafe { &*self.lock.data.get() }
+        unsafe { &*self.lock.data.with(|data| data) }
     }
 }
 
 impl<T> DerefMut for LockGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut T {
-        unsafe { &mut *self.lock.data.get() }
+        unsafe { &mut *self.lock.data.with_mut(|data| data) }
     }
 }
 
