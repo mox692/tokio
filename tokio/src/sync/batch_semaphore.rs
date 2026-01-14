@@ -420,14 +420,12 @@ impl Semaphore {
             }
 
             let mut remaining = 0;
-            let total = curr
-                .checked_add(acquired)
-                .expect("number of permits must not overflow");
+            let total = curr;
             let (next, acq) = if total >= needed {
-                let next = curr - (needed - acquired);
+                let next = curr - needed;
                 (next, needed >> Self::PERMIT_SHIFT)
             } else {
-                remaining = (needed - acquired) - curr;
+                remaining = needed - curr;
                 (0, curr >> Self::PERMIT_SHIFT)
             };
 
@@ -462,7 +460,10 @@ impl Semaphore {
                             });
 
                             return Poll::Ready(Ok(()));
-                        } else if lock.is_none() {
+                        } else {
+                            // Since `remaining == 0` at this point,
+                            // we don't have lock yet.
+                            // TODO: further cleanup?
                             break self.waiters.lock();
                         }
                     }
