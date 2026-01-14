@@ -105,7 +105,10 @@ impl Stats {
             let mean_poll_duration = elapsed / num_polls;
 
             // Compute the alpha weighted by the number of tasks polled this batch.
-            let weighted_alpha = 1.0 - (1.0 - TASK_POLL_TIME_EWMA_ALPHA).powf(num_polls);
+            let mut weighted_alpha = TASK_POLL_TIME_EWMA_ALPHA * num_polls;
+            if weighted_alpha > 1.0 {
+                weighted_alpha = 1.0;
+            }
 
             // Now compute the new weighted average task poll time.
             self.task_poll_time_ewma = weighted_alpha * mean_poll_duration
