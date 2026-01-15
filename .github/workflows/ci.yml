@@ -929,6 +929,7 @@ jobs:
       - name: Clone Quinn
         run: git clone https://github.com/quinn-rs/quinn.git
 
+      # TODO: Re-enable this once https://github.com/quinn-rs/quinn/pull/2188 is released.
       - name: Checkout the latest release because HEAD maybe contains breakage.
         run: |
           set -x
